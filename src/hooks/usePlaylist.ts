@@ -25,46 +25,53 @@ export function usePlaylist() {
 
   const fetchPlaylist = useCallback(async () => {
     setLoading(true);
+    console.log("Fetching playlist...");
 
-    const { data: playlistData, error: playlistError } = await supabase
-      .from("playlist")
-      .select(`
-        *,
-        songs (
+    try {
+      const { data: playlistData, error: playlistError } = await supabase
+        .from("playlist")
+        .select(`
           *,
-          profiles (full_name)
-        )
-      `)
-      .order("position", { ascending: true });
+          songs (
+            *,
+            profiles (full_name)
+          )
+        `)
+        .order("position", { ascending: true });
 
-    if (playlistError) {
-      console.error("Error fetching playlist:", playlistError);
-      setLoading(false);
-      return;
-    }
-
-    setPlaylist((playlistData as PlaylistItem[]) || []);
-
-    const { data: playerData, error: playerError } = await supabase
-      .from("player_state")
-      .select("*")
-      .eq("id", "main")
-      .maybeSingle();
-
-    if (playerError) {
-      console.error("Error fetching player state:", playerError);
-    } else if (playerData) {
-      setPlayerState(playerData as PlayerState);
-
-      if (playerData.current_song_id) {
-        const current = (playlistData as PlaylistItem[])?.find(
-          (item) => item.song_id === playerData.current_song_id
-        );
-        setCurrentSong(current || null);
+      if (playlistError) {
+        console.error("Error fetching playlist:", playlistError);
+        return;
       }
-    }
 
-    setLoading(false);
+      console.log("Playlist data fetched:", playlistData?.length, "items");
+      setPlaylist((playlistData as PlaylistItem[]) || []);
+
+      const { data: playerData, error: playerError } = await supabase
+        .from("player_state")
+        .select("*")
+        .eq("id", "main")
+        .maybeSingle();
+
+      if (playerError) {
+        console.error("Error fetching player state:", playerError);
+      } else if (playerData) {
+        console.log("Player state fetched:", playerData);
+        setPlayerState(playerData as PlayerState);
+
+        if (playerData.current_song_id) {
+          const current = (playlistData as PlaylistItem[])?.find(
+            (item) => item.song_id === playerData.current_song_id
+          );
+          setCurrentSong(current || null);
+        }
+      }
+    } catch (error) {
+      console.error("Error in fetchPlaylist:", error);
+    } finally {
+      console.log("Setting loading to false");
+      setLoading(false);
+    }
   }, [supabase, setPlaylist, setCurrentSong, setPlayerState, setLoading]);
 
   useEffect(() => {

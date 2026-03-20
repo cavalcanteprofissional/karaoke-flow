@@ -66,8 +66,12 @@ export function usePlaylist() {
   }, [supabase, setPlaylist, setCurrentSong, setPlayerState, setLoading]);
 
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     fetchPlaylist();
-  }, [fetchPlaylist]);
+  }, [fetchPlaylist, user]);
 
   const removeSong = useCallback(
     async (id: string) => {

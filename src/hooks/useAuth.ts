@@ -45,7 +45,6 @@ export function useAuth(requireAuth = false) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setLoading(true);
       if (session?.user) {
         const profile = await syncProfile(session.user);
         setUser(profile as Profile);
@@ -55,13 +54,12 @@ export function useAuth(requireAuth = false) {
           router.push("/login");
         }
       }
-      setLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase, router, setUser, setLoading, requireAuth]);
+  }, [supabase, router, setUser, requireAuth]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

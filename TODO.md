@@ -159,3 +159,44 @@ karaoke-flow/
 
 ### v2.0.0 - Deploy (Pendente)
 - [ ] Em produção
+
+---
+
+## 🐛 BUGS CORRIGIDOS
+
+### Bug 1: Loading Infinito no Dashboard (CRÍTICO)
+**Causa:** React StrictMode executa `useEffect` duas vezes, causando race condition com `initAuth()`
+
+**Solução:** Usar `useRef` para prevenir inicializações duplicadas
+```typescript
+const initRef = useRef(false);
+
+useEffect(() => {
+  if (initRef.current) return;  // Previne segunda execução
+  initRef.current = true;
+  // ...
+}, []);
+```
+
+**Lição:** Sempre usar guards contra StrictMode em development
+
+### Bug 2: Turbopack + Next.js 16.2.0 + PostCSS
+**Causa:** Turbopack tem problemas com Tailwind CSS v4 e PostCSS
+
+**Solução:** 
+- Fazer downgrade para Tailwind CSS 3.4.0
+- Usar PostCSS 8.4.31
+- Garantir versões compatíveis no package.json
+
+### Bug 3: Middleware cookies loop
+**Causa:** Criar `NextResponse.next()` dentro da função `setAll()`
+
+**Solução:** Apenas setar cookies na response existente
+```typescript
+setAll(cookiesToSet) {
+  cookiesToSet.forEach(({ name, value, options }) => {
+    request.cookies.set(name, value);
+    supabaseResponse.cookies.set(name, value, options);
+  });
+}
+```

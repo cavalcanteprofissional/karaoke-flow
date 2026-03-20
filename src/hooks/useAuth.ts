@@ -42,6 +42,26 @@ export function useAuth(requireAuth = false) {
   };
 
   useEffect(() => {
+    const initAuth = async () => {
+      setLoading(true);
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        const profile = await syncProfile(session.user);
+        setUser(profile as Profile);
+      } else {
+        setUser(null);
+        if (requireAuth) {
+          router.push("/login");
+        }
+      }
+      
+      setLoading(false);
+    };
+
+    initAuth();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -59,7 +79,7 @@ export function useAuth(requireAuth = false) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase, router, setUser, requireAuth]);
+  }, [supabase, router, setUser, setLoading, requireAuth]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

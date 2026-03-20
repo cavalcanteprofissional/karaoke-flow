@@ -11,7 +11,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
-  isLoading: false,
+  isLoading: true,
   setUser: (user) => set({ user, isLoading: false }),
   setLoading: (isLoading) => set({ isLoading }),
   isAdmin: () => get().user?.role === "admin",

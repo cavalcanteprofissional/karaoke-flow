@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -21,6 +21,17 @@ export function GoogleButton({
   children = "Continuar com Google",
 }: GoogleButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        console.log("OAuth timeout - resetting state");
+        setIsLoading(false);
+        onError?.("Tempo limite excedido. Tente novamente.");
+      }, 10000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading, onError]);
 
   const handleGoogleSignIn = async () => {
     console.log("Google sign-in clicked");
@@ -46,6 +57,7 @@ export function GoogleButton({
       }
     } catch (err) {
       console.error("Catch error:", err);
+      onError?.("Erro ao conectar com Google");
       setIsLoading(false);
     }
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -31,6 +31,17 @@ export function LoginForm() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        console.log("Login timeout - resetting state");
+        setIsLoading(false);
+        setError("Tempo limite excedido. Tente novamente.");
+      }, 10000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading]);
 
   const onSubmit = async (data: LoginFormData) => {
     console.log("Login form submitted", data);

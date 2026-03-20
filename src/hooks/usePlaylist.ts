@@ -24,41 +24,32 @@ export function usePlaylist() {
   } = usePlaylistStore();
 
   const fetchPlaylist = useCallback(async () => {
+    console.log("[usePlaylist] Starting fetch, user:", !!user);
     setLoading(true);
-    console.log("Fetching playlist...");
 
     try {
       const { data: playlistData, error: playlistError } = await supabase
         .from("playlist")
-        .select(`
-          *,
-          songs (
-            *,
-            profiles (full_name)
-          )
-        `)
+        .select(`*, songs (*, profiles (full_name))`)
         .order("position", { ascending: true });
 
       if (playlistError) {
-        console.error("Error fetching playlist:", playlistError);
+        console.error("[usePlaylist] Playlist error:", playlistError);
         return;
       }
 
-      console.log("Playlist data fetched:", playlistData?.length, "items");
+      console.log("[usePlaylist] Playlist fetched:", playlistData?.length || 0, "items");
       setPlaylist((playlistData as PlaylistItem[]) || []);
 
-      const { data: playerData, error: playerError } = await supabase
+      const { data: playerData } = await supabase
         .from("player_state")
         .select("*")
         .eq("id", "main")
         .maybeSingle();
 
-      if (playerError) {
-        console.error("Error fetching player state:", playerError);
-      } else if (playerData) {
-        console.log("Player state fetched:", playerData);
+      console.log("[usePlaylist] Player state:", playerData);
+      if (playerData) {
         setPlayerState(playerData as PlayerState);
-
         if (playerData.current_song_id) {
           const current = (playlistData as PlaylistItem[])?.find(
             (item) => item.song_id === playerData.current_song_id
@@ -67,25 +58,26 @@ export function usePlaylist() {
         }
       }
     } catch (error) {
-      console.error("Error in fetchPlaylist:", error);
+      console.error("[usePlaylist] Catch error:", error);
     } finally {
-      console.log("Setting loading to false");
+      console.log("[usePlaylist] Setting loading to false");
       setLoading(false);
     }
   }, [supabase, setPlaylist, setCurrentSong, setPlayerState, setLoading]);
 
   useEffect(() => {
+    console.log("[usePlaylist] useEffect triggered, user:", !!user);
     if (!user) {
+      console.log("[usePlaylist] No user, skipping fetch");
       setLoading(false);
       return;
     }
     fetchPlaylist();
-  }, [fetchPlaylist, user]);
+  }, [fetchPlaylist, user, setLoading]);
 
   const removeSong = useCallback(
     async (id: string) => {
       const { error } = await supabase.from("playlist").delete().eq("id", id);
-
       if (!error) {
         removeFromPlaylist(id);
       }
@@ -96,7 +88,6 @@ export function usePlaylist() {
   const reorder = useCallback(
     async (items: PlaylistItem[]) => {
       reorderPlaylist(items);
-
       for (let i = 0; i < items.length; i++) {
         await supabase
           .from("playlist")
@@ -123,12 +114,8 @@ export function usePlaylist() {
 
   const skipToNext = useCallback(async () => {
     if (!currentSong || playlist.length === 0) return;
-
-    const currentIndex = playlist.findIndex(
-      (item) => item.id === currentSong.id
-    );
+    const currentIndex = playlist.findIndex((item) => item.id === currentSong.id);
     const nextIndex = currentIndex + 1;
-
     if (nextIndex < playlist.length) {
       const nextSong = playlist[nextIndex];
       await playSong(nextSong.song_id);
@@ -136,10 +123,7 @@ export function usePlaylist() {
     } else {
       await supabase
         .from("player_state")
-        .update({
-          status: "idle",
-          updated_at: new Date().toISOString(),
-        })
+        .update({ status: "idle", updated_at: new Date().toISOString() })
         .eq("id", "main");
       setCurrentSong(null);
     }
@@ -148,20 +132,14 @@ export function usePlaylist() {
   const pausePlayback = useCallback(async () => {
     await supabase
       .from("player_state")
-      .update({
-        status: "paused",
-        updated_at: new Date().toISOString(),
-      })
+      .update({ status: "paused", updated_at: new Date().toISOString() })
       .eq("id", "main");
   }, [supabase]);
 
   const resumePlayback = useCallback(async () => {
     await supabase
       .from("player_state")
-      .update({
-        status: "playing",
-        updated_at: new Date().toISOString(),
-      })
+      .update({ status: "playing", updated_at: new Date().toISOString() })
       .eq("id", "main");
   }, [supabase]);
 

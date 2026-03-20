@@ -42,24 +42,7 @@ export function useAuth(requireAuth = false) {
   };
 
   useEffect(() => {
-    const getUser = async () => {
-      setLoading(true);
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-
-      if (authUser) {
-        const profile = await syncProfile(authUser);
-        setUser(profile as Profile);
-      } else {
-        setUser(null);
-        if (requireAuth) {
-          router.push("/login");
-        }
-      }
-    };
-
-    getUser();
+    setLoading(true);
 
     const {
       data: { subscription },
@@ -73,6 +56,7 @@ export function useAuth(requireAuth = false) {
           router.push("/login");
         }
       }
+      setLoading(false);
     });
 
     return () => {

@@ -45,13 +45,15 @@ export function usePlaylist() {
 
     setPlaylist((playlistData as PlaylistItem[]) || []);
 
-    const { data: playerData } = await supabase
+    const { data: playerData, error: playerError } = await supabase
       .from("player_state")
       .select("*")
       .eq("id", "main")
-      .single();
+      .maybeSingle();
 
-    if (playerData) {
+    if (playerError) {
+      console.error("Error fetching player state:", playerError);
+    } else if (playerData) {
       setPlayerState(playerData as PlayerState);
 
       if (playerData.current_song_id) {

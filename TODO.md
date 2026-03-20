@@ -6,110 +6,110 @@
 - [x] 1.1 Criar projeto Next.js 14+ com App Router
 - [x] 1.2 Configurar TailwindCSS
 - [x] 1.3 Configurar Shadcn/ui
-- [x] 1.4 Instalar dependências principais:
-  - [x] supabase-js
-  - [x] @supabase/ssr
-  - [x] zod
-  - [x] react-hook-form
-  - [x] @hookform/resolvers
-  - [x] zustand
-  - [x] class-variance-authority
-  - [x] clsx
-  - [x] tailwind-merge
-  - [x] lucide-react
+- [x] 1.4 Instalar dependências principais
 
 ### Fase 2: Supabase ✓
-- [x] 2.1 Criar script SQL: `001_initial_schema.sql`
-  - [x] Tabela `profiles`
-  - [x] Tabela `songs`
-  - [x] Tabela `playlist`
-  - [x] Tabela `player_state`
-  - [x] Tabela `approval_queue`
-- [x] 2.2 Criar script SQL: `002_rls_policies.sql`
-  - [x] RLS para profiles
-  - [x] RLS para songs
-  - [x] RLS para playlist
-  - [x] RLS para approval_queue
-- [x] 2.3 Criar script SQL: `003_triggers.sql`
-  - [x] Trigger para criar profile ao criar usuário
-  - [x] Trigger para atualizar timestamps
-- [x] 2.4 Criar `lib/supabase/client.ts`
-- [x] 2.5 Criar `lib/supabase/server.ts`
-- [x] 2.6 Criar `lib/supabase/types.ts`
+- [x] 2.1 Scripts SQL (profiles, songs, playlist, player_state, approval_queue)
+- [x] 2.2 Row Level Security (RLS)
+- [x] 2.3 Triggers (auto-create profile, timestamps)
+- [x] 2.4 Cliente Supabase (browser + server)
 
 ### Fase 3: Autenticação ✓
-- [x] 3.1 Criar layout de autenticação `app/(auth)/layout.tsx`
-- [x] 3.2 Criar página de login `app/(auth)/login/page.tsx`
-- [x] 3.3 Criar página de registro `app/(auth)/register/page.tsx`
-- [x] 3.4 Criar componentes de formulário:
-  - [x] `components/auth/LoginForm.tsx`
-  - [x] `components/auth/RegisterForm.tsx`
-- [x] 3.5 Criar hook `hooks/useAuth.ts`
-- [x] 3.6 Criar store Zustand `store/authStore.ts`
-- [x] 3.7 Criar `middleware.ts` para proteção de rotas
-- [x] 3.8 Criar layout do dashboard `app/(dashboard)/layout.tsx`
-- [x] 3.9 Criar layout admin `app/admin/layout.tsx`
+- [x] 3.1 Login/Register forms
+- [x] 3.2 Middleware de proteção
+- [x] 3.3 Perfis user/admin
 
 ## v1.1.0 - Playlist & Player ✓
 
 ### Fase 4: YouTube Integration ✓
-- [x] 4.1 Criar `.env.example`
-- [x] 4.2 Criar utilitários YouTube `lib/youtube/api.ts`
-- [x] 4.3 Criar API route de busca `app/api/youtube/search/route.ts`
-- [x] 4.4 Criar componente de busca `components/shared/SearchBar.tsx`
-- [x] 4.5 Criar `lib/youtube/oauth.ts` (OAuth admin)
-- [x] 4.6 Criar API route do player `app/api/youtube/player/route.ts`
+- [x] 4.1 YouTube Data API v3
+- [x] 4.2 YouTube IFrame API Player
 
 ### Fase 5: Playlist ✓
-- [x] 5.1 Criar formulário de solicitação `components/playlist/SongRequestForm.tsx`
-- [x] 5.2 Criar tabela da playlist `components/playlist/PlaylistTable.tsx`
-- [x] 5.3 Criar página do dashboard `app/(dashboard)/dashboard/page.tsx`
-- [x] 5.4 Criar página minhas músicas `app/(dashboard)/my-songs/page.tsx`
-- [x] 5.5 Implementar Realtime `hooks/useRealtime.ts`
-- [x] 5.6 Criar store playlist `store/playlistStore.ts`
+- [x] 5.1 SongRequestForm (solicitar músicas)
+- [x] 5.2 PlaylistTable
+- [x] 5.3 Supabase Realtime
 
 ### Fase 6: Player ✓
-- [x] 6.1 Criar componente YouTube Player `components/player/YouTubePlayer.tsx`
-- [x] 6.2 Criar controles do player `components/player/PlayerControls.tsx`
-- [x] 6.3 Criar "now playing" `components/player/NowPlaying.tsx`
-- [x] 6.4 Criar página do player `app/(dashboard)/player/page.tsx`
-- [x] 6.5 Criar store player `store/playerStore.ts`
-- [x] 6.6 Implementar auto-play da próxima música
+- [x] 6.1 YouTubePlayer component
+- [x] 6.2 PlayerControls
+- [x] 6.3 NowPlaying
+- [x] 6.4 Auto-play próxima música
 
 ## v1.2.0 - Admin Controls ✓
 
 ### Fase 7: Admin Controls ✓
-- [x] 7.1 Criar página de aprovações `app/admin/approvals/page.tsx`
-- [x] 7.2 Criar lista de aprovação `components/admin/ApprovalList.tsx`
-- [x] 7.3 Criar API route de aprovação `app/api/admin/approve/route.ts`
-- [x] 7.4 Criar página admin dashboard `app/admin/dashboard/page.tsx`
-- [x] 7.5 Criar gerenciador da playlist `components/admin/PlaylistManager.tsx`
-- [x] 7.6 Criar API routes:
-  - [x] `app/api/playlist/reorder/route.ts`
-  - [x] `app/api/playlist/remove/route.ts`
+- [x] 7.1 Dashboard admin
+- [x] 7.2 Aprovações
+- [x] 7.3 Playlist manager (reorder, remove)
 
-### Fase 8: Layout & UI ✓
-- [x] 8.1 Criar Header `components/layout/Header.tsx`
-- [x] 8.2 Componentes UI:
-  - [x] button
-  - [x] card
-  - [x] input
-  - [x] label
-  - [x] tabs
-  - [x] slider
-  - [x] dropdown-menu
+## v1.3.0 - Google OAuth ✓
+
+### Fase 8: Login Social ✓
+- [x] 8.1 GoogleButton component
+- [x] 8.2 Auth callback page
+- [x] 8.3 LoginForm + Google
+- [x] 8.4 RegisterForm + Google
+- [x] 8.5 useAuth - sincroniza profile Google
 
 ## v2.0.0 - Deploy (Pendente)
 
 ### Fase 9: Deploy
-- [ ] 9.1 Configurar Vercel
-- [ ] 9.2 Configurar variáveis de ambiente na Vercel
-- [ ] 9.3 Seed do admin inicial
-- [ ] 9.4 Testes finais
+- [ ] 9.1 Push para GitHub
+- [ ] 9.2 Configurar Google OAuth
+- [ ] 9.3 Deploy Vercel
+- [ ] 9.4 Testar funcionalidades
 
 ---
 
-## Estrutura Final do Projeto
+## 📋 PRÓXIMOS PASSOS (Antes de reiniciar PC)
+
+### 1. Commit atual (pendente)
+```bash
+git add . && git commit -m "feat: add Google OAuth login and registration"
+git push origin main
+```
+
+### 2. Configurar Google OAuth (Google Cloud Console)
+1. Acessar https://console.cloud.google.com
+2. APIs & Services > Credentials
+3. Criar/editar OAuth 2.0 Client ID (Web Application)
+4. Authorized JavaScript origins:
+   - `http://localhost:3000`
+5. Authorized redirect URIs:
+   - `https://seu-projeto.supabase.co/auth/v1/callback`
+   - `http://localhost:3000/auth/callback`
+
+### 3. Configurar Supabase
+1. Dashboard > Authentication > Providers > Google
+2. Habilitar Google provider
+3. Inserir Client ID e Client Secret do Google
+
+### 4. Variáveis ambiente (.env.local) - se precisar
+```env
+NEXT_PUBLIC_SUPABASE_URL=sua_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave
+SUPABASE_SERVICE_ROLE_KEY=sua_chave_service
+NEXT_PUBLIC_YOUTUBE_API_KEY=sua_chave_youtube
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### 5. Testar
+- Login com Google
+- Cadastro com Google
+- Criar usuário admin:
+```sql
+UPDATE profiles SET role = 'admin' WHERE email = 'seu_email@gmail.com';
+```
+
+### 6. Deploy Vercel
+- Conectar repo GitHub
+- Adicionar variáveis de ambiente
+- Deploy!
+
+---
+
+## Estrutura do Projeto
 
 ```
 karaoke-flow/
@@ -117,66 +117,43 @@ karaoke-flow/
 │   ├── app/
 │   │   ├── (auth)/           # Login, Register
 │   │   ├── (dashboard)/      # Dashboard, Player, My Songs
-│   │   ├── admin/            # Admin Dashboard, Approvals, Playlist Manager
+│   │   ├── admin/            # Admin Dashboard, Approvals
 │   │   ├── api/              # YouTube, Playlist, Admin APIs
-│   │   ├── layout.tsx
+│   │   ├── auth/callback/    # OAuth callback
 │   │   └── page.tsx
 │   ├── components/
-│   │   ├── admin/            # ApprovalList
-│   │   ├── auth/            # LoginForm, RegisterForm
-│   │   ├── layout/          # Header
-│   │   ├── player/          # YouTubePlayer, PlayerControls, NowPlaying
-│   │   ├── playlist/        # PlaylistTable, SongRequestForm
-│   │   ├── shared/          # SearchBar, VideoCard
-│   │   └── ui/              # Button, Card, Input, etc.
-│   ├── hooks/               # useAuth, usePlaylist, useRealtime
-│   ├── lib/
-│   │   ├── supabase/        # client, server, middleware, types
-│   │   └── youtube/         # api, oauth
-│   ├── store/               # authStore, playlistStore, playerStore
-│   ├── types/              # youtube.ts
+│   │   ├── auth/             # LoginForm, RegisterForm, GoogleButton
+│   │   ├── layout/           # Header
+│   │   ├── player/           # YouTubePlayer, PlayerControls
+│   │   ├── playlist/         # PlaylistTable, SongRequestForm
+│   │   ├── shared/           # SearchBar, VideoCard
+│   │   └── ui/               # Button, Card, Input, etc.
+│   ├── hooks/                # useAuth, usePlaylist, useRealtime
+│   ├── lib/                  # supabase, youtube
+│   ├── store/                # authStore, playlistStore, playerStore
 │   └── middleware.ts
-├── supabase/migrations/    # SQL scripts
-├── .env.local
-├── .env.example
+├── supabase/migrations/       # SQL scripts
 └── package.json
 ```
-
-## Próximos Passos
-
-1. Criar projeto no Supabase
-2. Executar scripts SQL em `supabase/migrations/`
-3. Preencher `.env.local` com credenciais
-4. Definir admin:
-   ```sql
-   UPDATE profiles SET role = 'admin' WHERE email = 'seu_email@exemplo.com';
-   ```
-5. Deploy na Vercel
 
 ---
 
 ## Histórico de Versões
 
-### v0.0.1 - Início (20/03/2026)
+### v0.0.1 - Início (20/03/2026) ✓
 - [x] Projeto iniciado
-- [x] Estrutura base criada
-- [x] Dependências instaladas
 
 ### v1.0.0 - Setup & Authentication (20/03/2026) ✓
-- [x] Projeto configurado
-- [x] Supabase integrado
 - [x] Autenticação completa
 
 ### v1.1.0 - Playlist & Player (20/03/2026) ✓
-- [x] Integração YouTube
-- [x] Playlist funcional
-- [x] Player com controles
+- [x] YouTube + Playlist + Player
 
 ### v1.2.0 - Admin Controls (20/03/2026) ✓
-- [x] Dashboard admin
-- [x] Aprovações
-- [x] Gerenciamento completo
+- [x] Dashboard + Aprovações + Gerenciamento
+
+### v1.3.0 - Google OAuth (20/03/2026) ✓
+- [x] Login/Cadastro com Google
 
 ### v2.0.0 - Deploy (Pendente)
 - [ ] Em produção
-- [ ] Testes completos

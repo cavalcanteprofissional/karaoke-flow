@@ -11,6 +11,36 @@ export function useAuth(requireAuth = false) {
   const supabase = createClient();
   const { user, setUser, isLoading, setLoading, isAdmin } = useAuthStore();
 
+  const syncProfile = async (authUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => {
+    const googleName = authUser.user_metadata?.full_name as string | undefined;
+    const googleAvatar = authUser.user_metadata?.avatar_url as string | undefined;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authUser.id)
+      .single();
+
+    if (profile) {
+      if (googleName && profile.full_name !== googleName) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: googleName })
+          .eq("id", authUser.id);
+        profile.full_name = googleName;
+      }
+      if (googleAvatar && profile.avatar_url !== googleAvatar) {
+        await supabase
+          .from("profiles")
+          .update({ avatar_url: googleAvatar })
+          .eq("id", authUser.id);
+        profile.avatar_url = googleAvatar;
+      }
+    }
+
+    return profile;
+  };
+
   useEffect(() => {
     const getUser = async () => {
       setLoading(true);
@@ -19,12 +49,7 @@ export function useAuth(requireAuth = false) {
       } = await supabase.auth.getUser();
 
       if (authUser) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", authUser.id)
-          .single();
-
+        const profile = await syncProfile(authUser);
         setUser(profile as Profile);
       } else {
         setUser(null);
@@ -40,12 +65,7 @@ export function useAuth(requireAuth = false) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-
+        const profile = await syncProfile(session.user);
         setUser(profile as Profile);
       } else {
         setUser(null);

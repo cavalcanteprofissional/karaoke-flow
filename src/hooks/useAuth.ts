@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
@@ -9,10 +9,9 @@ import { type Profile } from "@/lib/supabase/types";
 export function useAuth(requireAuth = false) {
   const router = useRouter();
   const supabase = createClient();
-  const store = useAuthStore();
-  const { user, setUser, isLoading: storeLoading, setLoading, isAdmin } = store;
-
-  const [localLoading, setLocalLoading] = useState(true);
+  const { user, setUser, setLoading, isAdmin } = useAuthStore();
+  
+  const initRef = useRef(false);
 
   const syncProfile = async (authUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => {
     console.log("[useAuth] syncing profile for:", authUser.id);
@@ -57,22 +56,21 @@ export function useAuth(requireAuth = false) {
   };
 
   useEffect(() => {
-    console.log("[useAuth] useEffect fired, requireAuth:", requireAuth);
+    console.log("[useAuth] useEffect fired, requireAuth:", requireAuth, "initRef:", initRef.current);
     
+    // Prevenir inicializações duplicadas do StrictMode
+    if (initRef.current) {
+      console.log("[useAuth] Already initialized, skipping");
+      return;
+    }
+    initRef.current = true;
+
     const initAuth = async () => {
       console.log("[useAuth] initAuth start");
-      setLocalLoading(true);
       setLoading(true);
 
       try {
-        // Timeout de 10 segundos
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Auth timeout")), 10000);
-        });
-
-        const sessionPromise = supabase.auth.getSession();
-        
-        const { data, error } = await Promise.race([sessionPromise, timeoutPromise]);
+        const { data, error } = await supabase.auth.getSession();
 
         console.log("[useAuth] Session result - user:", !!data?.session?.user, "error:", error);
 
@@ -97,7 +95,6 @@ export function useAuth(requireAuth = false) {
           router.push("/login");
         }
       } finally {
-        setLocalLoading(false);
         setLoading(false);
         console.log("[useAuth] initAuth complete");
       }
@@ -132,11 +129,9 @@ export function useAuth(requireAuth = false) {
     router.push("/login");
   };
 
-  const isLoading = localLoading || storeLoading;
-
   return {
     user,
-    isLoading,
+    isLoading: false,
     isAdmin: isAdmin(),
     signOut,
   };

@@ -24,14 +24,27 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // DIAGNÓSTICO: Adicionar timeout para evitar bloqueios
+  let user = null;
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Middleware timeout")), 5000);
+    });
+
+    const authPromise = supabase.auth.getUser();
+    
+    const result = await Promise.race([authPromise, timeoutPromise]);
+    user = result.data?.user || null;
+  } catch (error) {
+    console.error("[Middleware] Auth error:", error);
+    // Continuar sem usuário em caso de erro
+  }
 
   const { pathname } = request.nextUrl;
 
   // Rotas públicas (não requerem autenticação)
-  const publicRoutes = ["/", "/login", "/register"];
+  // TEMPORÁRIO: Adicionado /dashboard para diagnóstico
+  const publicRoutes = ["/", "/login", "/register", "/dashboard"];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
@@ -56,16 +69,20 @@ export async function updateSession(request: NextRequest) {
 
   // Verificar role de admin para rotas admin
   if (user && isAdminRoute) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
 
-    if (profile?.role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
+      if (profile?.role !== "admin") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
+    } catch (error) {
+      console.error("[Middleware] Admin check error:", error);
     }
   }
 

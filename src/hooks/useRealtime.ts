@@ -3,13 +3,17 @@
 import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePlaylistStore } from "@/store/playlistStore";
+import { useAuthStore } from "@/store/authStore";
 import { type PlaylistItem, type PlayerState } from "@/lib/supabase/types";
 
 export function useRealtime() {
   const supabase = createClient();
+  const { user } = useAuthStore();
   const { setPlaylist, setCurrentSong, setPlayerState } = usePlaylistStore();
 
   useEffect(() => {
+    if (!user) return;
+
     const channel = supabase
       .channel("playlist-changes")
       .on(
@@ -23,13 +27,7 @@ export function useRealtime() {
           if (payload.eventType === "INSERT") {
             const { data } = await supabase
               .from("playlist")
-              .select(`
-                *,
-                songs (
-                  *,
-                  profiles (full_name)
-                )
-              `)
+              .select(`*, songs (*, profiles (full_name))`)
               .eq("id", payload.new.id)
               .single();
 
@@ -41,13 +39,7 @@ export function useRealtime() {
           } else if (payload.eventType === "UPDATE") {
             const { data: playlistData } = await supabase
               .from("playlist")
-              .select(`
-                *,
-                songs (
-                  *,
-                  profiles (full_name)
-                )
-              `)
+              .select(`*, songs (*, profiles (full_name))`)
               .order("position", { ascending: true });
 
             if (playlistData) {
@@ -70,13 +62,7 @@ export function useRealtime() {
           if (newState.current_song_id) {
             const { data: playlistData } = await supabase
               .from("playlist")
-              .select(`
-                *,
-                songs (
-                  *,
-                  profiles (full_name)
-                )
-              `)
+              .select(`*, songs (*, profiles (full_name))`)
               .eq("song_id", newState.current_song_id)
               .single();
 
@@ -93,5 +79,5 @@ export function useRealtime() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, setPlaylist, setCurrentSong, setPlayerState]);
+  }, [supabase, user, setPlaylist, setCurrentSong, setPlayerState]);
 }

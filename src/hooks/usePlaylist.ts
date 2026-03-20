@@ -24,21 +24,19 @@ export function usePlaylist() {
   } = usePlaylistStore();
 
   const fetchPlaylist = useCallback(async () => {
-    console.log("[usePlaylist] Starting fetch, user:", !!user);
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { data: playlistData, error: playlistError } = await supabase
+      const { data: playlistData } = await supabase
         .from("playlist")
         .select(`*, songs (*, profiles (full_name))`)
         .order("position", { ascending: true });
 
-      if (playlistError) {
-        console.error("[usePlaylist] Playlist error:", playlistError);
-        return;
-      }
-
-      console.log("[usePlaylist] Playlist fetched:", playlistData?.length || 0, "items");
       setPlaylist((playlistData as PlaylistItem[]) || []);
 
       const { data: playerData } = await supabase
@@ -47,7 +45,6 @@ export function usePlaylist() {
         .eq("id", "main")
         .maybeSingle();
 
-      console.log("[usePlaylist] Player state:", playerData);
       if (playerData) {
         setPlayerState(playerData as PlayerState);
         if (playerData.current_song_id) {
@@ -58,22 +55,15 @@ export function usePlaylist() {
         }
       }
     } catch (error) {
-      console.error("[usePlaylist] Catch error:", error);
+      console.error("[usePlaylist] Error:", error);
     } finally {
-      console.log("[usePlaylist] Setting loading to false");
       setLoading(false);
     }
-  }, [supabase, setPlaylist, setCurrentSong, setPlayerState, setLoading]);
+  }, [supabase, user, setPlaylist, setCurrentSong, setPlayerState, setLoading]);
 
   useEffect(() => {
-    console.log("[usePlaylist] useEffect triggered, user:", !!user);
-    if (!user) {
-      console.log("[usePlaylist] No user, skipping fetch");
-      setLoading(false);
-      return;
-    }
     fetchPlaylist();
-  }, [fetchPlaylist, user, setLoading]);
+  }, [fetchPlaylist]);
 
   const removeSong = useCallback(
     async (id: string) => {

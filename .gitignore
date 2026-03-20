@@ -56,3 +56,4 @@ logs/
 __pycache__/
 *.spec.js
 *.test.js
+next.config.ts

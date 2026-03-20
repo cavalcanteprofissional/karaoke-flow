@@ -80,10 +80,12 @@ git push origin main
    - `https://seu-projeto.supabase.co/auth/v1/callback`
    - `http://localhost:3000/auth/callback`
 
-### 3. Configurar Supabase
-1. Dashboard > Authentication > Providers > Google
-2. Habilitar Google provider
-3. Inserir Client ID e Client Secret do Google
+### 3. Configurar Supabase (Google OAuth) - EM PROGRESSO
+1. Acesse https://kskoipyzqcacccepcqpc.supabase.co
+2. Vá em **Authentication > Providers > Google**
+3. Habilite o toggle **Enable Google**
+4. Insira Client ID e Client Secret do Google Cloud Console
+5. Salve
 
 ### 4. Variáveis ambiente (.env.local) - se precisar
 ```env

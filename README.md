@@ -9,7 +9,7 @@ Sistema de karaokê online com YouTube integrado, autenticação e reprodução 
 
 ## ✨ Funcionalidades
 
-- **Autenticação**: Cadastro, login e logout com Supabase Auth
+- **Autenticação**: Cadastro, login e logout com Supabase Auth + Google OAuth
 - **Perfis**: Usuário comum e Administrador
 - **Busca YouTube**: Pesquise e solicite músicas diretamente
 - **Playlist Pública**: Todos os usuários veem a mesma playlist
@@ -54,6 +54,17 @@ cp .env.example .env.local
    - Crie um projeto no [Google Cloud Console](https://console.cloud.google.com)
    - Habilite **YouTube Data API v3**
    - Crie uma **API Key** → `NEXT_PUBLIC_YOUTUBE_API_KEY`
+
+3. **Google OAuth (Login com Google)**:
+   - No [Google Cloud Console](https://console.cloud.google.com), vá em **APIs & Services > Credentials**
+   - Crie ou edite **OAuth 2.0 Client ID** (Web Application)
+   - Em **Authorized JavaScript origins**, adicione: `http://localhost:3000`
+   - Em **Authorized redirect URIs**, adicione:
+     - `https://seu-projeto.supabase.co/auth/v1/callback` (use seu URL do Supabase)
+     - `http://localhost:3000/auth/callback`
+   - Copie o **Client ID** e **Client Secret**
+   - No Supabase Dashboard, vá em **Authentication > Providers > Google**
+   - Habilite Google e insira as credenciais
 
 3. **Execute os scripts SQL**:
    - No Supabase Dashboard, vá em **SQL Editor**
@@ -163,6 +174,10 @@ NEXT_PUBLIC_YOUTUBE_API_KEY=sua_chave_youtube_data_api
 
 # App
 NEXT_PUBLIC_APP_URL=https://seu-dominio.vercel.app
+
+# Google OAuth (redirect URIs no Google Cloud Console)
+# https://seu-projeto.supabase.co/auth/v1/callback
+# http://localhost:3000/auth/callback
 ```
 
 ## 🤝 Contribuindo

@@ -24,7 +24,6 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // DIAGNÓSTICO: Adicionar timeout para evitar bloqueios
   let user = null;
   try {
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -32,27 +31,21 @@ export async function updateSession(request: NextRequest) {
     });
 
     const authPromise = supabase.auth.getUser();
-    
     const result = await Promise.race([authPromise, timeoutPromise]);
     user = result.data?.user || null;
   } catch (error) {
     console.error("[Middleware] Auth error:", error);
-    // Continuar sem usuário em caso de erro
   }
 
   const { pathname } = request.nextUrl;
 
-  // Rotas públicas (não requerem autenticação)
-  // TEMPORÁRIO: Adicionado /dashboard para diagnóstico
-  const publicRoutes = ["/", "/login", "/register", "/dashboard"];
+  const publicRoutes = ["/", "/login", "/register"];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
 
-  // Rotas de admin
   const isAdminRoute = pathname.startsWith("/admin");
 
-  // Redirecionar para login se não autenticado e rota protegida
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -60,14 +53,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Se autenticado, redirecionar de rotas públicas para dashboard
   if (user && isPublicRoute && pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  // Verificar role de admin para rotas admin
   if (user && isAdminRoute) {
     try {
       const { data: profile } = await supabase

@@ -52,64 +52,85 @@
 - [x] 8.4 RegisterForm + Google
 - [x] 8.5 useAuth - sincroniza profile Google
 
-## v2.0.0 - Deploy (Pendente)
+## v2.0.0 - Deploy Vercel (EM ANDAMENTO)
 
 ### Fase 9: Deploy
-- [ ] 9.1 Push para GitHub
-- [ ] 9.2 Configurar Google OAuth
-- [ ] 9.3 Deploy Vercel
-- [ ] 9.4 Testar funcionalidades
+- [x] 9.1 Código pushado para GitHub
+- [x] 9.2 Google OAuth configurado
+- [ ] 9.3 Deploy Vercel (PENDENTE)
+- [ ] 9.4 Testar funcionalidades em produção
 
 ---
 
-## 📋 PRÓXIMOS PASSOS (Antes de reiniciar PC)
+## 📋 DEPLOY VERCEL - PASSO A PASSO
 
-### 1. Commit atual (pendente)
+### PASSO 1: Obter Valores das Variáveis
+
+Execute no terminal:
 ```bash
-git add . && git commit -m "feat: add Google OAuth login and registration"
-git push origin main
+cat .env.local
 ```
 
-### 2. Configurar Google OAuth (Google Cloud Console)
-1. Acessar https://console.cloud.google.com
-2. APIs & Services > Credentials
-3. Criar/editar OAuth 2.0 Client ID (Web Application)
-4. Authorized JavaScript origins:
-   - `http://localhost:3000`
-5. Authorized redirect URIs:
-   - `https://seu-projeto.supabase.co/auth/v1/callback`
-   - `http://localhost:3000/auth/callback`
-
-### 3. Configurar Supabase (Google OAuth) - EM PROGRESSO
-1. Acesse https://kskoipyzqcacccepcqpc.supabase.co
-2. Vá em **Authentication > Providers > Google**
-3. Habilite o toggle **Enable Google**
-4. Insira Client ID e Client Secret do Google Cloud Console
-5. Salve
-
-### 4. Variáveis ambiente (.env.local) - se precisar
-```env
-NEXT_PUBLIC_SUPABASE_URL=sua_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave
-SUPABASE_SERVICE_ROLE_KEY=sua_chave_service
-NEXT_PUBLIC_YOUTUBE_API_KEY=sua_chave_youtube
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
-
-### 5. Testar
-- Login com Google
-- Cadastro com Google
-- Criar usuário admin:
-```sql
-UPDATE profiles SET role = 'admin' WHERE email = 'seu_email@gmail.com';
-```
-
-### 6. Deploy Vercel
-- Conectar repo GitHub
-- Adicionar variáveis de ambiente
-- Deploy!
+Copie os valores de:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_YOUTUBE_API_KEY`
 
 ---
+
+### PASSO 2: Configurar Variáveis na Vercel
+
+Acesse: **https://vercel.com/karaoke-flow/settings/environment-variables**
+
+Adicione cada variável para **Production, Preview e Development**:
+
+| Nome | Valor | Ambientes |
+|------|-------|-----------|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://kskoipyzqcacccepcqpc.supabase.co` | Todos |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (do .env.local) | Todos |
+| `SUPABASE_SERVICE_ROLE_KEY` | (do .env.local) | Todos |
+| `NEXT_PUBLIC_YOUTUBE_API_KEY` | (do .env.local) | Todos |
+| `NEXT_PUBLIC_APP_URL` | (URL da Vercel após deploy) | Production |
+
+---
+
+### PASSO 3: Redeploy
+
+1. Vá em **Deployments** na Vercel
+2. Clique em **"Redeploy"** no último deployment
+3. Aguarde ~2-3 minutos para o build
+
+---
+
+### PASSO 4: Atualizar NEXT_PUBLIC_APP_URL
+
+Após o deploy, a Vercel fornecerá uma URL como:
+`https://karaoke-flow.vercel.app`
+
+Adicione esta URL como variável `NEXT_PUBLIC_APP_URL` na Vercel.
+
+---
+
+### PASSO 5: Atualizar Google OAuth
+
+No Google Cloud Console, adicione a URL de produção:
+- Authorized redirect URIs:
+  - `https://karaoke-flow.vercel.app/auth/callback`
+
+No Supabase Dashboard, o callback já está configurado:
+- `https://kskoipyzqcacccepcqpc.supabase.co/auth/v1/callback`
+
+---
+
+### PASSO 6: Testar
+
+1. Acesse a URL de produção
+2. Login com Google
+3. Solicite uma música
+4. Verifique playlist
+
+
 
 ## Estrutura do Projeto
 

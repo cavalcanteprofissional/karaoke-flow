@@ -33,23 +33,34 @@ export function LoginForm() {
   });
 
   const onSubmit = async (data: LoginFormData) => {
+    console.log("Login form submitted", data);
     setIsLoading(true);
     setError(null);
 
-    const supabase = createClient();
+    try {
+      const supabase = createClient();
+      console.log("Supabase client created for login");
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
-    });
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
 
-    if (authError) {
-      setError(authError.message);
+      console.log("Login result:", { authData, authError });
+
+      if (authError) {
+        console.error("Login error:", authError);
+        setError(authError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      window.location.href = "/dashboard";
+    } catch (err) {
+      console.error("Login catch error:", err);
+      setError("Erro inesperado");
       setIsLoading(false);
-      return;
     }
-
-    window.location.href = "/dashboard";
   };
 
   return (

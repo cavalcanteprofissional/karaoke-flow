@@ -42,11 +42,10 @@ export function useAuth(requireAuth = false) {
   };
 
   useEffect(() => {
-    setLoading(true);
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setLoading(true);
       if (session?.user) {
         const profile = await syncProfile(session.user);
         setUser(profile as Profile);

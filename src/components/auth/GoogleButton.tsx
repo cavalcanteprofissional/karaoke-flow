@@ -23,26 +23,30 @@ export function GoogleButton({
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
+    console.log("Google sign-in clicked");
     setIsLoading(true);
 
-    const supabase = createClient();
+    try {
+      const supabase = createClient();
+      console.log("Supabase client created");
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${redirectTo}`,
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=${redirectTo}`,
         },
-      },
-    });
+      });
 
-    if (error) {
-      onError?.(error.message);
+      console.log("OAuth result:", { data, error });
+
+      if (error) {
+        console.error("OAuth error:", error);
+        onError?.(error.message);
+        setIsLoading(false);
+      }
+    } catch (err) {
+      console.error("Catch error:", err);
       setIsLoading(false);
-    } else {
-      onSuccess?.();
     }
   };
 

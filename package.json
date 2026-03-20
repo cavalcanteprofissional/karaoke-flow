@@ -4,7 +4,7 @@
   "private": true,
   "description": "Sistema de karaokê online com YouTube integrado",
   "scripts": {
-    "dev": "next dev --no-turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
@@ -9,12 +9,10 @@ import { type Profile } from "@/lib/supabase/types";
 export function useAuth(requireAuth = false) {
   const router = useRouter();
   const supabase = createClient();
-  const { user, setUser, setLoading, isLoading, isAdmin } = useAuthStore();
-  
+  const { user, setUser, setLoading, isLoading } = useAuthStore();
   const initRef = useRef(false);
 
-  const syncProfile = async (authUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => {
-    console.log("[useAuth] syncing profile for:", authUser.id);
+  const syncProfile = useCallback(async (authUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => {
     try {
       let { data: profile, error } = await supabase
         .from("profiles")
@@ -23,7 +21,6 @@ export function useAuth(requireAuth = false) {
         .single();
 
       if (error?.code === "PGRST116") {
-        console.log("[useAuth] Profile not found, creating...");
         const { data: newProfile, error: insertError } = await supabase
           .from("profiles")
           .insert({
@@ -34,13 +31,9 @@ export function useAuth(requireAuth = false) {
           .select("*")
           .single();
 
-        if (insertError) {
-          console.error("[useAuth] Profile creation error:", insertError);
-          return null;
-        }
+        if (insertError) return null;
         profile = newProfile;
       } else if (error) {
-        console.error("[useAuth] Profile fetch error:", error);
         return null;
       }
 
@@ -60,13 +53,15 @@ export function useAuth(requireAuth = false) {
         }
       }
 
-      console.log("[useAuth] Profile synced:", profile);
       return profile;
-    } catch (err) {
-      console.error("[useAuth] syncProfile error:", err);
+    } catch {
       return null;
     }
-  };
+  }, [supabase]);
+
+  const getAdminStatus = useCallback(() => {
+    return user?.role === "admin";
+  }, [user?.role]);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -80,15 +75,26 @@ export function useAuth(requireAuth = false) {
 
         if (data?.session?.user) {
           const profile = await syncProfile(data.session.user);
-          setUser(profile as Profile);
+          if (profile) {
+            setUser(profile as Profile);
+          } else {
+            setUser({
+              id: data.session.user.id,
+              email: data.session.user.email || '',
+              full_name: (data.session.user.user_metadata?.full_name as string) || '',
+              role: 'user',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              avatar_url: (data.session.user.user_metadata?.avatar_url as string) || '',
+            } as Profile);
+          }
         } else {
           setUser(null);
           if (requireAuth) {
             router.push("/login");
           }
         }
-      } catch (err) {
-        console.error("[useAuth] initAuth error:", err);
+      } catch {
         setUser(null);
         if (requireAuth) {
           router.push("/login");
@@ -99,18 +105,18 @@ export function useAuth(requireAuth = false) {
     };
 
     initAuth();
-  }, [supabase, router, setUser, setLoading, requireAuth]);
+  }, [supabase, router, setUser, setLoading, requireAuth, syncProfile]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
     router.push("/login");
-  };
+  }, [supabase, router, setUser]);
 
   return {
     user,
     isLoading,
-    isAdmin: isAdmin(),
+    isAdmin: getAdminStatus(),
     signOut,
   };
 }

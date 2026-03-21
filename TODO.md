@@ -273,3 +273,13 @@ const { data, error } = await supabase.auth.getUser();
 **Causa:** Callback usa `getSession()` em vez de `getUser()`.
 
 **Solução:** Usar `getUser()` que valida tokens corretamente.
+
+### Bug 10: Loading infinito após login
+**Causa:** `useAuth` tem dependências instáveis no useEffect que causam re-execução contínua.
+
+**Problema:** `supabase`, `router`, `setUser`, `setLoading` são recriados a cada render, causando loop no useEffect.
+
+**Solução:**
+1. Usar `useCallback` para estabilizar funções
+2. Usar dependências vazias `[]` no useEffect
+3. Fallback para dados do session se profile falhar

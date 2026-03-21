@@ -4,11 +4,11 @@ import { Play, Pause, SkipForward, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { usePlayerStore } from "@/store/playerStore";
+import { useAuthStore } from "@/store/authStore";
 import { usePlaylist } from "@/hooks/usePlaylist";
-import { useAuth } from "@/hooks/useAuth";
 
 export function PlayerControls() {
-  const { isAdmin } = useAuth();
+  const isAdmin = useAuthStore((state) => state.user?.role === "admin");
   const { isPlaying, setIsPlaying, isMuted, setIsMuted, volume, setVolume, currentTime, duration } =
     usePlayerStore();
   const { pausePlayback, resumePlayback, skipToNext } = usePlaylist();

@@ -104,20 +104,18 @@ export function YouTubePlayer({ videoId, onVideoEnd }: YouTubePlayerProps) {
   }, [volume]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    if (!playerRef.current) return;
 
-    if (playerRef.current) {
-      interval = setInterval(() => {
-        if (playerRef.current) {
-          const currentTime = playerRef.current.getCurrentTime?.() || 0;
-          const duration = playerRef.current.getDuration?.() || 0;
-          setCurrentTime(currentTime);
-          if (duration > 0) {
-            setDuration(duration);
-          }
+    const interval = setInterval(() => {
+      if (playerRef.current) {
+        const currentTime = playerRef.current.getCurrentTime?.() || 0;
+        const duration = playerRef.current.getDuration?.() || 0;
+        setCurrentTime(currentTime);
+        if (duration > 0) {
+          setDuration(duration);
         }
-      }, 1000);
-    }
+      }
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [setCurrentTime, setDuration]);

@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ApprovalQueueItem } from "@/lib/supabase/types";
 
+const supabase = createClient();
+
 export function ApprovalList() {
-  const supabase = createClient();
   const [items, setItems] = useState<ApprovalQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -31,7 +32,8 @@ export function ApprovalList() {
 
   useEffect(() => {
     fetchApprovals();
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleApprove = async (id: string, songId: string) => {
     setProcessingId(id);

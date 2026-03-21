@@ -3,22 +3,22 @@
 import Link from "next/link";
 import { Music, ListMusic, CheckCircle, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/hooks/useUser";
 
 export default function AdminDashboardPage() {
-  const { user } = useAuth();
+  const user = useUser();
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Painel Admin</h1>
+        <h1 className="text-3xl font-bold mb-2">Painel de Administração</h1>
         <p className="text-muted-foreground">
           Bem-vindo, {user?.full_name || user?.email}. Gerencie a playlist e aprovações.
         </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Link href="/admin/approvals">
+        <Link href="/administracao/approvals">
           <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -34,7 +34,7 @@ export default function AdminDashboardPage() {
           </Card>
         </Link>
 
-        <Link href="/admin/playlist-manager">
+        <Link href="/administracao/playlist-manager">
           <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

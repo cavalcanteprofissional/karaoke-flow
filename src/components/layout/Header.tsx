@@ -40,7 +40,7 @@ export function Header() {
   ];
 
   if (isAdmin) {
-    navItems.push({ href: "/admin/dashboard", label: "Admin" });
+    navItems.push({ href: "/administracao/dashboard", label: "Administração" });
   }
 
   return (

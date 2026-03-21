@@ -299,3 +299,56 @@ const { data, error } = await supabase.auth.getUser();
 - Playlist sincronizada entre todos usuários (com delay de ~5s)
 - Funciona sem Realtime do Supabase
 - Sem erros de WebSocket no console
+
+---
+
+## 🐛 BUG EM ANDAMENTO
+
+### Bug 11: Loop Infinito no Dashboard após Login (PENDENTE)
+
+**Status:** Em investigação
+
+**Sintoma:** Login funciona (chega no dashboard), mas depois fica em loading infinito.
+
+**Observação:** Loop acontece NO DASHBOARD após login parecer funcionar.
+
+**Arquivos suspeitos:**
+- `src/hooks/useAuth.ts` - possible race condition com useEffect
+- `src/hooks/usePlaylist.ts` - múltiplos useEffects com dependências
+- `src/store/authStore.ts` - store pode estar resetando
+
+**Fluxo do problema:**
+```
+Login com Google → /auth/callback → /dashboard
+                                    ↓
+                           useAuth(true) executa
+                                    ↓
+                           usePlaylist() executa
+                                    ↓
+                           setInterval(polling) iniciado
+                                    ↓
+                           Alguma dependência muda?
+                                    ↓
+                           Re-render → loop?
+```
+
+**Próximos passos:**
+1. Testar localmente (localhost) para confirmar se é só no Vercel
+2. Simplificar useEffect no useAuth - usar dependências vazias `[]`
+3. Verificar se problema é no usePlaylist (múltiplos effects)
+4. Analisar dependências de `setUser` e `setLoading` no Zustand
+
+**Código a simplificar no useAuth.ts:**
+```typescript
+// Mudar de:
+useEffect(() => {
+  // ...
+}, [router, setUser, setLoading, requireAuth, syncProfile]);
+
+// Para:
+useEffect(() => {
+  // ...
+}, []); // DEPENDÊNCIA VAZIA
+```
+
+**Última alteração:** usePlaylist reescrito com polling fallback (commit `36419ed`)

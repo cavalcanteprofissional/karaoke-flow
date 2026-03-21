@@ -52,13 +52,13 @@
 - [x] 8.4 RegisterForm + Google
 - [x] 8.5 useAuth - sincroniza profile Google
 
-## v2.0.0 - Deploy Vercel (EM ANDAMENTO)
+## v2.0.0 - Deploy Vercel ✓
 
 ### Fase 9: Deploy
 - [x] 9.1 Código pushado para GitHub
 - [x] 9.2 Google OAuth configurado
-- [ ] 9.3 Deploy Vercel (PENDENTE)
-- [ ] 9.4 Testar funcionalidades em produção
+- [x] 9.3 Deploy Vercel
+- [x] 9.4 Testar funcionalidades em produção
 
 ---
 
@@ -178,8 +178,8 @@ karaoke-flow/
 ### v1.3.0 - Google OAuth (20/03/2026) ✓
 - [x] Login/Cadastro com Google
 
-### v2.0.0 - Deploy (Pendente)
-- [ ] Em produção
+### v2.0.0 - Deploy (20/03/2026) ✓
+- [x] Em produção: https://karaoke-flow.vercel.app
 
 ---
 
@@ -220,4 +220,26 @@ setAll(cookiesToSet) {
     supabaseResponse.cookies.set(name, value, options);
   });
 }
+```
+
+### Bug 4: Loop de OAuth Google (CRÍTICO)
+**Causa:** Rota `/auth/callback` não estava na lista de rotas públicas do middleware
+
+**Problema:** Quando Google redirecionava para `/auth/callback`, o middleware interceptava antes da página carregar, verificava `getUser()` (que retornava null pois cookies ainda não existiam), e redirecionava para `/login`, causando loop infinito.
+
+**Solução:** Adicionar `/auth/callback` às rotas públicas
+```typescript
+const publicRoutes = ["/", "/login", "/register", "/auth/callback"];
+```
+
+**Correção adicional:** Remover timeout de 5s que podia causar rejeição silenciosa em produção.
+```typescript
+// ANTES (problemático):
+const timeoutPromise = new Promise<never>((_, reject) => {
+  setTimeout(() => reject(new Error("Middleware timeout")), 5000);
+});
+const result = await Promise.race([authPromise, timeoutPromise]);
+
+// DEPOIS (corrigido):
+const { data, error } = await supabase.auth.getUser();
 ```

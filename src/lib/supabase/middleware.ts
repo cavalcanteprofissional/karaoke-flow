@@ -24,22 +24,15 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  let user = null;
-  try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Middleware timeout")), 5000);
-    });
-
-    const authPromise = supabase.auth.getUser();
-    const result = await Promise.race([authPromise, timeoutPromise]);
-    user = result.data?.user || null;
-  } catch (error) {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
     console.error("[Middleware] Auth error:", error);
   }
+  const user = data?.user || null;
 
   const { pathname } = request.nextUrl;
 
-  const publicRoutes = ["/", "/login", "/register"];
+  const publicRoutes = ["/", "/login", "/register", "/auth/callback"];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );

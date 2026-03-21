@@ -2,6 +2,33 @@ import { type YouTubeVideo, type YouTubeSearchResponse } from "@/types/youtube";
 
 const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
 
+interface YouTubeSearchItem {
+  id: {
+    videoId: string;
+  };
+  snippet: {
+    title: string;
+    channelTitle: string;
+    thumbnails: {
+      high?: {
+        url: string;
+        width: number;
+        height: number;
+      };
+      medium?: {
+        url: string;
+        width: number;
+        height: number;
+      };
+      default?: {
+        url: string;
+        width: number;
+        height: number;
+      };
+    };
+  };
+}
+
 export async function searchVideos(
   query: string,
   pageToken?: string
@@ -29,7 +56,7 @@ export async function searchVideos(
 
     const response = await fetch(
       `${YOUTUBE_API_BASE}/search?${params.toString()}`,
-      { next: { revalidate: 60 } }
+      { cache: "no-store" }
     );
 
     if (!response.ok) {
@@ -38,17 +65,14 @@ export async function searchVideos(
 
     const data = await response.json();
 
-    const videos: YouTubeVideo[] = data.items.map((item: Record<string, unknown>) => ({
-      id: item.id as string,
-      title: (item.snippet as Record<string, unknown>)?.title as string || "Untitled",
-      thumbnail: (item.snippet as Record<string, unknown>)?.thumbnails as Record<string, unknown> 
-        ? ((item.snippet as Record<string, unknown>).thumbnails as Record<string, unknown>).high 
-          ? ((item.snippet as Record<string, unknown>).thumbnails as Record<string, unknown>).high 
-          : ((item.snippet as Record<string, unknown>).thumbnails as Record<string, unknown>).medium
-          ? ((item.snippet as Record<string, unknown>).thumbnails as Record<string, unknown>).medium
-          : ((item.snippet as Record<string, unknown>).thumbnails as Record<string, unknown>).default
-        : null,
-      channelTitle: (item.snippet as Record<string, unknown>)?.channelTitle as string || "Unknown",
+    const videos: YouTubeVideo[] = data.items.map((item: YouTubeSearchItem) => ({
+      id: item.id.videoId,
+      title: item.snippet?.title || "Untitled",
+      thumbnail: item.snippet?.thumbnails?.high?.url 
+        || item.snippet?.thumbnails?.medium?.url 
+        || item.snippet?.thumbnails?.default?.url 
+        || null,
+      channelTitle: item.snippet?.channelTitle || "Unknown",
       duration: null,
       viewCount: null,
     }));

@@ -6,11 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { SearchBar } from "@/components/shared/SearchBar";
 import { VideoCard } from "@/components/shared/VideoCard";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/hooks/useUser";
 import { type YouTubeVideo } from "@/types/youtube";
 
 export function SongRequestForm() {
-  const { user } = useAuth();
+  const user = useUser();
   const supabase = createClient();
 
   const [searchResults, setSearchResults] = useState<YouTubeVideo[]>([]);

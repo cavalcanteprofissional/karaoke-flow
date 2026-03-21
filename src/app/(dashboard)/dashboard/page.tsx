@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlaylist } from "@/hooks/usePlaylist";
-import { useRealtime } from "@/hooks/useRealtime";
 import { SongRequestForm } from "@/components/playlist/SongRequestForm";
 import { PlaylistTable } from "@/components/playlist/PlaylistTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,8 +12,6 @@ import { ListMusic } from "lucide-react";
 export default function DashboardPage() {
   const { user, isAdmin } = useAuth(true);
   const { playlist, currentSong, isLoading, removeSong, reorder, playSong } = usePlaylist();
-
-  useRealtime();
 
   const [activeTab, setActiveTab] = useState("playlist");
 

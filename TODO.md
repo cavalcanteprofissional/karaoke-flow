@@ -181,6 +181,10 @@ karaoke-flow/
 ### v2.0.0 - Deploy (20/03/2026) ✓
 - [x] Em produção: https://karaoke-flow.vercel.app
 
+### v2.0.1 - Polling Fallback (20/03/2026) ✓
+- [x] Realtime com fallback de polling
+- [x] Playlist sincronizada sem Realtime
+
 ---
 
 ## 🐛 BUGS CORRIGIDOS
@@ -280,3 +284,18 @@ const { data, error } = await supabase.auth.getUser();
 **Problema:** Isso invalida `useCallback` e causa re-execução do `useEffect`, loop infinito.
 
 **Solução:** Mover `createClient()` para fora do componente (nível de módulo) ou usar `useMemo`.
+
+### Feature: Polling como Fallback para Realtime
+**Problema:** Extensão `pg_realtime` não disponível no Supabase gratuito.
+
+**Solução:** Implementar polling com `setInterval(5000)` como fallback quando Realtime falhar.
+
+**Fluxo:**
+1. Tentar Realtime primeiro
+2. Se falhar, mudar para polling
+3. Buscar playlist a cada 5 segundos
+
+**Benefícios:**
+- Playlist sincronizada entre todos usuários (com delay de ~5s)
+- Funciona sem Realtime do Supabase
+- Sem erros de WebSocket no console

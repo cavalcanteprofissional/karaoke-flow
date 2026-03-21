@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * @deprecated Esta hook está deprecated. A sincronização de playlist
+ * foi movida para usePlaylist.ts que agora inclui polling como fallback.
+ * Não utilize mais este hook.
+ */
+
 import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePlaylistStore } from "@/store/playlistStore";

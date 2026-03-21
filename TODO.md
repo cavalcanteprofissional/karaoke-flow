@@ -243,3 +243,11 @@ const result = await Promise.race([authPromise, timeoutPromise]);
 // DEPOIS (corrigido):
 const { data, error } = await supabase.auth.getUser();
 ```
+
+### Bug 5: Tela branca após OAuth (tela branca + ?code= na URL)
+**Causa:** Callback usava `router.push()` que preservava query params, e `useAuth` retornava `isLoading: false` sempre.
+
+**Solução:**
+1. Callback usa `router.replace()` para limpar URL
+2. `useAuth` retorna `isLoading` real do store
+3. `useAuth` cria profile automaticamente se não existir (código `PGRST116` = not found)

@@ -69,27 +69,14 @@ export function useAuth(requireAuth = false) {
   };
 
   useEffect(() => {
-    console.log("[useAuth] useEffect fired, requireAuth:", requireAuth, "initRef:", initRef.current);
-    
-    // Prevenir inicializações duplicadas do StrictMode
-    if (initRef.current) {
-      console.log("[useAuth] Already initialized, skipping");
-      return;
-    }
+    if (initRef.current) return;
     initRef.current = true;
 
     const initAuth = async () => {
-      console.log("[useAuth] initAuth start");
       setLoading(true);
 
       try {
-        const { data, error } = await supabase.auth.getSession();
-
-        console.log("[useAuth] Session result - user:", !!data?.session?.user, "error:", error);
-
-        if (error) {
-          console.error("[useAuth] Session error:", error);
-        }
+        const { data } = await supabase.auth.getSession();
 
         if (data?.session?.user) {
           const profile = await syncProfile(data.session.user);
@@ -97,7 +84,6 @@ export function useAuth(requireAuth = false) {
         } else {
           setUser(null);
           if (requireAuth) {
-            console.log("[useAuth] No user, redirecting to login");
             router.push("/login");
           }
         }
@@ -109,31 +95,10 @@ export function useAuth(requireAuth = false) {
         }
       } finally {
         setLoading(false);
-        console.log("[useAuth] initAuth complete");
       }
     };
 
     initAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("[useAuth] onAuthStateChange:", event, !!session?.user);
-      if (session?.user) {
-        const profile = await syncProfile(session.user);
-        setUser(profile as Profile);
-      } else {
-        setUser(null);
-        if (requireAuth) {
-          router.push("/login");
-        }
-      }
-    });
-
-    return () => {
-      console.log("[useAuth] Cleanup");
-      subscription.unsubscribe();
-    };
   }, [supabase, router, setUser, setLoading, requireAuth]);
 
   const signOut = async () => {

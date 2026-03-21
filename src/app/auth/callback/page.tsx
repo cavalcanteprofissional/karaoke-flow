@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -8,38 +8,28 @@ import { Loader2 } from "lucide-react";
 function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleCallback = async () => {
       const supabase = createClient();
       const next = searchParams.get("next") || "/dashboard";
 
-      const { error } = await supabase.auth.getSession();
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (error) {
-        setError(error.message);
-        setTimeout(() => {
-          router.push("/login");
-        }, 3000);
-      } else {
+        if (error || !data.session) {
+          router.replace("/login");
+          return;
+        }
+
         router.replace(next);
+      } catch {
+        router.replace("/login");
       }
     };
 
     handleCallback();
   }, [searchParams, router]);
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-destructive mb-4">Erro: {error}</p>
-          <p className="text-muted-foreground">Redirecionando para login...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center">

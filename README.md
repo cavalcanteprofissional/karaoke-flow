@@ -129,6 +129,201 @@ karaoke-flow/
 | Reordenar playlist | ❌ | ✅ |
 | Remover músicas | ❌ | ✅ |
 
+## 🔄 Fluxo do Sistema
+
+### Arquitetura de Autenticação
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        FLUXO DE AUTENTICAÇÃO                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. USUÁRIO ACESSA /dashboard
+   │
+   ├─→ Middleware (middleware.ts)
+   │   └─→ Verifica cookies de sessão
+   │       └─→ Redireciona para /login se não autenticado
+   │
+   └─→ DashboardLayout (layout.tsx)
+       └─→ useAuth(true) ← Executa initAuth UMA vez
+           │
+           ├─→ supabase.auth.getSession()
+           │   └─→ Busca perfil no banco
+           │       └─→ syncProfile() ← Atualiza authStore
+           │
+           └─→ setUser(profile) ← Atualiza store Zustand
+               │
+               └─→ TODOS os componentes subscritos re-renderizam
+                   │
+                   ├─→ Header (useUser)
+                   ├─→ DashboardPage (useUser)
+                   └─→ usePlaylist (acionado pela mudança de user)
+```
+
+### Fluxo de Renderização do Dashboard
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     FLUXO DE RENDERIZAÇÃO                            │
+└─────────────────────────────────────────────────────────────────────┘
+
+DashboardLayout
+├─ useAuth(true) ─→ initRef flag previne execução dupla
+│   └─→ setLoading(true) → setLoading(false)
+│       └─→ setUser(profile) ← Atualiza store
+│
+└─ children (DashboardPage)
+    ├─ useUser() ─→ Lê user da store (NÃO executa initAuth)
+    └─ usePlaylist() ─→ Acionado quando user muda no store
+        └─→ fetchPlaylist() ← Busca dados
+        └─→ setupRealtime() OU setupPolling()
+```
+
+### Estrutura de Hooks
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         HOOKS DO SISTEMA                              │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐
+│   useAuth()     │ ← Executa initAuth (uma vez por app)
+│   requireAuth   │
+└────────┬────────┘
+         │
+         ├─→ Lê: user, isLoading do authStore
+         ├─→ Escreve: setUser, setLoading
+         └─→ Retorna: user, isLoading, isAdmin, signOut
+
+┌─────────────────┐
+│   useUser()     │ ← Leitura apenas do user
+└────────┬────────┘
+         │
+         └─→ Lê: user do authStore
+             └─→ NÃO causa re-renders extras
+
+┌─────────────────────────┐
+│   usePlaylist()         │ ← Gerencia playlist + realtime
+└────────────┬────────────┘
+             │
+             ├─→ Efeito único com dependência [user]
+             │   └─→ cleanup() ao desmontar
+             │
+             ├─→ Realtime (Supabase)
+             │   └─→ Canal: playlist-sync
+             │       ├─→ Tabela: playlist
+             │       └─→ Tabela: player_state
+             │
+             └─→ Polling (fallback)
+                 └─→ Interval: 5 segundos
+
+┌─────────────────────────┐
+│   Stores (Zustand)       │
+└─────────────────────────┘
+
+authStore ──────────────→ user, isLoading
+                              ↑
+                              └─ useAuth → setUser()
+
+playlistStore ───────────→ playlist[], currentSong, playerState
+                              ↑
+                              └─ usePlaylist → fetchPlaylist()
+
+playerStore ─────────────→ videoId, isPlaying, isMuted, volume
+                              ↑
+                              └─ YouTubePlayer → setIsPlaying()
+```
+
+### Fluxo de Dados (Playlist)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     FLUXO DE DADOS - PLAYLIST                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. USUÁRIO SOLICITA MÚSICA
+   └─→ SongRequestForm
+       └─→ POST /api/youtube/search
+           └─→ YouTube Data API
+               └─→ Lista de vídeos
+
+2. USUÁRIO SELECIONA VÍDEO
+   └─→ Insere em songs (se não existir)
+       └─→ Insere em approval_queue (pendente)
+
+3. ADMIN APROVA
+   └─→ POST /api/admin/approve
+       └─→ Insere em playlist (position = última)
+           └─→ Supabase Realtime notifica
+
+4. PLAYER TOCAR MÚSICA
+   └─→ Admin clica "Play"
+       └─→ UPDATE player_state (current_song_id, status)
+           └─→ usePlaylist detecta mudança
+               └─→ YouTubePlayer carrega vídeo
+```
+
+### Middleware (Proteção de Rotas)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                       MIDDLEWARE - PROTECTION                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+Middleware (middleware.ts)
+├─→ createServerClient() ← Lê cookies
+├─→ supabase.auth.getUser()
+│   └─→ Valida token JWT
+│
+├─→ Rotas públicas: /, /login, /register, /auth/callback
+│   └─→ Permite acesso sem autenticação
+│
+└─→ Rotas protegidas: /dashboard, /player, /admin/*
+    └─→ Redireciona para /login se !user
+```
+
+### Estados do Player
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                       ESTADOS DO PLAYER                               │
+└─────────────────────────────────────────────────────────────────────┘
+
+player_state (tabela Supabase)
+│
+├─ status: "idle" | "playing" | "paused"
+│   └─→ playerStore.isPlaying
+│
+├─ current_song_id: string | null
+│   └─→ playlistStore.currentSong
+│
+└─ updated_at: timestamp
+    └─→ Sincronizado via Realtime
+```
+
+### Performance & Boas Práticas
+
+1. **useAuth executa UMA vez** via `initRef`
+2. **usePlaylist usa efeito único** com dependência `[user]`
+3. **Realtime com fallback de polling** (5s) para estabilidade
+4. **Zustand selectors otimizados** para evitar re-renders
+5. **Cleanup em todos os useEffects** para evitar vazamento de memória
+
+### Debug (Desenvolvimento)
+
+Para identificar problemas, adicione logs nos arquivos:
+
+```typescript
+// src/hooks/useAuth.ts
+console.log("[useAuth] effect executing", { initRef, user, isLoading });
+
+// src/store/authStore.ts  
+console.log("[authStore] setUser", { user });
+
+// src/hooks/usePlaylist.ts
+console.log("[usePlaylist] effect", { user, playlist });
+```
+
 ## 🌐 API Routes
 
 | Endpoint | Método | Descrição |

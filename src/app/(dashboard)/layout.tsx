@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { Loader2, AlertCircle } from "lucide-react";
 
 export default function DashboardLayout({
@@ -43,7 +44,8 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 pb-20 md:pb-0">{children}</main>
+      <BottomNav />
     </div>
   );
 }

@@ -68,9 +68,9 @@ export function useAuth(requireAuth = false) {
     if (initRef.current) return;
     initRef.current = true;
 
-    const initAuth = async () => {
-      setLoading(true);
+    setLoading(true);
 
+    const initAuth = async () => {
       try {
         const { data } = await supabase.auth.getSession();
 
@@ -106,7 +106,7 @@ export function useAuth(requireAuth = false) {
     };
 
     initAuth();
-  }, [router, setUser, setLoading, requireAuth, syncProfile]);
+  }, []);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();

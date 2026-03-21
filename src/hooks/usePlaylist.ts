@@ -10,7 +10,7 @@ const supabase = createClient();
 const POLL_INTERVAL = 5000;
 
 export function usePlaylist() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const {
     playlist,
     currentSong,
@@ -28,9 +28,10 @@ export function usePlaylist() {
   const [useRealtime, setUseRealtime] = useState(true);
   const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
 
   const fetchPlaylist = useCallback(async () => {
-    if (!user) return;
+    if (!mountedRef.current) return;
 
     try {
       const { data: playlistData } = await supabase
@@ -38,6 +39,7 @@ export function usePlaylist() {
         .select(`*, songs (*, profiles (full_name))`)
         .order("position", { ascending: true });
 
+      if (!mountedRef.current) return;
       setPlaylist((playlistData as PlaylistItem[]) || []);
 
       const { data: playerData } = await supabase
@@ -46,7 +48,7 @@ export function usePlaylist() {
         .eq("id", "main")
         .maybeSingle();
 
-      if (playerData) {
+      if (playerData && mountedRef.current) {
         setPlayerState(playerData as PlayerState);
         if (playerData.current_song_id) {
           const current = (playlistData as PlaylistItem[])?.find(
@@ -58,9 +60,11 @@ export function usePlaylist() {
     } catch (error) {
       console.error("[usePlaylist] Error fetching:", error);
     }
-  }, [user, setPlaylist, setCurrentSong, setPlayerState]);
+  }, [setPlaylist, setCurrentSong, setPlayerState]);
 
   const handlePlaylistChange = useCallback(async (payload: { eventType: string; new?: { id: string }; old?: { id: string } }) => {
+    if (!mountedRef.current) return;
+    
     if (payload.eventType === "INSERT" && payload.new) {
       const { data } = await supabase
         .from("playlist")
@@ -68,17 +72,21 @@ export function usePlaylist() {
         .eq("id", payload.new.id)
         .single();
 
-      if (data) {
+      if (data && mountedRef.current) {
         addToPlaylist(data as PlaylistItem);
       }
     } else if (payload.eventType === "DELETE" && payload.old) {
-      removeFromPlaylist(payload.old.id);
+      if (mountedRef.current) {
+        removeFromPlaylist(payload.old.id);
+      }
     } else if (payload.eventType === "UPDATE") {
       await fetchPlaylist();
     }
   }, [addToPlaylist, removeFromPlaylist, fetchPlaylist]);
 
   const handlePlayerStateChange = useCallback(async (payload: { new: PlayerState }) => {
+    if (!mountedRef.current) return;
+    
     const newState = payload.new;
     setPlayerState(newState);
 
@@ -89,11 +97,13 @@ export function usePlaylist() {
         .eq("song_id", newState.current_song_id)
         .single();
 
-      if (playlistData) {
+      if (playlistData && mountedRef.current) {
         setCurrentSong(playlistData as PlaylistItem);
       }
     } else {
-      setCurrentSong(null);
+      if (mountedRef.current) {
+        setCurrentSong(null);
+      }
     }
   }, [setCurrentSong, setPlayerState]);
 
@@ -118,9 +128,7 @@ export function usePlaylist() {
         }
       )
       .subscribe((status: string) => {
-        if (status === "SUBSCRIBED") {
-          console.log("[usePlaylist] Realtime connected");
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           console.warn("[usePlaylist] Realtime failed, switching to polling");
           setUseRealtime(false);
         }
@@ -131,7 +139,6 @@ export function usePlaylist() {
 
   const setupPolling = useCallback(() => {
     if (pollIntervalRef.current) return;
-    console.log("[usePlaylist] Starting polling every", POLL_INTERVAL, "ms");
     pollIntervalRef.current = setInterval(fetchPlaylist, POLL_INTERVAL);
   }, [fetchPlaylist]);
 
@@ -159,29 +166,24 @@ export function usePlaylist() {
 
     const init = async () => {
       await fetchPlaylist();
+      
+      if (!mountedRef.current) return;
       setLoading(false);
 
       if (useRealtime) {
         setupRealtime();
-      }
-
-      if (!useRealtime) {
+      } else {
         setupPolling();
       }
     };
 
     init();
 
-    return cleanup;
-  }, [user, useRealtime, fetchPlaylist, setLoading, cleanup, setupRealtime, setupPolling, setPlaylist, setCurrentSong, setPlayerState]);
-
-  useEffect(() => {
-    if (!useRealtime && !pollIntervalRef.current && user) {
-      setupPolling();
-    } else if (useRealtime && realtimeRef.current && !pollIntervalRef.current) {
+    return () => {
+      mountedRef.current = false;
       cleanup();
-    }
-  }, [useRealtime, user, setupPolling, cleanup]);
+    };
+  }, [user]);
 
   const removeSong = useCallback(
     async (id: string) => {

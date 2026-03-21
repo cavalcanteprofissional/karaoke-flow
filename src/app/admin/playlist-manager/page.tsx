@@ -1,7 +1,6 @@
 "use client";
 
 import { usePlaylist } from "@/hooks/usePlaylist";
-import { useRealtime } from "@/hooks/useRealtime";
 import { PlaylistTable } from "@/components/playlist/PlaylistTable";
 import { PlayerControls } from "@/components/player/PlayerControls";
 import { NowPlaying } from "@/components/player/NowPlaying";
@@ -11,7 +10,6 @@ import { ListMusic } from "lucide-react";
 
 export default function PlaylistManagerPage() {
   const { playlist, currentSong, removeSong, reorder, playSong } = usePlaylist();
-  useRealtime();
 
   const handleMoveUp = (index: number) => {
     if (index === 0) return;

@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { Music, User, LogOut, Shield } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/hooks/useUser";
+import { useAuthStore } from "@/store/authStore";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,9 +18,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+const supabase = createClient();
+
 export function Header() {
   const pathname = usePathname();
-  const { user, isAdmin, signOut } = useAuth();
+  const router = useRouter();
+  const user = useUser();
+  const setUser = useAuthStore((state) => state.setUser);
+  const isAdmin = useAuthStore((state) => state.user?.role === "admin");
+  
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    router.push("/login");
+  };
 
   const navItems = [
     { href: "/dashboard", label: "Playlist" },
@@ -75,7 +89,7 @@ export function Header() {
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={signOut} className="text-destructive">
+                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
                   <LogOut className="h-4 w-4 mr-2" />
                   Sair
                 </DropdownMenuItem>

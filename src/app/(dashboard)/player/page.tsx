@@ -1,14 +1,12 @@
 "use client";
 
 import { usePlaylist } from "@/hooks/usePlaylist";
-import { useRealtime } from "@/hooks/useRealtime";
 import { YouTubePlayer } from "@/components/player/YouTubePlayer";
 import { PlayerControls } from "@/components/player/PlayerControls";
 import { NowPlaying } from "@/components/player/NowPlaying";
 
 export default function PlayerPage() {
   const { currentSong } = usePlaylist();
-  useRealtime();
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">

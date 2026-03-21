@@ -1,10 +1,10 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/hooks/useUser";
 import { Music2 } from "lucide-react";
 
 export default function MySongsPage() {
-  const { user } = useAuth();
+  const user = useUser();
 
   return (
     <div className="container mx-auto px-4 py-8">

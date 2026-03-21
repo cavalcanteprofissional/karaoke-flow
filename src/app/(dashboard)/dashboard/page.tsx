@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/store/authStore";
+import { useUser } from "@/hooks/useUser";
 import { usePlaylist } from "@/hooks/usePlaylist";
 import { SongRequestForm } from "@/components/playlist/SongRequestForm";
 import { PlaylistTable } from "@/components/playlist/PlaylistTable";
@@ -10,23 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ListMusic } from "lucide-react";
 
 export default function DashboardPage() {
-  const { user, isAdmin } = useAuth(true);
+  const user = useUser();
+  const isAdmin = useAuthStore((state) => state.user?.role === "admin");
   const { playlist, currentSong, isLoading, removeSong, reorder, playSong } = usePlaylist();
 
   const [activeTab, setActiveTab] = useState("playlist");
 
   if (!user) {
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando...</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const handleMoveUp = (index: number) => {

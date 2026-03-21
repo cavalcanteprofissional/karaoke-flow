@@ -33,7 +33,7 @@ export async function searchVideos(
   query: string,
   pageToken?: string
 ): Promise<YouTubeSearchResponse> {
-  const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
+  const apiKey = process.env.YOUTUBE_API_KEY;
 
   if (!apiKey) {
     return { videos: [], nextPageToken: null, error: "YouTube API key not configured" };
@@ -93,7 +93,7 @@ export async function searchVideos(
 }
 
 export async function getVideoDetails(videoId: string) {
-  const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
+  const apiKey = process.env.YOUTUBE_API_KEY;
 
   if (!apiKey) {
     return { video: null, error: "YouTube API key not configured" };

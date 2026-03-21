@@ -103,7 +103,7 @@ karaoke-flow/
 │   ├── app/              # Rotas (Next.js App Router)
 │   │   ├── (auth)/      # Login, Register
 │   │   ├── (dashboard)/ # Playlist, Player, Minhas Músicas
-│   │   ├── admin/       # Painel Admin
+│   │   ├── administracao/  # Painel de Administração
 │   │   └── api/         # API Routes
 │   ├── components/       # Componentes React
 │   ├── hooks/           # Hooks customizados
@@ -278,7 +278,7 @@ Middleware (middleware.ts)
 ├─→ Rotas públicas: /, /login, /register, /auth/callback
 │   └─→ Permite acesso sem autenticação
 │
-└─→ Rotas protegidas: /dashboard, /player, /admin/*
+└─→ Rotas protegidas: /dashboard, /player, /administracao/*
     └─→ Redireciona para /login se !user
 ```
 

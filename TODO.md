@@ -191,6 +191,13 @@ karaoke-flow/
 - [x] useAuth simplificado com dependência vazia
 - [x] Dashboard page usa useUser() sem duplicar initAuth
 
+### v2.0.3 - Loop Infinitos Adicionais (21/03/2026) ✓
+- [x] PlayerControls - usa useAuthStore ao invés de useAuth
+- [x] ApprovalList - createClient fora do componente, dependência vazia
+- [x] YouTubePlayer - interval fix
+- [x] Admin Dashboard - usa useUser()
+- [x] Renomeado Admin → Administração
+
 ---
 
 ## 🐛 BUGS CORRIGIDOS

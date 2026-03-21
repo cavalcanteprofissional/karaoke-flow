@@ -6,8 +6,9 @@ import { usePlaylistStore } from "@/store/playlistStore";
 import { useAuthStore } from "@/store/authStore";
 import { type PlaylistItem, type PlayerState } from "@/lib/supabase/types";
 
+const supabase = createClient();
+
 export function useRealtime() {
-  const supabase = createClient();
   const { user } = useAuthStore();
   const { setPlaylist, setCurrentSong, setPlayerState } = usePlaylistStore();
 

@@ -275,11 +275,8 @@ const { data, error } = await supabase.auth.getUser();
 **Solução:** Usar `getUser()` que valida tokens corretamente.
 
 ### Bug 10: Loading infinito após login
-**Causa:** `useAuth` tem dependências instáveis no useEffect que causam re-execução contínua.
+**Causa:** `createClient()` é chamado dentro do componente, criando nova instância a cada render.
 
-**Problema:** `supabase`, `router`, `setUser`, `setLoading` são recriados a cada render, causando loop no useEffect.
+**Problema:** Isso invalida `useCallback` e causa re-execução do `useEffect`, loop infinito.
 
-**Solução:**
-1. Usar `useCallback` para estabilizar funções
-2. Usar dependências vazias `[]` no useEffect
-3. Fallback para dados do session se profile falhar
+**Solução:** Mover `createClient()` para fora do componente (nível de módulo) ou usar `useMemo`.

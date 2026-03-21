@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { type Profile } from "@/lib/supabase/types";
 
+const supabase = createClient();
+
 export function useAuth(requireAuth = false) {
   const router = useRouter();
-  const supabase = createClient();
   const { user, setUser, setLoading, isLoading } = useAuthStore();
   const initRef = useRef(false);
 
@@ -57,7 +58,7 @@ export function useAuth(requireAuth = false) {
     } catch {
       return null;
     }
-  }, [supabase]);
+  }, []);
 
   const getAdminStatus = useCallback(() => {
     return user?.role === "admin";
@@ -105,13 +106,13 @@ export function useAuth(requireAuth = false) {
     };
 
     initAuth();
-  }, [supabase, router, setUser, setLoading, requireAuth, syncProfile]);
+  }, [router, setUser, setLoading, requireAuth, syncProfile]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
     router.push("/login");
-  }, [supabase, router, setUser]);
+  }, [router, setUser]);
 
   return {
     user,

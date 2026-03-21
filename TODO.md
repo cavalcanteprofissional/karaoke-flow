@@ -198,6 +198,20 @@ karaoke-flow/
 - [x] Admin Dashboard - usa useUser()
 - [x] Renomeado Admin → Administração
 
+### v2.0.4 - Design System & Navegação (21/03/2026) ✓
+- [x] DESIGN.md criado como agente de design
+- [x] Dark/Light mode implementado com next-themes
+- [x] ThemeToggle component
+- [x] Mobile Navigation com BottomNav e MobileNav (Sheet)
+- [x] Header responsivo
+
+### v2.0.5 - YouTube API Fix (21/03/2026) ✓
+- [x] Corrigido parsing de item.id (acessa videoId corretamente)
+- [x] Corrigido parsing de thumbnail URL
+- [x] Interface TypeScript para resposta da API
+- [x] SongRequestForm usa useUser() ao invés de useAuth()
+- [x] API testada e funcionando
+
 ---
 
 ## 🐛 BUGS CORRIGIDOS
@@ -390,3 +404,63 @@ const isAdmin = useAuthStore((state) => state.user?.role === "admin");
 - `src/app/(dashboard)/dashboard/page.tsx` (usa useUser)
 
 **Testado por:** Usuário (localmente)
+
+### Bug 12: YouTube API - Parsing Incorreto
+
+**Status:** ✅ RESOLVIDO (21/03/2026)
+
+**Sintoma:** Não era possível solicitar músicas - busca retornava dados vazios ou erro.
+
+**Causa Raiz:**
+1. `item.id` era tratado como string, mas a API retorna objeto `{ videoId: string }`
+2. Thumbnail parsing estava incorreto - acessava objeto inteiro ao invés de `.url`
+
+**Solução Implementada:**
+
+**1. Interface TypeScript correta:**
+```typescript
+interface YouTubeSearchItem {
+  id: { videoId: string; };
+  snippet: {
+    title: string;
+    channelTitle: string;
+    thumbnails: {
+      high?: { url: string; width: number; height: number; };
+      medium?: { url: string; width: number; height: number; };
+      default?: { url: string; width: number; height: number; };
+    };
+  };
+}
+```
+
+**2. Parsing correto:**
+```typescript
+const videos: YouTubeVideo[] = data.items.map((item: YouTubeSearchItem) => ({
+  id: item.id.videoId,  // ← Acessa videoId do objeto
+  title: item.snippet?.title || "Untitled",
+  thumbnail: item.snippet?.thumbnails?.high?.url  // ← Acessa .url
+    || item.snippet?.thumbnails?.medium?.url
+    || item.snippet?.thumbnails?.default?.url
+    || null,
+  channelTitle: item.snippet?.channelTitle || "Unknown",
+  duration: null,
+  viewCount: null,
+}));
+```
+
+**3. SongRequestForm:**
+```typescript
+// ANTES:
+import { useAuth } from "@/hooks/useAuth";
+const { user } = useAuth();
+
+// DEPOIS:
+import { useUser } from "@/hooks/useUser";
+const user = useUser();
+```
+
+**Arquivos Modificados:**
+- `src/lib/youtube/api.ts` (parsing corrigido)
+- `src/components/playlist/SongRequestForm.tsx` (useUser)
+
+**Testado por:** API curl - retornou dados corretos

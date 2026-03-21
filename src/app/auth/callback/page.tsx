@@ -15,9 +15,9 @@ function AuthCallbackContent() {
       const next = searchParams.get("next") || "/dashboard";
 
       try {
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getUser();
 
-        if (error || !data.session) {
+        if (error || !data.user) {
           router.replace("/login");
           return;
         }

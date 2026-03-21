@@ -74,11 +74,11 @@ export function RegisterForm() {
         </div>
         <h2 className="text-2xl font-bold">Conta criada!</h2>
         <p className="text-muted-foreground">
-          Verifique seu email para confirmar sua conta.
+          Verifique seu email para confirmar sua conta e fazer login.
         </p>
         <Link href="/login">
           <Button variant="outline" className="w-full">
-            Voltar para login
+            Ir para login
           </Button>
         </Link>
       </div>

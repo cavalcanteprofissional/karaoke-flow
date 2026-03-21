@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { Header } from "@/components/layout/Header";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 export default function DashboardLayout({
   children,
@@ -20,7 +21,23 @@ export default function DashboardLayout({
   }
 
   if (!user) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md p-6">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">Erro ao carregar</h2>
+          <p className="text-muted-foreground mb-4">
+            Não foi possível carregar suas informações. Por favor, faça login novamente.
+          </p>
+          <Link 
+            href="/login" 
+            className="inline-flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Voltar para login
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

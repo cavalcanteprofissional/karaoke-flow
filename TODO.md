@@ -251,3 +251,25 @@ const { data, error } = await supabase.auth.getUser();
 1. Callback usa `router.replace()` para limpar URL
 2. `useAuth` retorna `isLoading` real do store
 3. `useAuth` cria profile automaticamente se não existir (código `PGRST116` = not found)
+
+### Bug 6: Registro requer confirmação de email
+**Causa:** Supabase `signUp` envia email de confirmação por padrão, impedindo login automático.
+
+**Problema:** Usuários se registram mas não conseguem acessar até confirmar email.
+
+**Solução:** Usar `emailConfirm: false` para desenvolvimento ou mostrar aviso claro.
+
+### Bug 7: Inconsistência nos redirects
+**Causa:** `LoginForm` usa `window.location.href`, `GoogleButton` usa `router.push`.
+
+**Solução:** Padronizar para `router.push()` ou `window.location.replace()`.
+
+### Bug 8: Dashboard retorna null no erro
+**Causa:** `dashboard/layout.tsx` retorna `null` quando `!user`, causando tela branca.
+
+**Solução:** Mostrar mensagem de erro e link para tentar novamente.
+
+### Bug 9: getSession vs getUser no callback
+**Causa:** Callback usa `getSession()` em vez de `getUser()`.
+
+**Solução:** Usar `getUser()` que valida tokens corretamente.

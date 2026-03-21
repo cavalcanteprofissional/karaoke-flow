@@ -9,20 +9,37 @@ import { type Profile } from "@/lib/supabase/types";
 export function useAuth(requireAuth = false) {
   const router = useRouter();
   const supabase = createClient();
-  const { user, setUser, setLoading, isAdmin } = useAuthStore();
+  const { user, setUser, setLoading, isLoading, isAdmin } = useAuthStore();
   
   const initRef = useRef(false);
 
   const syncProfile = async (authUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => {
     console.log("[useAuth] syncing profile for:", authUser.id);
     try {
-      const { data: profile, error } = await supabase
+      let { data: profile, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", authUser.id)
         .single();
 
-      if (error) {
+      if (error?.code === "PGRST116") {
+        console.log("[useAuth] Profile not found, creating...");
+        const { data: newProfile, error: insertError } = await supabase
+          .from("profiles")
+          .insert({
+            id: authUser.id,
+            email: authUser.email || '',
+            full_name: authUser.user_metadata?.full_name as string || '',
+          })
+          .select("*")
+          .single();
+
+        if (insertError) {
+          console.error("[useAuth] Profile creation error:", insertError);
+          return null;
+        }
+        profile = newProfile;
+      } else if (error) {
         console.error("[useAuth] Profile fetch error:", error);
         return null;
       }
@@ -31,19 +48,15 @@ export function useAuth(requireAuth = false) {
         const googleName = authUser.user_metadata?.full_name as string | undefined;
         const googleAvatar = authUser.user_metadata?.avatar_url as string | undefined;
 
-        if (googleName && profile.full_name !== googleName) {
+        if ((googleName && profile.full_name !== googleName) || (googleAvatar && profile.avatar_url !== googleAvatar)) {
+          const updates: Record<string, string> = {};
+          if (googleName && profile.full_name !== googleName) updates.full_name = googleName;
+          if (googleAvatar && profile.avatar_url !== googleAvatar) updates.avatar_url = googleAvatar;
+
           await supabase
             .from("profiles")
-            .update({ full_name: googleName })
+            .update(updates)
             .eq("id", authUser.id);
-          profile.full_name = googleName;
-        }
-        if (googleAvatar && profile.avatar_url !== googleAvatar) {
-          await supabase
-            .from("profiles")
-            .update({ avatar_url: googleAvatar })
-            .eq("id", authUser.id);
-          profile.avatar_url = googleAvatar;
         }
       }
 
@@ -131,7 +144,7 @@ export function useAuth(requireAuth = false) {
 
   return {
     user,
-    isLoading: false,
+    isLoading,
     isAdmin: isAdmin(),
     signOut,
   };

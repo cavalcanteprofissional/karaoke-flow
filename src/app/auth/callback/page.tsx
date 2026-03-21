@@ -23,7 +23,7 @@ function AuthCallbackContent() {
           router.push("/login");
         }, 3000);
       } else {
-        router.push(next);
+        router.replace(next);
       }
     };
 

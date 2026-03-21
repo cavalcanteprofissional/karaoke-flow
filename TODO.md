@@ -212,6 +212,12 @@ karaoke-flow/
 - [x] SongRequestForm usa useUser() ao invés de useAuth()
 - [x] API testada e funcionando
 
+### v2.0.6 - YouTube API Key Environment (21/03/2026) ✓
+- [x] Corrigido acesso à API key em server-side routes
+- [x] Adicionado YOUTUBE_API_KEY (sem NEXT_PUBLIC_) para SSR
+- [x] Atualizado youtube/api.ts para usar process.env.YOUTUBE_API_KEY
+- [x] Atualizado .env.example com nova variável
+
 ---
 
 ## 🐛 BUGS CORRIGIDOS

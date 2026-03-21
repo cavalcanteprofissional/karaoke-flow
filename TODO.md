@@ -185,6 +185,12 @@ karaoke-flow/
 - [x] Realtime com fallback de polling
 - [x] Playlist sincronizada sem Realtime
 
+### v2.0.2 - Bug 11 Fix (21/03/2026) ✓
+- [x] Loop infinito no dashboard corrigido
+- [x] Novo hook useUser() para leitura apenas
+- [x] useAuth simplificado com dependência vazia
+- [x] Dashboard page usa useUser() sem duplicar initAuth
+
 ---
 
 ## 🐛 BUGS CORRIGIDOS
@@ -304,51 +310,76 @@ const { data, error } = await supabase.auth.getUser();
 
 ## 🐛 BUG EM ANDAMENTO
 
-### Bug 11: Loop Infinito no Dashboard após Login (PENDENTE)
+### Bug 11: Loop Infinito no Dashboard após Login (CORRIGIDO)
 
-**Status:** Em investigação
+**Status:** ✅ RESOLVIDO (21/03/2026)
 
-**Sintoma:** Login funciona (chega no dashboard), mas depois fica em loading infinito.
+**Causa Raiz:**
+1. `useAuth(true)` era executado NO LAYOUT e NO PAGE simultaneamente
+2. Ambos chamavam `initAuth()` → `setLoading(true)` → sobrescrevendo estado
+3. Dependências do useEffect incluíam funções que mudavam de referência
+4. `setLoading(true)` no início de `initAuth` causava loop de re-renders
 
-**Observação:** Loop acontece NO DASHBOARD após login parecer funcionar.
+**Solução Implementada:**
 
-**Arquivos suspeitos:**
-- `src/hooks/useAuth.ts` - possible race condition com useEffect
-- `src/hooks/usePlaylist.ts` - múltiplos useEffects com dependências
-- `src/store/authStore.ts` - store pode estar resetando
-
-**Fluxo do problema:**
-```
-Login com Google → /auth/callback → /dashboard
-                                    ↓
-                           useAuth(true) executa
-                                    ↓
-                           usePlaylist() executa
-                                    ↓
-                           setInterval(polling) iniciado
-                                    ↓
-                           Alguma dependência muda?
-                                    ↓
-                           Re-render → loop?
-```
-
-**Próximos passos:**
-1. Testar localmente (localhost) para confirmar se é só no Vercel
-2. Simplificar useEffect no useAuth - usar dependências vazias `[]`
-3. Verificar se problema é no usePlaylist (múltiplos effects)
-4. Analisar dependências de `setUser` e `setLoading` no Zustand
-
-**Código a simplificar no useAuth.ts:**
+**1. Novo Hook `useUser()` (src/hooks/useUser.ts):**
 ```typescript
-// Mudar de:
+export function useUser(): Profile | null {
+  const user = useAuthStore((state) => state.user);
+  return user;
+}
+```
+- Leitura apenas do user do store
+- NÃO executa initAuth
+- NÃO causa re-renders
+
+**2. Simplificado `useAuth.ts` (src/hooks/useAuth.ts:67-109):**
+```typescript
+// ANTES (problemático):
 useEffect(() => {
   // ...
 }, [router, setUser, setLoading, requireAuth, syncProfile]);
 
-// Para:
+// DEPOIS (corrigido):
 useEffect(() => {
-  // ...
-}, []); // DEPENDÊNCIA VAZIA
+  if (initRef.current) return;
+  initRef.current = true;
+  
+  setLoading(true);  // ← Movido para fora de initAuth
+  
+  const initAuth = async () => {
+    try {
+      // ... lógica de autenticação
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  initAuth();
+}, []);  // ← Dependência VAZIA
 ```
 
-**Última alteração:** usePlaylist reescrito com polling fallback (commit `36419ed`)
+**3. Modificado `dashboard/page.tsx`:**
+```typescript
+// ANTES (problemático):
+const { user, isAdmin } = useAuth(true);  // ← Duas execuções!
+
+// DEPOIS (corrigido):
+const user = useUser();  // ← Apenas leitura
+const isAdmin = useAuthStore((state) => state.user?.role === "admin");
+```
+
+**Fluxo Corrigido:**
+```
+1. /auth/callback → router.replace("/dashboard")
+2. Dashboard Layout → useAuth(true) → initAuth() → UNA execução
+3. Dashboard Page  → useUser() → apenas lê user do store → SEM initAuth
+4. ✅ Sem loop, sem duplicação
+```
+
+**Arquivos Modificados:**
+- `src/hooks/useUser.ts` (NOVO)
+- `src/hooks/useAuth.ts` (simplificado useEffect)
+- `src/app/(dashboard)/dashboard/page.tsx` (usa useUser)
+
+**Testado por:** Usuário (localmente)

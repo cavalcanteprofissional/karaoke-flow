@@ -235,7 +235,7 @@ karaoke-flow/
 1. Acessar: https://vercel.com/cavalcanteprofissional/karaoke-flow/settings/environment-variables
 2. Adicionar variável:
    - **Name:** `YOUTUBE_API_KEY`
-   - **Value:** `AIzaSyAZHFHmF9WvWK1DRiUhBx9coWwdBrGzhT4`
+   - **Value:** (sua_chave_youtube_api)
    - **Environments:** Production ✓, Development ✓
 
 ---

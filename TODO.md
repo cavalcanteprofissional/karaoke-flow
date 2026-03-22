@@ -240,6 +240,31 @@ karaoke-flow/
 
 ---
 
+## ⚠️ PENDENTE: Script RLS - approval_queue
+
+### Problema: Painel de aprovações não mostra músicas solicitadas
+
+**Causa:** Políticas RLS antigas permitiam ver apenas próprias solicitações.
+
+**Solução:** Executar script SQL em `supabase/migrations/004_fix_approval_queue_rls.sql`
+
+**PASSOS:**
+1. Acessar: https://supabase.com/dashboard → SQL Editor
+2. Abrir arquivo: `supabase/migrations/004_fix_approval_queue_rls.sql`
+3. Substituir `SEU_EMAIL_AQUI@exemplo.com` pelo email do admin
+4. Executar todo o script
+
+**Arquivo criado:** `supabase/migrations/004_fix_approval_queue_rls.sql`
+
+**O que o script faz:**
+- Define usuário como admin
+- Remove políticas antigas de `approval_queue`
+- Cria nova política: todos veem todas as aprovações
+- Remove políticas antigas de `songs`
+- Cria políticas permissivas para `songs`
+
+---
+
 ## 🐛 BUGS CORRIGIDOS
 
 ### Bug 1: Loading Infinito no Dashboard (CRÍTICO)

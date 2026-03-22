@@ -223,6 +223,89 @@ karaoke-flow/
 - [x] API funcionando em localhost (variáveis carregadas)
 - [x] Problema identificado: variável não configurada no Vercel
 
+### v2.0.8 - Auth Callback Fix (22/03/2026) ✓
+- [x] Corrigido callback page - salvar user no authStore ANTES de redirecionar
+- [x] Callback agora busca perfil do banco e sincroniza com Google metadata
+- [x] Criado endpoint /api/debug/auth para verificação de autenticação
+- [x] Build verificado com sucesso
+
+---
+
+## 🐛 BUG 13: Token de Autenticação Não Salvo (CORRIGIDO)
+
+**Status:** ✅ RESOLVIDO (22/03/2026)
+
+**Sintoma:** Painel de aprovações não mostra dados, embora existam no banco.
+
+**Diagnóstico:**
+1. ✅ Dados existem no banco (SQL retorna lista)
+2. ✅ Políticas RLS corretas (todas aplicadas)
+3. ✅ INSERT funcionou (201 Created)
+4. ❌ **Token NÃO salvo no localStorage**
+5. ❌ `auth.uid()` retorna NULL
+
+**Causa Raiz:**
+O callback page (`/auth/callback`) não salvava o usuário no authStore antes de redirecionar. O fluxo era:
+
+```
+1. Login com Google → Callback
+2. Callback → getUser() → REDIRECIONA ❌ (sem salvar user)
+3. Dashboard → getSession() → auth.uid() = NULL ❌
+4. RLS BLOQUEIA todas as queries ❌
+```
+
+**Solução Implementada:**
+
+**Arquivo:** `src/app/auth/callback/page.tsx`
+
+```typescript
+// ANTES (INCORRETO):
+useEffect(() => {
+  const handleCallback = async () => {
+    const { data } = await supabase.auth.getUser();
+    if (data?.user) {
+      router.replace(next); // ❌ Não salva user!
+    }
+  };
+  handleCallback();
+}, []);
+
+// DEPOIS (CORRETO):
+useEffect(() => {
+  const handleCallback = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    
+    if (sessionData?.session?.user) {
+      // Buscar perfil do banco
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", sessionData.session.user.id)
+        .single();
+      
+      // Salvar no store ANTES de redirecionar
+      setUser(profile);
+      setLoading(false);
+      router.replace(next); // ✅ Agora sim!
+    }
+  };
+  handleCallback();
+}, []);
+```
+
+**Fluxo Corrigido:**
+```
+1. Login com Google → Callback
+2. Callback → getSession() → Salva user no authStore
+3. Callback → router.replace("/dashboard") ✅
+4. Dashboard → auth.uid() retorna ID correto ✅
+5. RLS permite queries ✅
+```
+
+**Arquivos Modificados:**
+- `src/app/auth/callback/page.tsx` (reescrito com lógica completa)
+- `src/app/api/debug/auth/route.ts` (NOVO - para diagnóstico)
+
 ---
 
 ## ⚠️ PENDENTE: Configurar Vercel

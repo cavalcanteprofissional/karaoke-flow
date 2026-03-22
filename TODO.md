@@ -218,6 +218,26 @@ karaoke-flow/
 - [x] Atualizado youtube/api.ts para usar process.env.YOUTUBE_API_KEY
 - [x] Atualizado .env.example com nova variável
 
+### v2.0.7 - Debug Endpoint (22/03/2026) ✓
+- [x] Criado endpoint /api/debug/env para diagnóstico
+- [x] API funcionando em localhost (variáveis carregadas)
+- [x] Problema identificado: variável não configurada no Vercel
+
+---
+
+## ⚠️ PENDENTE: Configurar Vercel
+
+### Problema: "YouTube API key not configured" em produção
+
+**Causa:** A variável `YOUTUBE_API_KEY` não está configurada no dashboard da Vercel.
+
+**Solução:**
+1. Acessar: https://vercel.com/cavalcanteprofissional/karaoke-flow/settings/environment-variables
+2. Adicionar variável:
+   - **Name:** `YOUTUBE_API_KEY`
+   - **Value:** `AIzaSyAZHFHmF9WvWK1DRiUhBx9coWwdBrGzhT4`
+   - **Environments:** Production ✓, Development ✓
+
 ---
 
 ## 🐛 BUGS CORRIGIDOS

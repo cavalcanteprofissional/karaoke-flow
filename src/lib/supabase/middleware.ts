@@ -2,6 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  const { pathname, searchParams } = request.nextUrl;
+  
+  const errorParam = searchParams.get("error");
+  const errorDescription = searchParams.get("error_description");
+
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -24,22 +29,40 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const { data, error } = await supabase.auth.getUser();
-  if (error) {
-    console.error("[Middleware] Auth error:", error);
+  if (errorParam) {
+    console.log("OAuth error detected, redirecting to login");
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("error", errorDescription || errorParam);
+    return NextResponse.redirect(url);
   }
-  const user = data?.user || null;
 
-  const { pathname } = request.nextUrl;
-
-  const publicRoutes = ["/", "/login", "/register", "/auth/callback"];
+  const publicRoutes = [
+    "/",
+    "/login",
+    "/register",
+    "/auth/callback",
+    "/auth/logout",
+    "/debug",
+    "/hybridaction",
+  ];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
 
-  const isAdminRoute = pathname.startsWith("/admin");
+  const isAdminRoute = pathname.startsWith("/administracao");
+
+  let user = null;
+  if (!isPublicRoute || pathname === "/") {
+    const { data, error } = await supabase.auth.getUser();
+    if (error && !isPublicRoute) {
+      console.log("[Middleware] Auth error:", error.message);
+    }
+    user = data?.user || null;
+  }
 
   if (!user && !isPublicRoute) {
+    console.log("[Middleware] No user, redirecting to login");
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);

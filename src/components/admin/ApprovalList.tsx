@@ -16,15 +16,24 @@ export function ApprovalList() {
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const fetchApprovals = async () => {
-    const { data } = await supabase
+    console.log("=== FETCHING APPROVALS ===");
+    
+    const { data, error } = await supabase
       .from("approval_queue")
       .select(`
         *,
         songs (*),
-        profiles (full_name)
+        profiles!approval_queue_requested_by_fkey (full_name)
       `)
       .eq("status", "pending")
       .order("created_at", { ascending: false });
+
+    console.log("Approvals query result:", { data, error });
+    console.log("Number of items:", data?.length);
+
+    if (error) {
+      console.error("Error fetching approvals:", error);
+    }
 
     setItems((data as ApprovalQueueItem[]) || []);
     setIsLoading(false);

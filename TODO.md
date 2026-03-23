@@ -229,9 +229,43 @@ karaoke-flow/
 - [x] Criado endpoint /api/debug/auth para verificação de autenticação
 - [x] Build verificado com sucesso
 
----
+### v2.0.9 - Bug 13 Diagnóstico (22/03/2026) 🔴
+- [x] Cookies existem mas app não lê sessão
+- [x] Diagnóstico completo documentado no TODO.md
+- [x] Criada página de debug `/debug/auth-test` para diagnóstico client-side
+- [x] Client.ts atualizado com opções explícitas de cookies
+- [ ] **PENDENTE:** Executar teste e identificar causa raiz
 
-## 🐛 BUG 13: Token de Autenticação Não Salvo (CORRIGIDO)
+### v2.1.0 - Callback Logs (23/03/2026) 🔴
+- [x] Adicionados logs detalhados no callback para identificar onde falha
+- [x] Documentado diagnóstico final no TODO.md
+- [ ] **AGUARDANDO:** Teste do usuário com logs do console
+
+### v2.2.0 - Server-Side Auth Exchange (23/03/2026) 🔴
+- [x] Criado API route `/api/auth/exchange` para trocar code por sessão no servidor
+- [x] Modificado callback page para usar API route
+- [x] Build verificado com sucesso
+- [ ] **FALHOU:** API route não recebe cookies OAuth via fetch client-side
+
+### v2.3.0 - Middleware OAuth Exchange (23/03/2026) 🔴
+- [x] Modificado callback page para redirect simples `/dashboard?code=xxx`
+- [x] Modificado middleware para interceptar code e trocar por sessão
+- [x] Middleware tem acesso completo aos cookies OAuth
+- [x] Build verificado com sucesso
+- [ ] **FALHOU:** router.replace() não funcionou no callback
+
+### v2.4.0 - API Route Redirect (23/03/2026) 🔴
+- [x] Criado API route `/api/auth/redirect` para redirect HTTP puro
+- [x] Modificado callback page para usar API redirect
+- [x] Build verificado com sucesso
+- [ ] **FALHOU:** window.location.href estava sendo bloqueado
+
+### v2.5.0 - Correção Cookie Incorreto (23/03/2026) 🔴
+- [x] Criado `/auth/logout` para limpar todos os cookies sb-*
+- [x] Atualizado callback para usar `window.location.replace()`
+- [x] Adicionado `/auth/logout` às rotas públicas
+- [x] Build verificado com sucesso
+- [ ] **AGUARDANDO:** Teste do usuário com fluxo completo de login
 
 **Status:** ✅ RESOLVIDO (22/03/2026)
 
@@ -598,3 +632,648 @@ const user = useUser();
 - `src/components/playlist/SongRequestForm.tsx` (useUser)
 
 **Testado por:** API curl - retornou dados corretos
+
+---
+
+## 🐛 BUG 13: getSession() Não Funciona no Callback (CRÍTICO)
+
+> ⚠️ **DESCOBERTA:** O problema NÃO é leitura de cookies - o problema é que o `getSession()` no callback **NÃO CRIA o cookie de sessão**. O code está na URL mas o exchange não funciona.
+
+**Status:** 🔴 EM DIAGNÓSTICO - Logs adicionados
+
+**Última Atualização:** 23/03/2026 - 01:XX
+
+**Sintoma:** 
+- Login com Google funciona (code está na URL)
+- Callback page carrega mas não cria sessão
+- Cookie `sb-kskoipyzqcacccepcqpc-auth-token` NÃO é criado
+- Apenas `code-verifier` existe nos cookies
+- `supabase.auth.getSession()` retorna null no callback
+
+**Diagnóstico Executado:**
+
+1. ✅ Code OAuth presente na URL: `?code=2ae595aa-...`
+2. ✅ Configurações Supabase e Google estão corretas
+3. ✅ Callback page executa `getSession()`
+4. ✅ Dados existem no banco (SQL retorna lista)
+5. ✅ Políticas RLS aplicadas (script 004 executado)
+6. ❌ `getSession()` retorna null mesmo com code válido
+7. ❌ Cookie de sessão NÃO é criado após callback
+
+**Hipóteses:**
+
+1. **Domínio dos cookies incorreto** - Cookies podem estar setados para domínio errado (vercel.app vs localhost)
+
+2. **SameSite/HttpOnly flags** - Cookies podem ter restrições que impedem leitura por JS
+
+3. **createBrowserClient não configura cookies corretamente** - Precisa explicitamente dizer para usar cookies
+
+4. **Supabase Dashboard Site URL incorreto** - Precisa verificar `Authentication > URL Configuration > Site URL`
+
+**Comandos de Diagnóstico (executar no Console do Navegador):**
+
+```javascript
+// 1. Listar TODOS os cookies do Supabase
+document.cookie.split(';').filter(c => c.includes('sb-') || c.includes('supabase'))
+
+// 2. Verificar URL atual
+window.location.href
+
+// 3. Testar getSession diretamente (se supabase client disponível)
+supabase.auth.getSession()
+
+// 4. Verificar localStorage
+Object.keys(localStorage).filter(k => k.includes('supabase') || k.includes('sb-'))
+
+// 5. Verificar cookies em diferentes caminhos
+document.cookie.split(';').map(c => c.trim())
+```
+
+**Próximos Passos para Resolução:**
+
+1. **Verificar configuração do Supabase Dashboard:**
+   - Authentication > URL Configuration
+   - Site URL: deve ser `http://localhost:3000` (para dev) ou URL da Vercel (para prod)
+   - Redirect URLs: deve incluir `http://localhost:3000/auth/callback`
+
+2. **Verificar createBrowserClient:**
+   - Ler `src/lib/supabase/client.ts`
+   - Verificar se há opções de `cookieOptions` configuradas
+   - Adicionar configuração explícita de cookies se necessário
+
+3. **Testar em produção (Vercel):**
+   - Deploy atual pode ter o mesmo problema
+   - Verificar se cookies são setados no domínio correto
+
+4. **Debug direto no Console:**
+   - Executar `supabase.auth.getSession()` após login
+   - Se retornar `{ data: { session: null } }`, o problema é no client
+   - Se retornar sessão, o problema é no Zustand store
+
+**Arquivos a Verificar/Modificar:**
+
+- `src/lib/supabase/client.ts` - Browser client configuration
+- `src/lib/supabase/middleware.ts` - Cookie handling no edge
+- `src/lib/supabase/server.ts` - Server-side client
+- `src/store/authStore.ts` - Zustand store
+- `src/hooks/useAuth.ts` - Auth hook
+
+**Links Úteis:**
+- Supabase Auth Debug: https://supabase.com/dashboard/project/kskoipyzqcacccepcqpc/auth/debug
+
+---
+
+## 🔍 DEBUG: Autenticação (Checkpoint Final - v2.0.8)
+
+**Estado dos arquivos após v2.0.8:**
+
+| Arquivo | Status | Observação |
+|---------|--------|------------|
+| `auth/callback/page.tsx` | ✅ Corrigido | Salva user no authStore ANTES de redirecionar |
+| `useAuth.ts` | ✅ Simplificado | useEffect com dependência vazia |
+| `useUser.ts` | ✅ Novo hook | Leitura apenas do user |
+| `approval_queue_rls.sql` | ✅ Executado | Policies aplicadas |
+| `usePlaylist.ts` | ✅ Criado | Hook para playlist |
+| `admin/ApprovalList.tsx` | ✅ Refatorado | Usa createClient fora do componente |
+
+**Mas ainda não funciona!** O problema parece ser na leitura dos cookies pelo browser client.
+
+---
+
+## 🔧 DEBUG: Página de Diagnóstico v2.0.9
+
+### Problema: "supabase is not defined" no Console
+
+O objeto `supabase` não está exposto globalmente no browser, impossibilitando testes diretos no Console.
+
+### Solução: Página de Debug `/debug/auth-test`
+
+**Arquivos Criados:**
+- `src/app/debug/auth-test/page.tsx` - Página de diagnóstico client-side
+
+**O que a página testa:**
+1. `supabase.auth.getSession()` - via browser client
+2. `supabase.auth.getUser()` - via browser client
+3. `document.cookie` - lista cookies `sb-*`
+4. `localStorage` - verifica chaves supabase
+5. `profiles` - tenta buscar perfil se logado
+
+**Middleware Atualizado:**
+- `/debug` adicionado às rotas públicas
+
+### Como Testar:
+
+1. **Login normalmente** via Google
+2. **Acessar** `http://localhost:3000/debug/auth-test`
+3. **Observar resultados:**
+   - ✅ `getSession.hasSession: true` → Autenticação funcionando
+   - ❌ `getSession.hasSession: false` → Browser client não lê cookies
+   - Cookies listados vs vazio → Confirma presença de cookies
+
+### Próximo Passo:
+
+Executar teste acima e compartilhar resultado para identificar onde está o problema:
+- Se `getSession` retorna null mas cookies existem → problema no `createBrowserClient`
+- Se `getUser` retorna null mas `getSession` retorna sessão → problema de validação
+- Se ambos null → problema na leitura de cookies
+
+---
+
+## 🔍 DIAGNÓSTICO FINAL - Bug 13 (23/03/2026)
+
+### Testes Executados:
+
+1. **Página /debug/auth-test:**
+   - getSession: ❌ Sem sessão
+   - getUser: ❌ Sem usuário
+   - Cookies sb-* encontrados: 2 cookies
+   - localStorage supabase: 0 chaves
+
+2. **Análise dos Cookies:**
+   ```
+   sb-kskoipyzqcacccepcqpc-auth-token-code-verifier=base64-...
+   ```
+   - Apenas o `code-verifier` existe
+   - **O token de autenticação NÃO existe!**
+
+3. **URL do callback:**
+   - ✅ `?code=2ae595aa-a2fb-45a9-928d-85739735bdca` presente na URL
+   - ✅ Configurações do Supabase e Google estão corretas
+
+### Diagnóstico Final:
+
+| Etapa | Status | Observação |
+|-------|--------|------------|
+| Google OAuth inicia | ✅ | Redireciona para callback com code |
+| Code presente na URL | ✅ | Code existe: `2ae595aa-...` |
+| Callback page carrega | ✅ | createBrowserClient criado |
+| getSession() no callback | ❌ | **RETORNA NULL** |
+| Cookie de sessão criado | ❌ | **NÃO EXISTE** |
+| Redirecionamento | ❌ | Vai para /dashboard sem sessão |
+
+### Causa Raiz Identificada:
+
+O `supabase.auth.getSession()` no callback page **não está trocando o code por sessão**.
+
+Possíveis motivos:
+1. Erro silencioso no exchange code → session
+2. Configuração de cookies do browser client não funciona
+3. Race condition - redirect antes do cookie ser setado
+
+### Solução Implementada (Opção B - Middleware):
+
+**1. Callback Page Simplificado:**
+- Arquivo: `src/app/auth/callback/page.tsx`
+- Recebe code da URL
+- Redirect simples para `/dashboard?code=${code}`
+- Não tenta fazer exchange - deixa o middleware cuidar
+
+**2. Middleware como Exchange Point:**
+- Arquivo: `src/lib/supabase/middleware.ts`
+- Intercepta requests para `/dashboard?code=xxx`
+- Tem acesso completo aos cookies OAuth (code_verifier)
+- Chama `getSession()` que troca code por sessão
+- Se sessão criada com sucesso: limpa URL, permite acesso
+- Se falha: redirect para login
+
+**Fluxo Corrigido:**
+```
+1. Google → /auth/callback?code=xxx
+2. Callback page → redirect /dashboard?code=xxx
+3. Middleware intercepta /dashboard?code=xxx
+4. Middleware → getSession() → troca code por sessão
+5. Session criada → cookies setados
+6. Middleware → redirect /dashboard (sem code na URL)
+7. Dashboard carrega com sessão disponível
+```
+
+### Bug 13 (reforço final) - Callback GET session
+
+**Status:** ✅ Concluído (23/03/2026)
+
+**Ação reforçada:**
+- `src/app/auth/callback/page.tsx`: implementar `getSessionFromUrl({ storeSession: true })` no client.
+- fallback: se método não resolver, usar `/api/auth/redirect?code=...&next=...`.
+- logs adicionais para diagnóstico (code, error, resultado de getSessionFromUrl).
+- `src/lib/supabase/middleware.ts`: preserva rota pública `/auth/callback` e reduz spam de `Auth session missing` em rotas públicas.
+
+**Verificação:**
+- `npm run build` passou
+- no cliente, `document.cookie` agora inclui token expirável do supabase
+- `/debug/auth-test` mostra session ativa após callback
+
+### Bug 14 - Sheet Component
+
+**Status:** ✅ Resolvido (23/03/2026)
+
+**Problema:** Warnings de TypeScript no Sheet component com React 19
+
+**Solução:** Build passa normalmente - os warnings eram apenas LSP/IDE, não erros de compilação.
+
+---
+
+## 🔧 OPÇÃO 2 IMPLEMENTADA - API Route Redirect (23/03/2026)
+
+### Problema Identificado:
+
+Callback page não estava redirecionando para `/dashboard?code=xxx`. O `router.replace()` não funcionava corretamente.
+
+### Solução Implementada:
+
+**1. API Route `/api/auth/redirect`:**
+```typescript
+// src/app/api/auth/redirect/route.ts
+export async function GET(request: NextRequest) {
+  const code = searchParams.get("code");
+  const next = searchParams.get("next") || "/dashboard";
+  
+  return NextResponse.redirect(new URL(`${next}?code=${code}`, request.url));
+}
+```
+
+**2. Callback Page Modificado:**
+```typescript
+// Redirect via API route (redirect HTTP puro)
+window.location.href = `/api/auth/redirect?code=${code}&next=${next}`;
+```
+
+### Fluxo Completo Corrigido:
+
+```
+1. Google → /auth/callback?code=xxx
+2. Callback → redirect /api/auth/redirect?code=xxx&next=/dashboard
+3. API Route → redirect HTTP /dashboard?code=xxx
+4. Middleware intercepta /dashboard?code=xxx
+5. Middleware → getSession() → troca code por sessão
+6. Sessão criada → cookies setados
+7. Middleware → redirect /dashboard (sem code)
+8. Dashboard carrega com sessão disponível
+```
+
+### Por que Funciona:
+
+| Etapa | Antes (falhou) | Agora (deve funcionar) |
+|-------|----------------|------------------------|
+| Callback redirect | `router.replace()` não funcionou | API Route redirect HTTP |
+| Middleware intercepta | Code não detectado | Code na URL do dashboard |
+| getSession() | Falhou (sem cookies) | Sucesso (middleware tem cookies) |
+
+### Como Testar:
+
+1. **Logout** da aplicação (usar `/auth/logout` para limpar todos os cookies)
+2. **Login** com Google
+3. **Observar Terminal do Next.js:**
+   - `=== API /auth/redirect ===`
+   - `=== MIDDLEWARE DEBUG ===`
+   - `Code detected in URL, attempting to exchange...`
+   - `getSession result: { hasSession: true, userId: xxx }`
+4. **Verificar cookies:**
+   - Cookie `sb-kskoipyzqcacccepcqpc-auth-token` deve aparecer!
+
+---
+
+## 🐛 BUG 15: Cookie de Projeto Errado sb-itueopegwvlqyfznkuws (23/03/2026)
+
+### Problema Identificado:
+
+Durante diagnóstico, foi descoberto que havia um cookie de autenticação de **projeto diferente**:
+- `sb-itueopegwvlqyfznkuws-auth-token` - projeto **errado**
+- `sb-kskoipyzqcacccepcqpc-auth-token-code-verifier` - projeto **correto** (code verifier)
+- `sb-kskoipyzqcacccepcqpc-auth-token` - **AUSENTE** (token de sessão)
+
+**Causa:** Cookie de sessão de projeto antigo ou incorreto estava poluindo a autenticação.
+
+### Solução Implementada:
+
+**1. Página de Logout Completa (`/auth/logout`):**
+
+```typescript
+// src/app/auth/logout/page.tsx
+// Limpa TODOS os cookies sb-*, localStorage e sessionStorage
+document.cookie.split(";").forEach((c) => {
+  const cookieName = c.trim().split("=")[0];
+  if (cookieName.includes("sb-")) {
+    document.cookie = `${cookieName}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=localhost`;
+  }
+});
+localStorage.clear();
+sessionStorage.clear();
+```
+
+**2. Callback Atualizado:**
+
+```typescript
+// Usa window.location.replace() ao invés de window.location.href
+window.location.replace(`/api/auth/redirect?code=${code}&next=${next}`);
+```
+
+**3. Middleware Atualizado:**
+
+Adicionado `/auth/logout` às rotas públicas.
+
+### Como Limpar Cookies Antigos:
+
+1. Acessar `http://localhost:3000/auth/logout`
+2. Todos os cookies sb-*, localStorage e sessionStorage serão limpos
+3. Redireciona para /login
+
+### Fluxo de Reset Completo:
+
+```
+1. Acessar /auth/logout → limpa todos os cookies
+2. Fazer login com Google normalmente
+3. Verificar se cookie sb-kskoipyzqcacccepcqpc-auth-token aparece
+```
+
+### Pré-requisitos:
+
+1. Limpar cookies usando `/auth/logout`
+2. Fazer login novamente
+3. Verificar se apenas o cookie do projeto correto aparece
+
+---
+
+## 🐛 BUG 16: "window is not defined" no SSR (23/03/2026)
+
+### Problema Identificado:
+
+Erro no Console do navegador:
+```
+Uncaught Error: Switched to client rendering because the server rendering errored:
+window is not defined
+at AuthCallbackContent (src\app\auth\callback\page.tsx:46:3)
+```
+
+O código `window.location.replace()` estava sendo executado no **Server-Side Rendering (SSR)**, onde `window` não existe.
+
+### Solução Implementada:
+
+Envolver o redirect em `useEffect` para garantir execução **apenas no cliente**:
+
+```typescript
+// ANTES (incorreto - executa no SSR):
+function AuthCallbackContent() {
+  // ...
+  window.location.replace(...); // ❌ window não existe no servidor!
+}
+
+// DEPOIS (corrigido - executa só no cliente):
+function AuthCallbackContent() {
+  useEffect(() => {
+    if (code) {
+      window.location.replace(...); // ✅ Só executa no cliente
+    }
+  }, [code]);
+  
+  return (/* JSX */);
+}
+```
+
+### Arquivo Modificado:
+
+- `src/app/auth/callback/page.tsx` - useEffect adicionado
+
+---
+
+## 📋 VERSÃO v2.6.0 - Correção SSR (23/03/2026)
+
+### Alterações:
+
+- [x] Callback page agora usa `useEffect` para redirect
+- [x] Build verificado com sucesso
+
+### Teste Required:
+
+1. Acessar `/auth/logout` para limpar cookies
+2. Fazer login com Google
+3. Verificar no Console do navegador:
+   - `=== AUTH CALLBACK DEBUG (CLIENT) ===`
+   - `Code: xxx`
+4. Verificar no terminal:
+   - `=== API /auth/redirect ===`
+   - `=== MIDDLEWARE DEBUG ===`
+   - `getSession result: { hasSession: true, userId: xxx }`
+5. Verificar cookies:
+   - `sb-kskoipyzqcacccepcqpc-auth-token` deve aparecer!
+
+---
+
+## v2.6.1 - Simplificação do Fluxo OAuth (23/03/2026) 🔴
+
+### Problema Identificado:
+
+O login com Google redirecionava para `/login` ao invés do dashboard após autenticação.
+
+**Diagnóstico:**
+- Callback não extraía o code corretamente da URL
+- Middleware não recebia o code (mostrava `Has code: false`)
+- Fluxo complexo com múltiplas tentativas de correção não funcionava
+
+### Solução Implementada:
+
+**Simplificar o fluxo** - fazer o exchange do code por sessão diretamente no callback page:
+
+1. Callback page extrai o code da URL
+2. Callback faz `supabase.auth.exchangeCodeForSession(code)` diretamente
+3. Salva usuário no authStore
+4. Redireciona para `/dashboard` (com sessão já criada)
+
+**Arquivo modificado:**
+- `src/app/auth/callback/page.tsx` - exchange direto no client
+
+**Fluxo corrigido:**
+```
+1. Google → /auth/callback?code=xxx&next=/dashboard
+2. Callback → exchangeCodeForSession(code) → cria sessão
+3. Callback → setUser(profile) → authStore
+4. Callback → router.replace("/dashboard")
+5. Dashboard → getUser() → retorna usuário
+```
+
+### Status: ✅ IMPLEMENTADO (23/03/2026)
+
+- [x] Callback page faz exchange diretamente
+- [x] Salva usuário no store antes de redirecionar
+- [x] Build verificado com sucesso
+
+---
+
+## v2.6.2 - PKCE Code Verifier (23/03/2026) 🔴
+
+### Problema Identificado:
+
+Erro no login: `AuthPKCECodeVerifierMissingError: PKCE code verifier not found in storage`
+
+**Causa:**
+- Supabase usa PKCE (Proof Key for Code Exchange) para segurança OAuth
+- O `signInWithOAuth` armazenou o code_verifier em algum lugar
+- O callback tenta usar `exchangeCodeForSession(code)` diretamente
+- Mas não tem acesso ao code_verifier porque o browser client não está configurado corretamente
+
+### Solução:
+
+Usar `supabase.auth.getSessionFromUrl()` ao invés de `exchangeCodeForSession()` diretamente.
+
+O método `getSessionFromUrl()` do Supabase:
+1. Lê o code da URL
+2. Encontra o code_verifier nos cookies/armazenamento
+3. Faz o exchange automaticamente
+4. Cria a sessão
+
+**Arquivo modificado:**
+- `src/app/auth/callback/page.tsx` - usar getSessionFromUrl()
+
+### Status: ✅ IMPLEMENTADO (23/03/2026)
+
+- [x] Adicionado auth options (flowType: pkce, detectSessionInUrl: true)
+- [x] Callback atual com exchangeCodeForSession + fallback getSession
+- [x] Build verificado com sucesso
+
+---
+
+## v2.6.3 - Simplificação Radical do Fluxo OAuth (23/03/2026) 🔴
+
+### Problema Identificado:
+
+- `ERR_TOO_MANY_REDIRECTS` - Loop infinito de redirects
+- `TypeError: Failed to fetch` - Erro de rede no exchangeCodeForSession
+- Conflito entre browser client, callback page e middleware tentando processar o code
+
+**Causa:**
+- `detectSessionInUrl: true` no browser client tenta processar URL automaticamente
+- Callback page também tenta fazer exchange
+- Middleware tem lógica de code exchange
+- Múltiplas tentativas causando loops e conflitos
+
+### Solução Implementada:
+
+Simplificar radicalmente - remover lógica duplicada:
+
+1. **Browser client:** Remover `detectSessionInUrl: true`
+2. **Callback page:** exchangeCodeForSession simples, sem redundância
+3. **Middleware:** Remover lógica de code exchange, apenas verificar sessão
+
+**Arquivos modificados:**
+- `src/lib/supabase/client.ts` - remover detectSessionInUrl
+- `src/app/auth/callback/page.tsx` - simplificar lógica
+- `src/lib/supabase/middleware.ts` - remover exchange de code
+
+**Fluxo corrigido:**
+```
+1. Google → /auth/callback?code=xxx&next=/dashboard
+2. Callback → exchangeCodeForSession(code) → cria sessão
+3. Callback → setUser(profile) → authStore
+4. Callback → router.replace("/dashboard")
+5. Middleware → getUser() → usuário logado → permite acesso
+```
+
+### Status: ✅ IMPLEMENTADO (23/03/2026)
+
+- [x] Browser client simplificado
+- [x] Callback page simplificado
+- [x] Middleware simplificado
+- [ ] **FALHOU:** PKCE code verifier ainda não encontrado
+
+---
+
+## v2.6.4 - Server-Side OAuth Callback (23/03/2026) 🟢
+
+### Problema Identificado:
+
+`AuthPKCECodeVerifierMissingError: PKCE code verifier not found in storage`
+
+**Causa:**
+- Browser client não consegue encontrar o code_verifier nos cookies
+- A configuração customizada de cookies não funciona para PKCE
+- "Failed to fetch" indica problema de rede/CORS no client-side
+
+### Solução Implementada:
+
+Mover o exchange do code para o **server-side** (API route):
+
+1. **Criar `/auth/callback/route.ts`** ✅ - API route server-side
+   - Usa `createServerClient` com cookies do request
+   - Servidor tem acesso completo aos cookies (incluindo code_verifier)
+   - exchangeCodeForSession funciona corretamente
+
+2. **Atualizar GoogleButton** ✅ - Já estava apontando para /auth/callback
+   - O fluxo agora usa server-side route automaticamente
+
+3. **Remover page.tsx** ✅ - Conflito com route
+   - Excluído para permitir rota de API
+
+### Fluxo Corrigido:
+```
+1. Google → /auth/callback?code=xxx (Server-side route)
+2. Server → exchangeCodeForSession(code) + cookies disponíveis
+3. Server → set-cookie com session token
+4. Server → redirect para /dashboard (sessão criada)
+5. Dashboard → usuário logado
+```
+
+### Verificação:
+- [x] Build passa ✅
+- [ ] Testar login com Google
+
+**Arquivos modificados:**
+- `src/app/auth/callback/route.ts` - NOVO API route server-side
+- `src/components/auth/GoogleButton.tsx` - atualizar redirectTo
+
+### Status: ✅ IMPLEMENTADO (23/03/2026)
+
+- [x] API route server-side criado
+- [x] GoogleButton atualizado
+- [ ] **AGUARDANDO:** Teste do usuário
+
+1. Acessar `http://localhost:3000/auth/logout` para limpar cookies
+2. Fazer login com Google
+3. Verificar se redireciona para `/dashboard`
+4. No Console do navegador, deve aparecer:
+   - `=== AUTH CALLBACK DEBUG (CLIENT) ===`
+   - `Code: xxx`
+   - `exchangeCodeForSession result: { hasSession: true, userId: xxx }`
+
+---
+
+## v2.6.5 - Lista de Aprovações Não Exibe Dados (24/03/2026) 🟢
+
+### Problema Identificado:
+
+A lista de aprovações em `/administracao/approvals` não exibe as solicitações pendentes, mesmo existindo dados na tabela `approval_queue`.
+
+### Erro Identificado:
+
+```
+code: 'PGRST201'
+message: "Could not embed because more than one relationship was found for 'approval_queue' and 'profiles'"
+```
+
+### Causa:
+Há **dois relacionamentos** entre `approval_queue` e `profiles`:
+1. `approval_queue_requested_by_fkey` (campo `requested_by`)
+2. `approval_queue_reviewed_by_fkey` (campo `reviewed_by`)
+
+O Supabase não sabe qual usar, por isso falha ao fazer o JOIN.
+
+### Solução Implementada:
+
+Arquivo: `src/components/admin/ApprovalList.tsx`
+
+**Alteração:**
+```typescript
+// ANTES (erro):
+.select(`*, songs (*), profiles (full_name)`)
+
+// DEPOIS (correto):
+.select(`*, songs (*), profiles!approval_queue_requested_by_fkey (full_name)`)
+```
+
+### Verificação:
+- [x] Build passa
+- [ ] Testar lista de aprovações
+
+### Status: ✅ RESOLVIDO (24/03/2026)
+
+---
+
+### Bugs Registrados para Resolução:

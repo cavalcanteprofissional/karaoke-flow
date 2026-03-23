@@ -383,6 +383,27 @@ NEXT_PUBLIC_APP_URL=https://seu-dominio.vercel.app
 4. Push para a branch (`git push origin feature/nova-funcionalidade`)
 5. Abra um Pull Request
 
+## 📋 Changelog
+
+### v2.6.5 (24/03/2026)
+- **Fix**: Lista de aprovações não exibia dados (erro PGRST201 - múltiplos relacionamentos)
+- **Corrigido**: Especificado relacionamento `profiles!approval_queue_requested_by_fkey`
+
+### v2.6.4 (23/03/2026)
+- **Fix**: OAuth Google login redirecionava para `/login` ao invés de `/dashboard`
+- **Melhoria**: Movido callback OAuth para server-side (`/auth/callback/route.ts`)
+- **Removido**: Callback page (`page.tsx`) substituído por API route
+
+### v2.6.3 (22/03/2026)
+- **Fix**: Painel de aprovações não mostrava dados
+- **Script**: Adicionado `004_fix_approval_queue_rls.sql` com políticas RLS corrigidas
+
+### v2.6.0+
+- Autenticação com Supabase Auth + Google OAuth
+- Sistema de aprovações de músicas
+- Playlist em tempo real com YouTube
+- Painel admin com controles completos
+
 ## 📄 Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.

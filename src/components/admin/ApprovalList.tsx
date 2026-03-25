@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Check, X, Clock, Loader2 } from "lucide-react";
+import { Check, X, Clock, Loader2, ListMusic } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ApprovalQueueItem } from "@/lib/supabase/types";
@@ -14,6 +15,7 @@ export function ApprovalList() {
   const [items, setItems] = useState<ApprovalQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const user = useAuthStore((state) => state.user);
 
   const fetchApprovals = async () => {
     console.log("=== FETCHING APPROVALS ===");
@@ -46,16 +48,78 @@ export function ApprovalList() {
 
   const handleApprove = async (id: string, songId: string) => {
     setProcessingId(id);
+    console.log("=== APPROVING SONG ===");
+    console.log("Approval ID:", id);
+    console.log("Song ID:", songId);
+    console.log("User ID:", user?.id);
 
-    await supabase
-      .from("songs")
-      .update({ status: "approved" })
-      .eq("id", songId);
+    try {
+      console.log("Step 1: Updating song status to 'approved'...");
+      const { error: songError } = await supabase
+        .from("songs")
+        .update({ status: "approved" })
+        .eq("id", songId);
 
-    await supabase
-      .from("approval_queue")
-      .update({ status: "approved", reviewed_at: new Date().toISOString() })
-      .eq("id", id);
+      if (songError) {
+        console.error("Step 1 ERROR:", songError);
+        throw songError;
+      }
+      console.log("Step 1: Song status updated ✅");
+
+      console.log("Step 2: Updating approval_queue status...");
+      const { error: queueError } = await supabase
+        .from("approval_queue")
+        .update({ status: "approved", reviewed_at: new Date().toISOString() })
+        .eq("id", id);
+
+      if (queueError) {
+        console.error("Step 2 ERROR:", queueError);
+        throw queueError;
+      }
+      console.log("Step 2: Approval queue updated ✅");
+
+      console.log("Step 3: Adding to playlist...");
+      
+      // Verificar se já está na playlist
+      const { data: existingPlaylistItem } = await supabase
+        .from("playlist")
+        .select("id, position")
+        .eq("song_id", songId)
+        .single();
+
+      if (existingPlaylistItem) {
+        console.log("Song already in playlist at position:", existingPlaylistItem.position);
+        console.log("Step 3: Skipped (already exists) ✅");
+      } else {
+        const { count } = await supabase
+          .from("playlist")
+          .select("*", { count: "exact", head: true });
+
+        console.log("Current playlist count:", count);
+
+        const { error: playlistError } = await supabase.from("playlist").insert({
+          song_id: songId,
+          position: (count || 0) + 1,
+          added_by: user?.id || null,
+        });
+
+        if (playlistError) {
+          console.error("Step 3 ERROR:", playlistError);
+          console.error("Error details:", {
+            message: playlistError.message,
+            details: playlistError.details,
+            hint: playlistError.hint,
+            code: playlistError.code,
+          });
+          throw playlistError;
+        }
+        console.log("Step 3: Added to playlist ✅");
+      }
+
+      console.log("=== APPROVAL COMPLETE ===");
+    } catch (error) {
+      console.error("handleApprove CATCH ERROR:", error);
+    }
 
     fetchApprovals();
     setProcessingId(null);

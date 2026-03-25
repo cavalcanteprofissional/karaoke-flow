@@ -263,6 +263,180 @@ playerStore ─────────────→ videoId, isPlaying, isMut
                └─→ YouTubePlayer carrega vídeo
 ```
 
+---
+
+### Fluxo de Aprovação de Músicas
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                 FLUXO DE APROVAÇÃO DE MÚSICAS                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 1. SOLICITAÇÃO (SongRequestForm)                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+   Usuário ──▶ Buscar YouTube ──▶ Selecionar Vídeo ──▶ Enviar
+
+   Queries executadas:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ INSERT INTO songs                                                │
+   │   youtube_id, youtube_url, title, thumbnail,                   │
+   │   requested_by, status = 'pending'                              │
+   └─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ INSERT INTO approval_queue                                      │
+   │   song_id, requested_by, status = 'pending'                     │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Estado: pending → Aguardando aprovação
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 2. LISTAGEM (ApprovalList - Admin)                                   │
+└─────────────────────────────────────────────────────────────────────┘
+
+   Admin acessa /administracao/approvals
+
+   Query executada:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ SELECT approval_queue.*, songs.*, profiles.full_name           │
+   │ FROM approval_queue                                            │
+   │ JOIN songs ON songs.id = approval_queue.song_id                │
+   │ JOIN profiles ON profiles.id = approval_queue.requested_by     │
+   │ WHERE status = 'pending'                                       │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Exibe: Lista de músicas pendentes com:
+   - Thumbnail
+   - Título
+   - Solicitante
+   - Botões Aprovar/Rejeitar
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 3. APROVAÇÃO (ApprovalList)                                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+   Admin clica "Aprovar"
+
+   Step 1: Atualizar song status
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ UPDATE songs SET status = 'approved' WHERE id = :songId        │
+   └─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+   Step 2: Atualizar approval_queue
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ UPDATE approval_queue                                          │
+   │   SET status = 'approved', reviewed_at = NOW(),                │
+   │       reviewed_by = :adminId                                    │
+   │   WHERE id = :approvalId                                       │
+   └─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+   Step 3: Adicionar à playlist
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ INSERT INTO playlist (song_id, position, added_by)             │
+   │ VALUES (:songId, :nextPosition, :adminId)                      │
+   │                                                         │
+   │ Ou se já existir: SKIP (evita erro de constraint única)        │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Estado: pending → approved → Na playlist
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 4. EXIBIÇÃO (PlaylistTable + usePlaylist)                           │
+└─────────────────────────────────────────────────────────────────────┘
+
+   Usuário acessa /dashboard
+
+   Query executada:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ SELECT playlist.*, songs.*, profiles.full_name                 │
+   │ FROM playlist                                                   │
+   │ JOIN songs ON songs.id = playlist.song_id                       │
+   │ LEFT JOIN profiles ON profiles.id = songs.requested_by          │
+   │ ORDER BY position ASC                                           │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Estado da query:
+   - RLS: auth.role() = 'authenticated'
+   - Join: songs e profiles carregados
+   - Ordenação: por position (índice na playlist)
+
+   Fluxo de dados:
+   ┌──────────────────────┐     ┌──────────────────────┐
+   │ usePlaylist          │ ──▶ │ playlistStore        │
+   │ fetchPlaylist()      │     │ setPlaylist()        │
+   │                      │     │                      │
+   │ Query: select        │     │ playlist: []         │
+   │ JOIN songs + profiles│     │                      │
+   └──────────────────────┘     └──────────────────────┘
+            │
+            ▼
+   ┌──────────────────────┐     ┌──────────────────────┐
+   │ PlaylistTable        │ ◀─── │ Zustand Store        │
+   │ Render: map()        │     │ Atualiza quando      │
+   │                      │     │ setPlaylist()Called  │
+   └──────────────────────┘     └──────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 5. REPRODUÇÃO (Player)                                              │
+└─────────────────────────────────────────────────────────────────────┘
+
+   Admin clica "Play" em uma música
+
+   Query executada:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ UPDATE player_state                                            │
+   │   SET current_song_id = :songId, status = 'playing',          │
+   │       updated_at = NOW()                                       │
+   │   WHERE id = 'main'                                            │
+   └─────────────────────────────────────────────────────────────────┘
+
+   usePlaylist detecta mudança (Realtime/Polling)
+   │
+   ▼
+   YouTubePlayer carrega youtube_id
+
+   Estados do player: idle | playing | paused
+
+   Quando música termina (YouTube IFrame API → onStateChange)
+   │
+   ▼
+   usePlaylist.skipToNext() → próxima música
+   │
+   ▼
+   Se não houver próxima: player_state status = 'idle'
+
+---
+
+### Tabelas Envolvidas
+
+| Tabela | Função | Campos Principais |
+|--------|--------|-------------------|
+| songs | Armazena músicas do YouTube | youtube_id, title, thumbnail, status, requested_by |
+| approval_queue | Fila de aprovações | song_id, requested_by, status, reviewed_by, reviewed_at |
+| playlist | Músicas na playlist | song_id, position, added_by |
+| player_state | Estado do player | current_song_id, status |
+
+---
+
+### Políticas RLS
+
+| Tabela | Operação | Condição |
+|--------|----------|----------|
+| songs | SELECT | status='approved' OR requested_by=auth.uid() OR admin |
+| songs | INSERT | auth.uid() IS NOT NULL |
+| songs | UPDATE/DELETE | admin only |
+| approval_queue | SELECT | requested_by=auth.uid() OR admin |
+| approval_queue | INSERT | auth.uid() IS NOT NULL |
+| approval_queue | UPDATE | admin only |
+| playlist | SELECT | auth.role() = 'authenticated' |
+| playlist | INSERT | auth.uid() IS NOT NULL |
+| playlist | UPDATE/DELETE | admin only |
+
 ### Middleware (Proteção de Rotas)
 
 ```

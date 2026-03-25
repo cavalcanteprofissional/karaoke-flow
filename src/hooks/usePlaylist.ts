@@ -29,24 +29,33 @@ export function usePlaylist() {
   const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const initRef = useRef(false);
 
   const fetchPlaylist = useCallback(async () => {
     if (!mountedRef.current) return;
 
     try {
-      const { data: playlistData } = await supabase
+      const { data: playlistData, error: playlistError } = await supabase
         .from("playlist")
         .select(`*, songs (*, profiles (full_name))`)
         .order("position", { ascending: true });
 
+      if (playlistError) {
+        console.error("[usePlaylist] Playlist query error:", playlistError);
+      }
+
       if (!mountedRef.current) return;
       setPlaylist((playlistData as PlaylistItem[]) || []);
 
-      const { data: playerData } = await supabase
+      const { data: playerData, error: playerError } = await supabase
         .from("player_state")
         .select("*")
         .eq("id", "main")
         .maybeSingle();
+
+      if (playerError) {
+        console.error("[usePlaylist] Player state query error:", playerError);
+      }
 
       if (playerData && mountedRef.current) {
         setPlayerState(playerData as PlayerState);
@@ -154,8 +163,12 @@ export function usePlaylist() {
   }, []);
 
   useEffect(() => {
+    if (initRef.current) {
+      return;
+    }
+    initRef.current = true;
+
     if (!user) {
-      cleanup();
       setPlaylist([]);
       setCurrentSong(null);
       setPlayerState(null);
@@ -164,24 +177,59 @@ export function usePlaylist() {
 
     setLoading(true);
 
-    const init = async () => {
-      await fetchPlaylist();
+    const doFetch = async () => {
+      if (!mountedRef.current) {
+        return;
+      }
       
-      if (!mountedRef.current) return;
+      const { data: playlistData } = await supabase
+        .from("playlist")
+        .select(`*, songs (*, profiles (full_name))`)
+        .order("position", { ascending: true });
+
+      if (!mountedRef.current) {
+        return;
+      }
+      
+      setPlaylist((playlistData as PlaylistItem[]) || []);
       setLoading(false);
 
-      if (useRealtime) {
-        setupRealtime();
-      } else {
-        setupPolling();
+      const { data: playerData } = await supabase
+        .from("player_state")
+        .select("*")
+        .eq("id", "main")
+        .maybeSingle();
+
+      if (playerData && mountedRef.current) {
+        setPlayerState(playerData as PlayerState);
+        if (playerData.current_song_id) {
+          const current = (playlistData as PlaylistItem[])?.find(
+            (item) => item.song_id === playerData.current_song_id
+          );
+          setCurrentSong(current || null);
+        }
+      }
+
+      if (mountedRef.current) {
+        if (useRealtime) {
+          setupRealtime();
+        } else {
+          setupPolling();
+        }
       }
     };
 
-    init();
+    doFetch();
 
     return () => {
-      mountedRef.current = false;
-      cleanup();
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      if (realtimeRef.current) {
+        supabase.removeChannel(realtimeRef.current);
+        realtimeRef.current = null;
+      }
     };
   }, [user]);
 
@@ -218,8 +266,13 @@ export function usePlaylist() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", "main");
+
+      const song = playlist.find(item => item.song_id === songId);
+      if (song) {
+        setCurrentSong(song);
+      }
     },
-    []
+    [playlist, setCurrentSong]
   );
 
   const skipToNext = useCallback(async () => {

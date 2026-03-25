@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Music, Play, Disc, Settings, LogOut, X, User } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useUser } from "@/hooks/useUser";
 import { useAuthStore } from "@/store/authStore";
@@ -46,6 +46,7 @@ export function MobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="w-72 flex flex-col">
+        <SheetTitle className="text-lg font-semibold">Menu</SheetTitle>
         <div className="flex items-center justify-between mb-6">
           <Link href="/dashboard" className="flex items-center gap-2">
             <Music className="h-6 w-6 text-primary" />

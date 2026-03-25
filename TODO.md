@@ -1213,7 +1213,13 @@ Mover o exchange do code para o **server-side** (API route):
 
 ### Verificação:
 - [x] Build passa ✅
-- [ ] Testar login com Google
+- [x] Testar login com Google ✅
+
+### Testado e Confirmado (24/03/2026):
+- [x] Usuário autenticado com Google
+- [x] Sessão criada no server-side
+- [x] Redirect para /dashboard funcionando
+- [x] Session created for user: 368b2d17-c156-452f-984d-e9583b775021
 
 **Arquivos modificados:**
 - `src/app/auth/callback/route.ts` - NOVO API route server-side
@@ -1270,9 +1276,340 @@ Arquivo: `src/components/admin/ApprovalList.tsx`
 
 ### Verificação:
 - [x] Build passa
-- [ ] Testar lista de aprovações
+- [x] Testar lista de aprovações ✅
+
+### Status: ✅ RESOLVIDO E CONFIRMADO (24/03/2026)
+
+---
+
+## v2.6.6 - Migrar Middleware para Proxy (24/03/2026) 🟢
+
+### Problema:
+Warning deprecation no Next.js 16.2.0:
+```
+"Please use 'proxy' instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy"
+```
+
+### Solução Implementada:
+
+Executar codemod:
+```bash
+npx @next/codemod@canary middleware-to-proxy .
+```
+
+**Resultado:**
+- `src/middleware.ts` → `src/proxy.ts`
+- Função `middleware()` → `proxy()`
+
+### Verificação:
+- [x] Build passa sem warnings de middleware ✅
 
 ### Status: ✅ RESOLVIDO (24/03/2026)
+
+---
+
+## v2.6.7 - Aprovação Não Adiciona à Playlist (24/03/2026) 🟢
+
+### Problema:
+Ao aprovar uma música, ela não era adicionada à playlist. O player não reproduzia nada.
+
+### Solução Implementada:
+
+Modificado `src/components/admin/ApprovalList.tsx`:
+- `handleApprove` agora adiciona automaticamente a música à tabela `playlist`
+- Obtém última posição e adiciona no final
+- Usa `user.id` do authStore para `added_by`
+
+### Fluxo Corrigido:
+1. Usuário solicita música → approval_queue (pending)
+2. Admin aprova → música vai para playlist automaticamente
+3. Playlist **NÃO toca automaticamente** (player_state.status = "idle")
+4. Admin clica play → música reproduz
+
+### Verificação:
+- [x] Build passa ✅
+- [ ] Testar aprovação + playlist + play
+
+### Status: ✅ IMPLEMENTADO (24/03/2026)
+
+---
+
+## v2.6.8 - Música Aprovada Não Vai para Playlist (24/03/2026) 🟢
+
+### Problema Identificado:
+
+Após aprobar uma música, ela não aparece na tabela `playlist`. O player não reproduz nada.
+
+### Erro Identificado:
+
+```
+code: '23505'
+message: 'duplicate key value violates unique constraint "playlist_song_id_key"'
+```
+
+### Causa:
+A música **já estava na playlist** (foi adicionada anteriormente). A constraint única impede duplicatas.
+
+### Solução Implementada:
+
+Modificado `src/components/admin/ApprovalList.tsx`:
+- Adicionada verificação se `song_id` já existe na `playlist` antes de inserir
+- Se já existe, pula a inserção e mostra log
+- Se não existe, insere normalmente
+
+### Fluxo Corrigido:
+1. Usuário solicita música → approval_queue (pending)
+2. Admin aprova → Verifica se já está na playlist
+3. Se não estiver → adiciona à playlist
+4. Se já estiver → pula (evita erro de duplicata)
+
+### Verificação:
+- [x] Build passa ✅
+- [x] Música adicionada ao banco ✅
+- [x] Log confirma posição ✅
+
+### Status: ✅ RESOLVIDO PARCIALMENTE (24/03/2026)
+**Problema: Música está no banco, mas UI não exibe (RLS)**
+
+---
+
+## v2.6.9 - Playlist Não Exibe Dados na UI (24/03/2026) 🔴
+
+### Problema Identificado:
+
+Música **EXISTE** no banco (playlist tem registros em position 2), mas a **UI não exibe**:
+- `/dashboard` → playlist vazia
+- `/administracao/playlist-manager` → playlist vazia
+- Log confirma: "Song already in playlist at position: 2"
+
+### Causa Provável:
+
+**RLS (Row Level Security)** bloqueando a leitura da tabela `playlist` para o usuário logado.
+
+### Estado Atual:
+
+- [x] Script SQL `005_fix_playlist_trigger.sql` criado
+- [x] Música adicionada à playlist (banco tem dados)
+- [x] Log confirma: "Song already in playlist at position: 2"
+- [ ] Script SQL executado no Supabase
+- [ ] Verificado políticas RLS no Supabase
+
+### Verificações Realizadas:
+
+1. ✅ Música está no banco (playlist tem registros)
+2. ✅ Log confirma: "Song already in playlist at position: 2"
+3. ❌ UI não exibe (RLS bloqueando leitura)
+
+### Próximos Passos (para continuar):
+
+1. **Executar script SQL** `005_fix_playlist_trigger.sql` no Supabase SQL Editor
+2. **Verificar políticas**:
+   ```sql
+   -- Ver políticas existentes
+   SELECT policyname, cmd FROM pg_policies WHERE tablename = 'playlist';
+   ```
+3. **Se necessário, criar política ultra-permissiva**:
+   ```sql
+   CREATE POLICY "playlist_public_read"
+   ON playlist FOR SELECT USING (true);
+   ```
+
+### Script de Correção Criado:
+
+`supabase/migrations/005_fix_playlist_trigger.sql`:
+- Recria trigger de aprovação
+- Cria políticas RLS permissivas
+- Testa trigger
+
+### Status: 🔴 EM DIAGNÓSTICO (25/03/2026)
+
+---
+
+## v2.7.0 - Playlist Não Exibe Dados na UI (BUG ATIVO)
+
+### Status: 🔴 EM INVESTIGAÇÃO (25/03/2026)
+
+### Descrição do Bug
+
+Música **EXISTE** no banco de dados (`playlist` tem registros), mas a **UI não exibe** os dados na página `/dashboard` e `/administracao/playlist-manager`.
+
+### Diagnóstico Realizado (25/03/2026)
+
+| Etapa | Status | Observação |
+|-------|--------|------------|
+| getSession() | ✅ OK | Sessão reconhecida pelo browser client |
+| getUser() | ✅ OK | Usuário encontrado |
+| Cookies sb-* | ✅ OK | 2 cookies presentes |
+| Dados no banco | ✅ OK | SQL retorna dados |
+| Políticas RLS | ✅ OK | Aplicadas corretamente (`auth.role() = 'authenticated'`) |
+| Playlist UI | ❌ FAIL | Não exibe dados |
+
+### Testes Executados
+
+**1. SQL Editor (via Supabase Dashboard):**
+```sql
+SELECT * FROM playlist LIMIT 10;
+```
+✅ Retornou registros
+
+**2. Políticas RLS:**
+```sql
+SELECT policyname, cmd, qual FROM pg_policies WHERE tablename = 'playlist';
+```
+✅Retornou:
+- `playlist_select_policy` - USING: `auth.role() = 'authenticated'`
+- `playlist_insert_policy`
+- `playlist_update_policy`
+- `playlist_delete_policy`
+
+**3. Página de Debug (/debug/auth-test):**
+```
+getSession retornou: ✅ Sessão encontrada
+getUser retornou: ✅ Usuário encontrado
+Cookies sb-* encontrados: 2
+localStorage supabase: 0 chaves
+```
+
+### Hipóteses do Problema
+
+1. **Query retornando array vazio sem erro** - O `.select()` pode estar retornando `{ data: [], error: null }`
+2. **Problema no formato do select** - O JOIN aninhado `songs (*, profiles (full_name))` pode estar causando problema
+3. **RLS com contexto diferente** - Pode haver diferença entre SQL Editor (servidor) e browser client
+4. **Erro silencioso no catch** - O erro pode estar sendo capturado mas não exibido
+
+### Query do usePlaylist
+
+```typescript
+// src/hooks/usePlaylist.ts:37-40
+const { data: playlistData } = await supabase
+  .from("playlist")
+  .select(`*, songs (*, profiles (full_name))`)
+  .order("position", { ascending: true });
+```
+
+### Logs de Debug Adicionados (25/03/2026)
+
+Os logs confirmam:
+- ✅ Query retorna 3 itens (`dataLength: 3, error: null`)
+- ✅ Dados chegam ao fetchPlaylist (`songsTitle` presente)
+- ❌ **LOOP DE RE-EXECUÇÃO IDENTIFICADO!**
+
+### Causa Raiz do Bug
+
+**Loop de re-execução** encontrado:
+```
+1. init() → fetchPlaylist() → cleanup (imprevisto!) → useEffect re-executado
+2. useEffect → setLoading(true) → init() → fetch → cleanup → repeat
+```
+
+Logs mostram:
+- `cleanup` executado durante fetch
+- `useEffect triggered` logo após
+- `setLoading called: true` entre execuções
+
+### Solução Implementada (25/03/2026)
+
+Adicionado `initRef` no usePlaylist para prevenir execução dupla:
+
+```typescript
+const initRef = useRef(false);
+
+useEffect(() => {
+  if (initRef.current) return;
+  initRef.current = true;
+  // ... código
+}, [user]);
+```
+
+### Resultado Parcial (25/03/2026)
+
+- Dados **exibiram temporariamente** mas depois sumiram
+- **Loop ainda acontece** - initRef não está impedindo re-execuções
+- `setLoading(true)` está sendo chamado múltiplas vezes
+
+### Causa Raiz Atual
+
+O `initRef` não está impedindo re-execuções porque:
+1. Componente pode estar remontando
+2. StrictMode em desenvolvimento
+3. `setLoading(true)` está sendo chamado entre execuções
+
+### Correção Implementada (25/03/2026)
+
+Adicionado initRef para evitar re-execução:
+```typescript
+const initRef = useRef(false);
+
+useEffect(() => {
+  if (initRef.current) {
+    console.log("initRef already true, skipping...");
+    return;
+  }
+  initRef.current = true;
+  // ... código
+}, [user]);
+```
+
+### Resultado (25/03/2026)
+
+- ✅ initRef está funcionando - impede re-execução
+- ✅ Loop corrigido
+- ❌ Dados ainda não aparecem na UI
+
+### Causa Atual
+
+O fetch completa mas dados não aparecem:
+- Logs mostram "Not mounted after fetch"
+- Polling pode estar causando problemas
+- Estado pode não estar atualizando corretamente
+
+### v2.7.0 - Playlist Não Exibe Dados na UI - CORRIGIDO (25/03/2026)
+
+**Status:** ✅ CORRIGIDO
+
+**Problema:** Playlist não aparecia na UI devido a loop de re-execução
+
+**Solução:**
+1. Adicionado `initRef` para evitar execuções múltiplas
+2. Refatorado useEffect para fetch inline
+3. Melhorado cleanup para limpar polling/realtime
+
+### v2.7.1 - Playlist do Player Vazia (25/03/2026)
+
+**Status:** 🔴 PARCIALMENTE CORRIGIDO
+
+**Problema:** Ao clicar Play na PlaylistTable, o player não toca imediatamente
+
+**Correção implementada:**
+- Função `playSong` agora atualiza `currentSong` localmente
+- O `currentSong` é atualizado corretamente
+
+**Resultado:** 
+- ✅ Música foi para a playlist do player (currentSong atualizado)
+- ❌ Player YouTube não executa o vídeo
+
+**Próximo passo:** Investigar YouTubePlayer - possível problema com IFrame API
+
+**Arquivo:** `src/hooks/usePlaylist.ts` (corrigido)
+
+---
+
+## Pendente - YouTubePlayer Não Executa (25/03/2026)
+
+**Status:** 🔴 AGUARDANDO DIAGNÓSTICO
+
+**Problema:** O currentSong é atualizado corretamente, mas o YouTubePlayer não reproduz o vídeo
+
+**Possíveis causas:**
+1. YouTube IFrame API não carregou corretamente
+2. playerRef.current é null quando tenta carregar
+3. Erro no console do navegador
+
+**Próximos passos para diagnóstico:**
+1. Verificar Console do navegador por erros
+2. Verificar se YouTube IFrame API carregou
+3. Verificar valor do videoId sendo passado
+4. Testar se player está sendo criado corretamente
 
 ---
 

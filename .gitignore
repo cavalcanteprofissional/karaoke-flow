@@ -11,6 +11,9 @@ dist/
 
 # Testing
 coverage/
+playwright-report/
+test-results/
+blob-report/
 
 # Misc
 .DS_Store
@@ -56,4 +59,3 @@ logs/
 __pycache__/
 *.spec.js
 *.test.js
-next.config.ts

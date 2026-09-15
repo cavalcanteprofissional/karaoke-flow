@@ -28,10 +28,11 @@ Fase 1 (MVP) = cobrir o fluxo de watch party descrito abaixo. Qualquer coisa for
 
 Ambos os campos abaixo são toggles controlados pelo host, persistidos na sala:
 
-| Campo | Valores | Efeito |
-|---|---|---|
-| `entryMode` | `open` \| `approval` | `open`: qualquer um com código/QR entra direto. `approval`: pedido de entrada fica pendente até o host aprovar. |
-| `queueApprovalMode` | `auto` \| `manual` | `auto`: música entra direto na fila ao ser adicionada. `manual`: música fica pendente até o host aprovar. |
+| Campo                     | Valores              | Efeito                                                                                                                                                                                                                                                          |
+| ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entryMode`               | `open` \| `approval` | `open`: qualquer um com código/QR entra direto. `approval`: pedido de entrada fica pendente até o host aprovar.                                                                                                                                                 |
+| `queueApprovalMode`       | `auto` \| `manual`   | `auto`: música entra direto na fila ao ser adicionada. `manual`: música fica pendente até o host aprovar.                                                                                                                                                       |
+| `requireSongConfirmation` | `true` \| `false`    | `true`: ao adicionar música, um popup de confirmação (thumbnail + título + duração) é exibido antes de enviar à fila — o próprio usuário confirma/cancela. `false`: adiciona direto. Não substitui `queueApprovalMode` (aprovação do host); são complementares. |
 
 ## 5. Entidades de Dados (rascunho)
 
@@ -43,6 +44,7 @@ Room
 - id, code (código curto único), qrCodeUrl, hostId
 - entryMode: open | approval
 - queueApprovalMode: auto | manual
+- requireSongConfirmation: boolean (modal de confirmação antes de adicionar música)
 - youtubeApiKey (opcional; se nulo, usa a chave default de `YOUTUBE_API_KEY` do `.env.local`)
 - status: active | closed
 - createdAt
@@ -164,6 +166,7 @@ O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um d
 ## 14. Padrões de UX/UI recomendados
 
 **Para o controller (celular do host/participante):**
+
 - Fluxo de entrada em 1-2 toques: abrir QR → nome da sala aparece → confirmar entrada (sem formulários longos).
 - Busca de música como campo único e persistente no topo, resultados em lista com thumbnail + título + duração, botão "Adicionar à fila" grande o suficiente pra ambiente de bar (uso com uma mão, pouca luz, possivelmente sob efeito de álcool — alvo de toque generoso, texto com bom contraste).
 - Feedback imediato ao adicionar música: estado visual claro de "pendente de aprovação" vs "na fila" vs "tocando agora".
@@ -171,6 +174,7 @@ O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um d
 - Indicador visual de "quem está cantando agora" e "próximo da fila" sempre visível, mesmo rolando a lista.
 
 **Para a tela do projetor/TV (player device) — a lista de fila:**
+
 - Layout pensado para visão a distância: vídeo do YouTube ocupando a maior parte da tela, sem overlays sobre o player (respeitando a restrição da seção 6), e uma faixa lateral ou inferior fixa mostrando a fila.
 - A fila na TV deve mostrar só o essencial e em fonte grande/legível a distância: posição, título da música e (se fizer sentido) nome/apelido de quem pediu — sem thumbnails pequenas que ninguém enxerga do outro lado do salão.
 - Destaque visual forte para "próxima música" (ex: linha maior, cor de destaque) — é a informação mais útil para quem está na fila esperando a vez.
@@ -178,5 +182,6 @@ O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um d
 - Transição entre músicas sem tela preta/loading perceptível — pré-carregar o próximo vídeo do IFrame Player enquanto o atual ainda toca, se a API permitir.
 
 **Geral:**
+
 - Tema escuro por padrão (ambiente de bar/balada, tanto no controller quanto na tela) para não ofuscar o ambiente nem cansar os olhos com luz do celular no escuro.
 - Todo o app pensado mobile-first (conforme já definido), com a tela do projetor sendo a única exceção "desktop-like" da experiência.

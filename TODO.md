@@ -3,6 +3,7 @@
 Plano de implementação faseado para reconstrução do projeto a partir da `karaoke-watch-party-spec.md`.
 
 **Decisões técnicas assumidas:**
+
 - Next.js 16 (App Router, TypeScript, Tailwind CSS) — deploy na Vercel
 - shadcn/ui para componentes
 - Zustand (estado client), react-hook-form + zod (forms/validação)
@@ -15,22 +16,24 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Fase 0 — Fundação
 
-- [ ] Scaffold Next.js 16 (App Router, TypeScript, Tailwind) + Vercel deploy inicial
-- [ ] Setup do shadcn/ui (config, componentes base: button, input, card, dialog, drawer/sheet, tabs, slider, dropdown-menu, label)
-- [ ] Estrutura de pastas (`src/app`, `src/components`, `src/lib`, `src/hooks`, `src/stores`, `src/types`)
-- [ ] ESLint + prettier configurados
-- [ ] Tema escuro por default (next-themes)
-- [ ] Shell mobile-first base: header, bottom nav, containers responsivos
-- [ ] `.env.example` com todas as variáveis e documentação:
+- [x] Scaffold Next.js 16 (App Router, TypeScript, Tailwind) + Vercel deploy inicial
+- [x] Setup do shadcn/ui (config, componentes base: button, input, card, dialog, drawer/sheet, tabs, slider, dropdown-menu, label)
+- [x] Estrutura de pastas (`src/app`, `src/components`, `src/lib`, `src/hooks`, `src/stores`, `src/types`)
+- [x] ESLint + prettier configurados
+- [x] Tema escuro por default (next-themes)
+- [x] Shell mobile-first base: header, bottom nav, containers responsivos
+- [x] `.env.example` com todas as variáveis e documentação:
   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - `YOUTUBE_API_KEY` (chave default do desenvolvedor)
   - Config dos provedores OAuth (Google, GitHub)
-- [ ] Layout raiz + globals (dark, mobile-first)
+- [x] Layout raiz + globals (dark, mobile-first)
 
 ## Fase 1 — Banco de dados + RLS (Supabase)
 
+> **Pendência externa:** aguardando credenciais válidas — o projeto Supabase vinculado (`kskoipyzqcacccepcqpc`) não resolve no DNS (foi removido) e a `YOUTUBE_API_KEY` atual retorna `401/400 API key not valid`. Necessário: (1) reativar/criar projeto no Supabase e passar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY`; (2) gerar nova YouTube API key.
+
 - [ ] Migration: `profiles` (id, nome, email, avatar, authProvider)
-- [ ] Migration: `rooms` (id, code único 6 chars, qrCodeUrl, hostId, entryMode, queueApprovalMode, youtubeApiKey nullable, status, createdAt)
+- [ ] Migration: `rooms` (id, code único 6 chars, qrCodeUrl, hostId, entryMode, queueApprovalMode, requireSongConfirmation, youtubeApiKey nullable, status, createdAt)
 - [ ] Migration: `room_members` (roomId, userId, status pending|approved|rejected, joinedAt)
 - [ ] Migration: `queue_items` (roomId, addedByUserId, youtubeVideoId, title, thumbnailUrl, durationSeconds, status, position, addedAt)
 - [ ] `position` da fila computado no banco (sequência do Postgres) — evita condição de corrida
@@ -64,7 +67,8 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] `entryMode = approval`: pedido de entrada fica `pending`; host aprova/rejeita
 - [ ] Painel de aprovação de entrada (drawer/modal, ações rápidas, sem navegação para outra página)
 - [ ] Sair da sala; host pode fechar a sala (`status = closed`)
-- [ ] Toggles de config da sala persistidos no banco (`entryMode`, `queueApprovalMode`)
+- [ ] Toggles de config da sala persistidos no banco (`entryMode`, `queueApprovalMode`, `requireSongConfirmation`)
+- [ ] Toggle `requireSongConfirmation` na UI de config da sala ("Pedir confirmação antes de adicionar música")
 
 ## Fase 4 — Busca no YouTube (Data API v3)
 
@@ -83,6 +87,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] Estados da fila e transições: `pending → approved → playing → played`; `rejected`, `skipped`
 - [ ] `queueApprovalMode = auto`: entra direto na fila
 - [ ] `queueApprovalMode = manual`: entra como `pending` até host aprovar
+- [ ] `requireSongConfirmation = true`: modal de confirmação (Dialog) com thumbnail/título/duração antes de enviar à fila; só persiste após "Confirmar"
 - [ ] Realtime da fila via canal `room:{id}` (especificamente por sala, nunca canal global)
 - [ ] Painel de aprovação de fila (drawer, ações aprovar/rejeitar sem sair da tela principal)
 - [ ] Reordenar e remover itens (host)
@@ -112,6 +117,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Fase 8 — Não-funcionais, segurança, LGPD e polimento
 
+- [x] Estratégia de testes documentada: `TESTING.md` (Vitest + RTL + MSW + Playwright, checklist funcional por fase, DoD)
 - [ ] Auditoria completa de RLS — isolar salas; threads/admin; host actions autorizadas no backend
 - [ ] Rate limiting em rotas sensíveis (busca, entrada, ações de host)
 - [ ] Validação de limites do free tier Supabase Realtime (mensagens/eventos por segundo, conexões simultâneas) — Firebase como plano B anotado

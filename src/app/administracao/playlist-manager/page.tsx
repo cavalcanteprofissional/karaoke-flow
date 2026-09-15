@@ -10,6 +10,7 @@ import { ListMusic } from "lucide-react";
 
 export default function PlaylistManagerPage() {
   const { playlist, currentSong, removeSong, reorder, playSong } = usePlaylist();
+  const videoIds = playlist.map(p => p.songs?.youtube_id).filter(Boolean) as string[];
 
   const handleMoveUp = (index: number) => {
     if (index === 0) return;
@@ -64,7 +65,7 @@ export default function PlaylistManagerPage() {
               <CardTitle>Player</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <YouTubePlayer videoId={currentSong?.songs?.youtube_id || null} />
+              <YouTubePlayer videoIds={videoIds} />
               <PlayerControls />
               <NowPlaying />
             </CardContent>

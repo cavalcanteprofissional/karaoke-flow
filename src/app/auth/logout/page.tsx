@@ -2,6 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
 
 export default function LogoutPage() {
   const router = useRouter();
@@ -9,6 +12,14 @@ export default function LogoutPage() {
   useEffect(() => {
     const logout = async () => {
       console.log("=== LOGOUT PROCESS ===");
+
+      // 1. Chamar signOut do Supabase primeiro (invalida tokens no servidor)
+      try {
+        await supabase.auth.signOut();
+        console.log("Supabase signOut called");
+      } catch (err) {
+        console.error("signOut error:", err);
+      }
 
       const projectId = "kskoipyzqcacccepcqpc";
       const wrongProjectId = "itueopegwvlqyfznkuws";

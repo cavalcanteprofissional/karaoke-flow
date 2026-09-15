@@ -1613,4 +1613,91 @@ O fetch completa mas dados não aparecem:
 
 ---
 
+---
+
+## 🐛 BUG: YouTubePlayer Não Reproduz Vídeo (27/03/2026)
+
+### Problema:
+O `currentSong` é atualizado corretamente, mas o YouTubePlayer não reproduz o vídeo.
+
+### Erro Identificado:
+- `loadVideoById()` é chamado mas não executa
+- `playerRef.current` pode ser `null` quando a API ainda não carregou
+- Não há verificação se o player está pronto antes de carregar o vídeo
+
+### Causa Raiz:
+O useEffect tenta executar `loadVideoById()` mas não verifica se o player está **realmente pronto** (onReady).
+
+### Solução Implementada:
+
+**Arquivo:** `src/components/player/YouTubePlayer.tsx`
+
+1. Adicionar estado `isPlayerReady` para saber quando o player está pronto
+2. Setar `isPlayerReady = true` no callback `onReady` do YouTube
+3. Modificar o useEffect para esperar até `isPlayerReady` ser true
+
+### Status: 🔴 IMPLEMENTADO (AGUARDANDO VALIDAÇÃO)
+
+---
+
+## 🆕 FEATURE: Playlist Nativa do YouTube (27/03/2026)
+
+### Problema:
+O player usava `loadVideoById()` para tocar um vídeo por vez, com lógica manual de `skipToNext()` para avançar para próxima música.
+
+### Solução Implementada:
+
+Usar `loadPlaylist()` da IFrame API do YouTube para gerenciar a sequência automaticamente.
+
+**Arquivos modificados:**
+
+1. **YouTubePlayer.tsx**:
+   - Props alteradas: `videoId: string | null` → `videoIds: string[]`
+   - Usar `loadPlaylist(videoIds, startIndex)` ao invés de `loadVideoById()`
+   - Adicionar estado `currentIndex` para rastrear posição
+   - Detectar fim da playlist → resetar para "sem músicas"
+
+2. **player/page.tsx**:
+   - Extrair todos os `youtube_id` da playlist
+   - Passar array para YouTubePlayer
+
+3. **PlayerControls.tsx**:
+   - Remover botão de skip (YouTube gerencia)
+
+**Especificações:**
+- Ordem: UI (playlist ordenada por position asc)
+- Fim da playlist: Parar e mostrar "Aguardando música..."
+- Estado inicial: Manter tela de "Aguardando música..."
+
+### Status: 🔴 IMPLEMENTADO (AGUARDANDO VALIDAÇÃO)
+
+---
+
+## 🐛 BUG: Refresh Token Not Found (27/03/2026)
+
+### Erro:
+```
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+at ignore-listed frames { __isAuthError: true, status: 400, code: 'refresh_token_not_found'}
+```
+
+### Causa:
+1. **Logout incompleto**: Os cookies são limpos no browser, mas o Supabase ainda tenta usar um token de refresh que não existe
+2. **Timing issue**: O `signOut()` do Supabase pode não estar sincronizado com a limpeza de cookies
+3. **Erro não tratado**: O useAuth não trata erros de token expirado/inválido
+
+### Solução Implementada (27/03/2026):
+
+**Opção 1** - Tratamento de erro no useAuth.ts:
+- Adicionar try-catch para tratar erros de token inválido
+- Limpar sessão se token expirado
+
+**Opção 2** - Melhorar logout/page.tsx:
+- Chamar `signOut()` do Supabase ANTES de limpar cookies
+- Garante que tokens são invalidados no servidor
+
+### Status: ✅ IMPLEMENTADO (27/03/2026)
+
+---
+
 ### Bugs Registrados para Resolução:

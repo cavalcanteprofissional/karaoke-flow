@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, Pause, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { usePlayerStore } from "@/store/playerStore";
@@ -11,7 +11,7 @@ export function PlayerControls() {
   const isAdmin = useAuthStore((state) => state.user?.role === "admin");
   const { isPlaying, setIsPlaying, isMuted, setIsMuted, volume, setVolume, currentTime, duration } =
     usePlayerStore();
-  const { pausePlayback, resumePlayback, skipToNext } = usePlaylist();
+  const { pausePlayback, resumePlayback } = usePlaylist();
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -49,12 +49,6 @@ export function PlayerControls() {
       </div>
 
       <div className="flex items-center justify-center gap-4">
-        {isAdmin && (
-          <Button variant="ghost" size="icon" onClick={skipToNext}>
-            <SkipForward className="h-5 w-5" />
-          </Button>
-        )}
-
         <Button
           variant="default"
           size="icon"

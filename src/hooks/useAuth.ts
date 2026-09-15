@@ -72,7 +72,18 @@ export function useAuth(requireAuth = false) {
 
     const initAuth = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          console.error("Session error:", sessionError.message);
+          await supabase.auth.signOut();
+          setUser(null);
+          if (requireAuth) {
+            router.push("/login");
+          }
+          setLoading(false);
+          return;
+        }
 
         if (data?.session?.user) {
           const profile = await syncProfile(data.session.user);
@@ -95,7 +106,14 @@ export function useAuth(requireAuth = false) {
             router.push("/login");
           }
         }
-      } catch {
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        console.error("Auth error:", errorMessage);
+        
+        if (errorMessage.includes("refresh_token") || errorMessage.includes("Refresh Token")) {
+          await supabase.auth.signOut();
+        }
+        
         setUser(null);
         if (requireAuth) {
           router.push("/login");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { usePlayerStore } from "@/store/playerStore";
 import { usePlaylist } from "@/hooks/usePlaylist";
 import { Loader2 } from "lucide-react";
@@ -13,21 +13,23 @@ declare global {
 }
 
 interface YouTubePlayerProps {
-  videoId: string | null;
+  videoIds: string[];
   onVideoEnd?: () => void;
 }
 
-export function YouTubePlayer({ videoId, onVideoEnd }: YouTubePlayerProps) {
+export function YouTubePlayer({ videoIds, onVideoEnd }: YouTubePlayerProps) {
   const playerRef = useRef<YT.Player | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const { setIsPlaying, setCurrentTime, setDuration, isMuted, volume } = usePlayerStore();
-  const { skipToNext, playerState } = usePlaylist();
+  const { playerState } = usePlaylist();
 
-  const handleVideoEnd = useCallback(() => {
+  const handlePlaylistEnd = useCallback(() => {
     setIsPlaying(false);
-    skipToNext();
+    setCurrentIndex(0);
     onVideoEnd?.();
-  }, [skipToNext, setIsPlaying, onVideoEnd]);
+  }, [setIsPlaying, onVideoEnd]);
 
   useEffect(() => {
     const tag = document.createElement("script");
@@ -51,22 +53,30 @@ export function YouTubePlayer({ videoId, onVideoEnd }: YouTubePlayerProps) {
             origin: window.location.origin,
             rel: 0,
             showinfo: 0,
+            listType: "playlist",
           },
           events: {
             onReady: (event) => {
               playerRef.current = event.target;
-              setDuration(event.target.getDuration());
+              setDuration(event.target.getDuration() || 0);
+              setIsPlayerReady(true);
+              console.log("[YouTubePlayer] Player ready");
             },
             onStateChange: (event) => {
               if (event.data === window.YT.PlayerState.PLAYING) {
                 setIsPlaying(true);
+                const currentIndex = playerRef.current?.getPlaylistIndex() || 0;
+                setCurrentIndex(currentIndex);
               } else if (
                 event.data === window.YT.PlayerState.PAUSED ||
                 event.data === window.YT.PlayerState.ENDED
               ) {
                 setIsPlaying(false);
                 if (event.data === window.YT.PlayerState.ENDED) {
-                  handleVideoEnd();
+                  const nextIndex = (playerRef.current?.getPlaylistIndex() || 0) + 1;
+                  if (nextIndex >= videoIds.length) {
+                    handlePlaylistEnd();
+                  }
                 }
               }
             },
@@ -78,14 +88,33 @@ export function YouTubePlayer({ videoId, onVideoEnd }: YouTubePlayerProps) {
     return () => {
       window.onYouTubeIframeAPIReady = () => {};
     };
-  }, [setIsPlaying, setDuration, handleVideoEnd]);
+  }, [setIsPlaying, setDuration, handlePlaylistEnd, setIsPlayerReady, videoIds]);
 
   useEffect(() => {
-    if (playerRef.current && videoId) {
-      playerRef.current.loadVideoById(videoId);
+    if (!isPlayerReady) {
+      console.log("[YouTubePlayer] Player not ready yet, skipping playlist load");
+      return;
+    }
+    
+    if (playerRef.current && videoIds.length > 0) {
+      // Verificar se já está tocando a mesma playlist
+      const currentList = playerRef.current.getPlaylist?.();
+      const isSamePlaylist = currentList && 
+        currentList.length === videoIds.length && 
+        currentList.every((id: string, i: number) => id === videoIds[i]);
+      
+      if (!isSamePlaylist) {
+        console.log("[YouTubePlayer] Loading playlist:", videoIds);
+        // Delay para garantir que o player está 100% pronto
+        setTimeout(() => {
+          playerRef.current?.loadPlaylist(videoIds, 0);
+        }, 100);
+      } else {
+        console.log("[YouTubePlayer] Same playlist already loaded, skipping");
+      }
       setIsPlaying(playerState?.status === "playing");
     }
-  }, [videoId, playerState?.status, setIsPlaying]);
+  }, [videoIds, playerState?.status, setIsPlaying, isPlayerReady]);
 
   useEffect(() => {
     if (playerRef.current) {
@@ -122,7 +151,7 @@ export function YouTubePlayer({ videoId, onVideoEnd }: YouTubePlayerProps) {
 
   return (
     <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
-      {!videoId && (
+      {videoIds.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div className="text-center text-muted-foreground">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />

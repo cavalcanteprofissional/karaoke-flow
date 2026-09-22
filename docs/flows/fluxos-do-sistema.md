@@ -1,6 +1,6 @@
 # Fluxos do sistema
 
-Fluxos técnicos end-to-end no estado atual do MVP (Fase 2 concluída) + propostas.
+Fluxos técnicos end-to-end no estado atual do MVP (Fases 1–3 concluídas; Fase 3.5 em andamento) + propostas.
 
 ---
 
@@ -87,7 +87,7 @@ flowchart TD
 
 ## 2. Ciclo de vida da sala
 
-### 2.1 Criar sala (Fase 3 — Proposta)
+### 2.1 Criar sala
 
 ```mermaid
 flowchart TD
@@ -99,11 +99,14 @@ flowchart TD
     F --> G["Mostra QR + código (entrada 1 toque)"]
 ```
 
-### 2.2 Entrar na sala (código/QR) — RPC `join_room`
+### 2.2 Entrar na sala (código/QR) — preview + RPC `join_room`
 
 ```mermaid
 flowchart TD
-    A["Participante escaneia QR / digita code"] --> B["RPC join_room(code) `(backend, security definer)`"]
+    A["Participante escaneia QR / digita code"] --> V["RPC get_room_preview(code) `(backend, security definer)`"]
+    V --> W["Preview: dono (nome), entry_mode, status `(backend)`"]
+    W --> X["Confirmar entrada (1–2 toques)"]
+    X --> B["RPC join_room(code) `(backend, security definer)`"]
     B --> C{Sala ativa?}
     C -- não --> Z[erro: sala não encontrada/inativa]
     C -- sim --> D{É o host?}

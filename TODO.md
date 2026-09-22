@@ -17,7 +17,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 1. ~~Tela 1 — Onboarding + consentimento LGPD + base i18n~~ (**entregue em 2026-09-21** — ver sub-bloco da Fase 2).
 2. **Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5) — novo modelo de dados (`bars`, `mesas`, `rooms.bar_id`), reseed, `/entrar`, criar bar, QR por karaokê/mesa, anônimo.
 3. **Busca + fila end-to-end** (Fase 4) — rota de busca com cache/rate-limit/cadeia de credenciais, OAuth por-host e do app, `addSongToQueueAction` com a matriz de geolocalização e lista simples da fila.
-4. **Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"** — ⚠️ **pendência externa:** **Google Takeout** ("YouTube and YouTube Music", JSON) **solicitado em 2026-09-21 — aguardando o Google enviar o link de download**. Quando os dados chegarem: rodar a ferramenta pessoal isolada `ler-takeout.mjs` (fora do repo, em `Temp\opencode\yt-music`), extrair o sinal musical (YT Music, sem Shorts), escrever a §6 do [`MANIFEST.md`](./MANIFEST.md) e fechar o commit final. `MANIFEST.md` v0.1 já está commitado na raiz com a §6 em rascunho pendente.
+4. ~~**Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"**~~ (**entregue em 2026-09-22**): Google Takeout "YouTube and YouTube Music" (2 pedidos, 1 recebido) recebido; `ler-takeout.mjs` (fora do repo, `Temp\opencode\yt-music`) ajustado p/ nomes pt-BR + strip ` - Topic` e rodado → 8.216 eventos de escuta (2025→2026, sem Shorts/vídeo, 2.842 faixas); §6 do [`MANIFEST.md`](./MANIFEST.md) escrita com o retrato real (Florence + The Machine dominante, AURORA, década 2020); nota de instrução do autor e cartão do ouvido removidos, nota de rodapé aponta a etapa de ciência de dados; fonte no §8 e nota da spec §16/§17 atualizadas. Zip do Takeout isolado em `.local-data/takeout/` (gitignored, nunca versionado). *Pendência residual anotada:* análise cruzada (histórico × curtidas) fica para o futuro repo `karaoke-flow-data` (ciência de dados — ver `docs/ciencia-de-dados/segmentacao-sentimental.md`).
 
 > A ampliação da **bateria de testes** acompanha as fases (ver seção "Plano de testes por fase" abaixo).
 
@@ -210,6 +210,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Roadmap (fora do MVP — documentado, não implementar agora)
 
+- [ ] **Ciência de dados — segmentação sentimental dos ouvintes (PLN/letras):** camada híbrida (embeddings SBERT + léxicos/ML, circumplexo valence-arousal, letras via Genius com excertos curtos + metadados acústicos Spotify, HDBSCAN) que classifica o ouvinte — primeiro o perfil pessoal do dev (histórico YT Music real da §6), depois usuários da app com LGPD. **Nasce fora do repo e será extraída para o repo independente `karaoke-flow-data`.** Arquitetura e estado da arte: [`docs/ciencia-de-dados/segmentacao-sentimental.md`](./docs/ciencia-de-dados/segmentacao-sentimental.md) (decisões fechadas em 2026-09-22).
 - [ ] OAuth X (Twitter) e Meta (Facebook) — iniciar app review com antecedência
 - [ ] Catálogo pré-indexado de clássicos de karaokê (~500–1000 músicas) como fallback quando a cota de busca se esgotar
 - [ ] Aumento de cota YouTube via auditoria Google Cloud + pool/rotação de chaves quando 10+ salas

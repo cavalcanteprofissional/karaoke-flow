@@ -51,20 +51,33 @@ erDiagram
 
     profiles {
         uuid id PK,FK "auth.users.id (criado por trigger)"
-        text nome
+        text name
         text email
-        text avatar
+        text avatar_url
         text auth_provider
+        timestamptz created_at
     }
 
-    queue_cache {
-        text query PK "normalizada (case/acentos)"
+    consents {
+        uuid user_id PK,FK "auth.users.id"
+        text terms_version
+        jsonb cookies_preferences
+        jsonb geolocation
+        timestamptz accepted_at
+        timestamptz updated_at
+    }
+
+    song_cache {
+        bigint id PK "identity"
+        text query_normalized UK "normalizada (case/acentos)"
         jsonb results
         timestamptz created_at
     }
 ```
 
-> `queue_cache` (migration `20260921000006`) **não tem políticas RLS** — só o service role lê/escreve (cache da busca do YouTube).
+> `song_cache` (migration `20260921000006`) **não tem políticas RLS** — só o service role lê/escreve (cache da busca do YouTube).
+
+> `consents` (migration `20260921000009`, spec §2.5/§13): registro de aceite LGPD/GDPR por usuário — RLS restrito ao próprio usuário (`consents_select_own`).
 
 ---
 
@@ -102,8 +115,9 @@ flowchart LR
 | `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                    | host                           |
 | `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar) | self **ou** host               |
 | `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only**           | host only                      |
-| `profiles`     | via view `profiles_public` (id/nome/avatar, sem e-mail)                 | trigger `handle_new_user` (ninguém insere direto)    | próprio profile         | —                              |
-| `queue_cache`  | sem política                                                            | sem política                                         | sem política            | sem política (só service role) |
+| `profiles`     | via view `profiles_public` (id/name/avatar_url, sem email)             | trigger `handle_new_user` (ninguém insere direto)    | próprio profile         | —                              |
+| `consents`     | só o próprio usuário                                                     | próprio usuário (ou service role)                    | próprio usuário (ou service role) | —                          |
+| `song_cache`   | sem política                                                            | sem política                                         | sem política            | sem política (só service role) |
 
 ### Pontos de atenção (segurança)
 
@@ -134,9 +148,9 @@ stateDiagram-v2
 
 ---
 
-## 5. Fluxo de DB da operação "trocar música" (Proposta)
+## 5. Fluxo de DB da operação "trocar música" (Proposta — Fase 5)
 
-No esquema atual (atualização in place via RPC `replace_queue_song` — ver [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §5), **position não muda** e o `updated_at` é tocado pelo trigger. Diagrama:
+Na proposta em discussão (atualização in place via RPC `replace_queue_song` — ver [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §5), **position não muda** e o `updated_at` é tocado pelo trigger. Diagrama:
 
 ```mermaid
 sequenceDiagram

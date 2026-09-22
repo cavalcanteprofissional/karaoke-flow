@@ -264,6 +264,6 @@ O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um d
 - **como os dados deles são usados e protegidos** (LGPD — alinhado à §13),
 - **por que vale a pena participar** (benefício real para o cantor, não apenas vitrine dos bares).
 
-> Status do manifesto: **rascunho disponível em [`MANIFEST.md`](./MANIFEST.md) (v0.1 — 2026-09-21)** — artigo 6 será íntimo do autor, personalizado com seus dados reais de escuta/canal do YouTube (Google Takeout/YT Music, coletados por ferramenta pessoal executada fora do repositório); documento ainda **em validação** (revisão de donos e cantores).
+> Status do manifesto: **rascunho disponível em [`MANIFEST.md`](./MANIFEST.md) (v0.1 — 2026-09-21)** — artigo 6 é íntimo do autor, **concluído com dados reais do histórico de escuta do YouTube Music (Google Takeout, 8.216 eventos em 2025→2026), extraídos por ferramenta pessoal executada fora do repositório**; documento ainda **em validação** (revisão de donos e cantores).
 
 **OAuth com plataformas de música/streaming (requisito técnico futuro):** para viabilizar a camada social — autenticar usuários por histórico de escuta/canto e sincronizar as músicas cantadas — será necessário OAuth com apps de música/streaming, **no mínimo Spotify e Deezer**, além do OAuth do YouTube já usado hoje para o fluxo de conteúdo. Requisito técnico associado à **criação da rede social**, não ao MVP de watch party; manter o design de auth desacoplado (§8) para absorver esses provedores sem retrabalho.

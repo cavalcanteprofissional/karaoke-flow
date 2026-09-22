@@ -65,6 +65,7 @@ O projeto usa dois planos de credencial no Google Cloud (projeto `karaoke-flow-5
 - `karaoke-pesquisa-academica.md` — pesquisa acadêmica e de mercado que fundamenta o produto.
 - `TODO.md` — plano de implementação por fases.
 - `CHANGELOG.md` — histórico de mudanças por release.
+- `docs/ciencia-de-dados/segmentacao-sentimental.md` — etapa futura de ciência de dados (segmentação sentimental do ouvinte; nasce neste repo, vira o repo independente `karaoke-flow-data`).
 
 ### Fluxos do MVP (`docs/flows`)
 
@@ -78,7 +79,7 @@ Diagramas em **Mermaid** (rendezam nativamente no GitHub, VS Code com a extensã
 
 **Convenções dos diagramas:** em `flowchart`, o **quadrado** é uma tela/ação, o **losango** uma decisão e o **verde** um fim de sucesso. Eventos de **Realtime** aparecem como `publica: room:{id}`. Regras validadas **no banco** (RLS/policies/triggers) são marcadas com `(backend)`. Itens `Em aberto` dependem de decisão de produto.
 
-**Como manter:** todo diagrama reflete o **código real** (`supabase/migrations/*`, `src/proxy.ts`, helpers SSR) — se uma migration mudar, atualize o diagrama correspondente no mesmo PR. Fluxos de UI só aparecem depois que a tela existir (ou como proposta marcada com `Proposta`). _Versão da doc de fluxos: corresponde ao estado do MVP após a Fase 2 (Auth) — novas fases são adicionadas conforme implementadas._
+**Como manter:** todo diagrama reflete o **código real** (`supabase/migrations/*`, `src/proxy.ts`, helpers SSR) — se uma migration mudar, atualize o diagrama correspondente no mesmo PR. Fluxos de UI só aparecem depois que a tela existir (ou como proposta marcada com `Proposta`). _Versão da doc de fluxos: corresponde ao estado do MVP após a Fase 3 (Salas) — Fase 3.5 (bar/mesas/karaokês) em andamento; novas fases são adicionadas conforme implementadas._
 
 ## Testes
 

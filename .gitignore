@@ -34,6 +34,9 @@ yarn-error.log*
 # Credenciais de integração (JSONs OAuth/API baixados) — nunca versionar
 credentials/
 
+# Dados locais sensíveis (ex.: exportação Google Takeout) — nunca versionar
+.local-data/
+
 # Vercel
 .vercel
 

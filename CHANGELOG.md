@@ -10,6 +10,17 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ### Adicionado
 
+- **MANIFEST v0.1 — §6 "Acerca das Belas Artes" concluída (2026-09-22):**
+  - Google Takeout "YouTube and YouTube Music" recebido e processado pela ferramenta pessoal isolada `ler-takeout.mjs` (fora do repo, em `Temp\opencode\yt-music`) — ajustada nesta etapa para aceitar nomes de arquivo pt-BR (`histórico-de-visualização.json`) e limpar o sufixo ` - Topic` dos canais oficiais auto-gerados.
+  - Sinal musical real extraído: **8.216 eventos de escuta** (2025→2026, sem Shorts/vídeo) sobre 48.200 entradas cruas, **2.842 faixas distintas**; top artista Florence + The Machine (1.716 ≈ 21%), segunda voz AURORA (818); década 2020 em 100% dos lançamentos; pico 2025-Q4 (2.112).
+  - **`MANIFEST.md` §6** reescrita com o retrato íntimo baseado nos números reais; nota de rodapé aponta a etapa futura de ciência de dados; nota de instrução do autor e bloco "cartão do ouvido" removidos; **§8 Fontes** e nota de status da **spec §16/§17** atualizadas.
+  - **Higiene de dados:** exportação do Takeout movida para `.local-data/takeout/` (`takeout-20260922-yt-music.zip`) e ignorada por `.gitignore` (`.local-data/`) — **nunca versionada**; outputs da ferramenta permanecem fora do repositório.
+- **Registro de etapa futura de ciência de dados (roadmap):** doc `docs/ciencia-de-dados/segmentacao-sentimental.md` — camada PLN híbrida (embeddings SBERT + léxicos/ML) que classifica o ouvinte no circumplexo valence-arousal usando letras (Genius, excertos curtos) + metadados acústicos (Spotify); nasce neste repo, mas será extraída para o repo independente `karaoke-flow-data`; sujeito inicial = perfil pessoal do dev (extensível a usuários da app); HDBSCAN p/ clusters; registrada no `TODO.md` (Roadmap) e referenciada na §6/§8 do manifesto.
+
+### Corrigido
+
+- **Docs/fluxos (`docs/flows/*`) alinhados ao estado real do MVP:** `banco-de-dados.md` corrigido (ERD passa a refletir as migrations de verdade — `song_cache` no lugar do inexistente `queue_cache`, colunas de `profiles` (`name`/`avatar_url`), entidade `consents` (migration `0009`) adicionada; §5 deixa de dizer "esquema atual" e marca a RPC `replace_queue_song` como **proposta da Fase 5**, já que a RPC ainda não existe). `fluxos-do-sistema.md` atualizado (cabeçalho "Fases 1–3 concluídas; Fase 3.5 em andamento", §2.2 passa a incluir a etapa real de preview `get_room_preview` antes do `join_room`, §2.1 não é mais "Proposta"). `README.md` e `TODO.md`/`CHANGELOG.md` com referências atualizadas (estado da doc de fluxos pós-Fase 3, cleanup textual das notas de instrução do MANIFEST §6).
+
 - **Fase 1 — Banco de dados + RLS (Supabase):**
   - Migrations versionadas com Supabase CLI em `supabase/migrations` (aplicadas via `supabase db push` no projeto cloud `kskoipyzqcacccepcqpc`).
   - Tabelas: `profiles`, `rooms`, `room_members`, `queue_items`, `song_cache` + triggers de `updated_at`.

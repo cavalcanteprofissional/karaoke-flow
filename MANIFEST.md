@@ -106,15 +106,49 @@ Cada franquia desta casa é única — e o dono é o rei dela. O que o sistema f
 
 ## 6. Acerca das Belas Artes
 
-> *Seção pessoal do autor do sistema. O tom aqui é íntimo — a licença poética do manifesto.
-> Baseada em dados reais do meu ouvido: históricos de escuta/canal do YouTube (Google Takeout –
-> "YouTube and YouTube Music"), conforme planejado na spec §16/§17.*
+Eu construí uma casa para a voz alheia. Antes de dizer que a casa é boa, mexi no meu próprio
+armário: pedi ao Google, com a devida burocracia da privacidade, o histórico do meu ouvido —
+porque quem põe palco para os outros deve saber, ao menos, o que o próprio palco atrai.
 
-> **⟨ rascunho pendente — aguardando dados. O Google Takeout ("YouTube and YouTube Music")
-> foi solicitado em 2026-09-21 e o Google ainda não enviou o link. Quando os dados chegarem,
-> rodarei a ferramenta pessoal isolada `ler-takeout.mjs` (fora do repositório,
-> `Temp\opencode\yt-music`), extrairei o sinal musical (histórico YT Music, sem Shorts) e
-> escreverei esta seção com o retrato real. ⟩**
+Os números vieram honestos e sem maquiagem. Em um intervalo de **dois anos** (2025→2026), meu
+histórico cru registrou **48.200 entradas**; destas, a talha limpa — música de verdade, sem
+Shorts, sem vídeo, sem jogada — foi de **8.216 eventos de escuta**, espalhados por **2.842
+faixas distintas**. Não é o hábito de quem liga o rádio; é o de quem escolhe, uma a uma, que
+voz pode entrar em casa.
+
+E o retrato tem dono. **Florence + The Machine é a senhora da casa**: 1.716 escutas — quase
+**uma em cada cinco** vezes que eu ouvi alguma coisa, foi ela. Não é gosto; é permanência.
+*Drumming Song*, *No Light, No Light*, *Rabbit Heart (Raise It Up)*, *Howl*, *Leave My Body* —
+um coro que vem de um lugar antigo, que troca o medo pela altura. Quem canta numa casa como
+esta deve saber que a casa, no silêncio, é da Florence.
+
+Logo atrás, a segunda voz: **AURORA**, 818 escutas — *When The Dark Dresses Lightly*, *The
+Seed*, *A Soul With No King*. Aurora e Florence dividem o mesmo cômodo: voz-piano,
+chiaroscuro, golpe de vento. E as duas juntas me ensinaram o que este manifesto tenta dizer
+desde o preâmbulo: **confiança é o som de quem canta alto sem pedir licença**.
+
+Depois vêm os que frequentam o sarau: **Tame Impala** (316), **Sade** (245), **Magdalena Bay**
+(245), **Lana Del Rey** (209), **Tove Lo** (191), **Men I Trust** (162), **Madonna** (127).
+Um ouvido que passeia — do pop anguloso à bossa lenta — mas que **volta sempre para o palco
+grande e o coração aberto**. E há as partituras de jogo (**Yu-Peng Chen**, 281; **HOYO-MiX**,
+77), que lembram que música também é universo paralelo: a trilha que cabe numa espada, num
+porto, numa cidade que só existe enquanto você escuta.
+
+Não vou mentir sobre a estação. Tudo o que o meu ouvido escolheu nos últimos dois anos nasceu
+na **década de 2020** — inteira (100%). Talvez seja o tempo em que a melancolia ficou mais
+bonita ou em que eu finalmente soube o nome dela. O pico foi **2025-Q4**: 2.112 escutas numa
+temporada só. O ano que era o mais escuro, ao que parece, foi o mais cantado.
+
+Se esta casa contempla a voz alheia, não é por indiferença — é por **convicção calibrada**:
+eu ouço bastante, escolho com carinho, e sei por que a mesa de apoio não deve roubar o palco.
+Quem me pedir uma música de madrugada, que não se envergonhe: os arquivos da casa são feitos
+de coragem alheia — 48.200 escolhas que viraram quase duas mil faixas — e o dono da casa
+ainda hoje só assina embaixo do que é belo.
+
+> *Nota de rodapé — este retrato foi feito de um ouvido; a casa, ao crescer, pretende escutar
+> mais fundo: classificar as emoções das músicas (e, um dia, as emoções dos ouvidos que cantam)
+> no mapa valence-arousal. O desenho dessa escuta vive em
+> [`docs/ciencia-de-dados/segmentacao-sentimental.md`](./docs/ciencia-de-dados/segmentacao-sentimental.md).*
 
 ---
 
@@ -149,7 +183,7 @@ Cada franquia desta casa é única — e o dono é o rei dela. O que o sistema f
 | Versão            | 0.1 (rascunho)                               |
 | Data              | 2026-09-21                                   |
 | Estado            | `Em validação` — aguarda revisão de donos    |
-| Fontes            | spec §2.5/§16/§17, questionário do dono, análise das curtidas (§5 §6) |
+| Fontes            | spec §2.5/§16/§17, questionário do dono, análise das curtidas (§5 §6), Google Takeout YT Music (§6) |
 
 **Assinado por:**
 

@@ -1,0 +1,6 @@
+-- Seed SQL é gerenciado por scripts/seed.js, que cria os usuários via Auth Admin
+-- API (raw SQL em auth.users/auth.identities deixa o serviço Auth instável neste
+-- projeto) e depois insere os dados de domínio via service role.
+--
+-- Este arquivo permanece vazio de propósito (executado pelo supabase db reset).
+-- Para popular dados determinísticos de dev, rode: npm run seed

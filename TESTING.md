@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **documentação definida**. A stack será instalada e configurada ao longo das fases seguintes (Vitest/RTL desde a Fase 3, Playwright na Fase 6+). Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom instalados e configurados na Fase 3** (`vitest.config.mts`, `src/test/setup.ts`, scripts `test`/`test:watch`/`test:coverage`; primeiros unitários: `src/lib/rooms/utils.test.ts`). **Etapa 1 (2026-09-21):** suite com **29 testes** (i18n, cookies de consentimento, geo, componente Onboarding) — `globals: true` no Vitest p/ autocleanup do RTL. MSW (mock de redes) e Playwright (e2e) entram nas próximas fases. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 
 ---
 
@@ -18,7 +18,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 | E2E               | **Playwright**                         | Fluxos completos no navegador (entrar na sala, adicionar música com o toggle de confirmação, player kiosk) |
 | Cobertura         | `@vitest/coverage-v8`                  | Report de cobertura por fase; meta de referência: **≥80%** nas camadas críticas (fila, permissões, store)  |
 
-Estrutura de arquivos (a criar nas próximas fases):
+Estrutura de arquivos (parte já criada na Fase 3; 😴 = pende de fases futuras):
 
 ```
 src/

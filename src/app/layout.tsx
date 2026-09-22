@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { AuthSessionProvider } from "@/components/auth/auth-session-provider";
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -33,11 +34,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
+      <body className="bg-background text-foreground flex min-h-full flex-col font-sans">
         <ThemeProvider>
           <TooltipProvider>
-            {children}
-            <Toaster position="top-center" richColors />
+            <AuthSessionProvider>
+              {children}
+              <Toaster position="top-center" richColors />
+            </AuthSessionProvider>
           </TooltipProvider>
         </ThemeProvider>
       </body>

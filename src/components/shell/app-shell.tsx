@@ -1,21 +1,23 @@
+"use client";
+
 import { Header } from "@/components/shell/header";
-import { BottomNav, type NavItem } from "@/components/shell/bottom-nav";
 import { cn } from "cn";
 
 type AppShellProps = {
   children: React.ReactNode;
-  navItems?: NavItem[];
+  nav?: React.ReactNode;
   className?: string;
+  headerActions?: React.ReactNode;
 };
 
-export function AppShell({ children, navItems, className }: AppShellProps) {
+export function AppShell({ children, nav, className, headerActions }: AppShellProps) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <Header />
-      <main className={cn("mx-auto w-full max-w-md flex-1 px-4 pb-28 pt-4", className)}>
+      <Header actions={headerActions} />
+      <main className={cn("mx-auto w-full max-w-md flex-1 px-4 pt-4 pb-28", className)}>
         {children}
       </main>
-      {navItems && navItems.length > 0 && <BottomNav items={navItems} />}
+      {nav}
     </div>
   );
 }

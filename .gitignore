@@ -31,6 +31,9 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Credenciais de integração (JSONs OAuth/API baixados) — nunca versionar
+credentials/
+
 # Vercel
 .vercel
 

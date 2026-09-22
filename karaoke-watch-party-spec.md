@@ -14,15 +14,57 @@ Fase 1 (MVP) = cobrir o fluxo de watch party descrito abaixo. Qualquer coisa for
 - **Participante (guest):** entra na sala via QR code ou código, busca músicas no YouTube, adiciona à fila (sujeito a aprovação conforme config da sala).
 - **Tela da sala (player device):** dispositivo burro que só exibe o player do YouTube e o estado da fila; não tem controle próprio, só reage a eventos em tempo real vindos do host/sala.
 
+## 2.5 Tela 1 — Onboarding / Seleção de Perfil (MVP)
+
+> **Status: requisito de MVP** — a primeira tela do app, exibida antes de qualquer login. É a tela de bifurcação que roteia entre os dois fluxos já previstos nesta especificação (participante e host — ver §2 e §3): ponto de entrada/roteamento, **não** uma landing page de marketing e **não** uma funcionalidade nova paralela.
+
+### 2.5.1 Conteúdo obrigatório
+
+A tela contém apenas dois elementos — nenhum outro elemento é permitido (sem hero de marketing, sem copy extensa, sem cards promocionais):
+
+1. **Dois botões de escolha de perfil**, com o texto adaptado ao idioma detectado do usuário/navegador:
+   - **"Quero cantar"** — perfil de usuário padrão / participante (cantor): login, entrar em sala via QR code/código, fila de músicas.
+   - **"Sou dono"** — perfil de host / dono do estabelecimento: login, criação/gestão de sala, toggles de aprovação (entrada e fila).
+2. **Solicitação de consentimento de cookies** (banner ou modal), seguindo padrão de LGPD/GDPR — opção de **aceitar antes de qualquer coleta**; sem aceite, nenhum dado do dispositivo é coletado.
+
+### 2.5.2 Coleta de dados do dispositivo
+
+Coleta transparente, vinculada ao consentimento da §2.5.1 e executada **independentemente de qual botão o usuário escolher**, desde que o cookie tenha sido aceito:
+
+- **Idioma/localização do navegador** (`navigator.language`/locales) — usado para definir o idioma da UI, incluindo o texto dos dois botões.
+- **Localização geográfica** — coletada e armazenada para uso futuro de **descoberta de bares/salas próximas**. Sem funcionalidade ativa no MVP, apenas a coleta.
+- **Cookie de preferências do usuário** — persiste idioma escolhido e último modo selecionado ("quero cantar" / "sou dono") entre visitas.
+
+Ordem garantida em qualquer fluxo: usuário **aceita cookies** → coleta de idioma/geolocalização + gravação do cookie de preferências → roteamento pelo botão escolhido.
+
+### 2.5.3 Roteamento
+
+A escolha do botão determina a rota seguinte:
+
+```mermaid
+flowchart LR
+    A["Tela 1 — Onboarding<br/>(2 botões + aceite de cookies)"] --> B{"Perfil"}
+    B -- "Quero cantar" --> C["Fluxo participante: login →<br/>entrar via QR/código → fila"]
+    B -- "Sou dono" --> D["Fluxo host: login →<br/>criar/gerir sala → toggles"]
+    C --> E["§3 Fluxo Principal"]
+    D --> E
+```
+
+- **"Quero cantar"** → tela/fluxo de usuário padrão (cantor): login, entrar em sala via QR code/código, fila de músicas.
+- **"Sou dono"** → tela/fluxo de host (dono do estabelecimento): login, criação/gestão de sala, toggles de aprovação (entrada e fila).
+
+> Privacidade: política de retenção, exclusão de conta/dados e demais pontos LGPD estão na §13.
+
 ## 3. Fluxo Principal
 
-1. Usuário faz login.
-2. Usuário cria uma sala (vira host) OU entra em uma sala existente escaneando QR code ou digitando um código.
-3. Se a sala exigir aprovação de entrada, o host recebe e aprova/rejeita pedidos de entrada.
-4. Dentro da sala, qualquer participante busca músicas (via YouTube Data API) e adiciona à fila.
-5. Se a fila exigir aprovação, o item entra como "pendente" até o host aprovar; senão, entra direto na fila.
-6. A tela da sala (TV/projetor) reproduz a fila em sequência, tocando o próximo item automaticamente ao fim do atual.
-7. O host controla playback (pular, pausar, reordenar, remover) pelo próprio celular, através da aplicação web — sem precisar tocar no dispositivo da TV.
+1. Usuário abre a Tela 1 (onboarding — §2.5), aceita os cookies e escolhe o perfil: **"Quero cantar"** (participante) ou **"Sou dono"** (host). A coleta de idioma/geolocalização e o cookie de preferências ocorrem logo após o aceite, antes do roteamento.
+2. Usuário faz login.
+3. Usuário cria uma sala (vira host) OU entra em uma sala existente escaneando QR code ou digitando um código.
+4. Se a sala exigir aprovação de entrada, o host recebe e aprova/rejeita pedidos de entrada.
+5. Dentro da sala, qualquer participante busca músicas (via YouTube Data API) e adiciona à fila.
+6. Se a fila exigir aprovação, o item entra como "pendente" até o host aprovar; senão, entra direto na fila.
+7. A tela da sala (TV/projetor) reproduz a fila em sequência, tocando o próximo item automaticamente ao fim do atual.
+8. O host controla playback (pular, pausar, reordenar, remover) pelo próprio celular, através da aplicação web — sem precisar tocar no dispositivo da TV.
 
 ## 4. Configurações da Sala (Room Settings)
 
@@ -185,3 +227,43 @@ O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um d
 
 - Tema escuro por padrão (ambiente de bar/balada, tanto no controller quanto na tela) para não ofuscar o ambiente nem cansar os olhos com luz do celular no escuro.
 - Todo o app pensado mobile-first (conforme já definido), com a tela do projetor sendo a única exceção "desktop-like" da experiência.
+
+## 16. Futuro / Pós-MVP — Coleta de dados de donos via OAuth (qualificação comercial)
+
+> **Status: roadmap / pós-MVP.** Este requisito não faz parte do MVP atual (que usa apenas OAuth Google e GitHub — ver §8) e **não deve travar ou atrasar a entrega do MVP**.
+
+**Requisito de dados:** coletar, no momento do cadastro do estabelecimento, dados dos donos/gerentes via OAuth das plataformas de redes sociais:
+
+- **Instagram** (Meta)
+- **Facebook** (Meta)
+- **WhatsApp Business** (Meta)
+- **X (Twitter)**
+
+**Finalidade:** cruzar os dados sociais obtidos (alcance, engajamento, base de seguidores) com os dados operacionais levantados no questionário de validação (`questionario-donos-estabelecimento.md`) para:
+
+- **qualificar leads comerciais** (identificar estabelecimentos com maior potencial),
+- mensurar o **potencial de cada estabelecimento** (tamanho e engajamento de público, capacidade de divulgação/influência local),
+- priorizar a **expansão comercial/monetização** com base em dados, não em achismo.
+
+**Relação com o MVP:** o design de autenticação já é desacoplado por config de providers (ver §8 e §15), de modo que esses provedores possam ser adicionados no futuro sem retrabalho. Este item é explicitamente um requisito de **dados/roadmap** — não gera interface, campo obrigatório ou bloqueio no cadastro do host do MVP.
+
+> **Observação operacional:** todos os provedores Meta (Instagram, Facebook, WhatsApp Business) e o X exigem processo de **app review externo** antes de produção — iniciar com antecedência assim que a expansão comercial for decidida (consistente com §15).
+
+## 17. Futuro / Pós-MVP — Rede social entre usuários (cantores) e OAuth de streaming
+
+> **Status: visão de produto de longo prazo (pós-MVP)**. Não é escopo do MVP e não altera o modelo central de watch party (§1), que permanece como infraestrutura base.
+
+**Visão:** a aplicação deverá evoluir para uma **rede social compartilhada entre os usuários finais (os cantores)**, na qual eles podem registrar e compartilhar:
+
+- o **histórico de músicas cantadas** (por elas e pelos outros participantes),
+- os **bares/casas que frequentaram**, representados por um **badge/selo de presença** ("conquista") com a identidade (logo/nome) do estabelecimento.
+
+**Manifesto da rede social (item pendente do roadmap — ainda não escrito):** antes de lançar a camada social, deve ser produzido um **manifesto dirigido aos usuários** explicando:
+
+- o **propósito** da rede social (o que ela é e o que não é),
+- **como os dados deles são usados e protegidos** (LGPD — alinhado à §13),
+- **por que vale a pena participar** (benefício real para o cantor, não apenas vitrine dos bares).
+
+> Status do manifesto: **rascunho disponível em [`MANIFEST.md`](./MANIFEST.md) (v0.1 — 2026-09-21)** — artigo 6 será íntimo do autor, personalizado com seus dados reais de escuta/canal do YouTube (Google Takeout/YT Music, coletados por ferramenta pessoal executada fora do repositório); documento ainda **em validação** (revisão de donos e cantores).
+
+**OAuth com plataformas de música/streaming (requisito técnico futuro):** para viabilizar a camada social — autenticar usuários por histórico de escuta/canto e sincronizar as músicas cantadas — será necessário OAuth com apps de música/streaming, **no mínimo Spotify e Deezer**, além do OAuth do YouTube já usado hoje para o fluxo de conteúdo. Requisito técnico associado à **criação da rede social**, não ao MVP de watch party; manter o design de auth desacoplado (§8) para absorver esses provedores sem retrabalho.

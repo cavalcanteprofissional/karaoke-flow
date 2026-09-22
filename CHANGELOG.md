@@ -51,6 +51,7 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 - **Plano de implementação (`TODO.md`) e spec (`karaoke-watch-party-spec.md`):**
   - Novo campo de configuração da sala `requireSongConfirmation` (toggle do host: "pedir confirmação antes de adicionar música"), que exibe um modal de confirmação (thumbnail + título + duração) para o próprio usuário antes de enviar a música à fila. Complementar ao `queueApprovalMode`, não substituto.
+  - **Plano de testes por fase** adicionado ao `TODO.md` (seção "Plano de testes por fase"): MSW na Fase 4 (busca/fila), testes de domínio bar/mesa/karaokê na Fase 3.5, Playwright transversal pós-Fase 6 e transformação do e2e RLS manual da Fase 3 em script replayável. **A bateria atual (29 testes unitários) ainda não cobre server actions, banco/RLS nem e2e automatizado — execução fica para as fases listadas; nada foi rodado hoje, apenas planejado.**
 
 ### Excluído
 

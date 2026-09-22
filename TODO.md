@@ -14,9 +14,27 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 **Próximas etapas (plano fechado em 2026-09-21):**
 
-1. **Tela 1 — Onboarding + consentimento LGPD + base i18n** (sub-bloco da Fase 2) — `/` vira bifurcação, migration `consents`, cookie/geo/preferências só pós-aceite, host isento.
+1. ~~Tela 1 — Onboarding + consentimento LGPD + base i18n~~ (**entregue em 2026-09-21** — ver sub-bloco da Fase 2).
 2. **Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5) — novo modelo de dados (`bars`, `mesas`, `rooms.bar_id`), reseed, `/entrar`, criar bar, QR por karaokê/mesa, anônimo.
 3. **Busca + fila end-to-end** (Fase 4) — rota de busca com cache/rate-limit/cadeia de credenciais, OAuth por-host e do app, `addSongToQueueAction` com a matriz de geolocalização e lista simples da fila.
+4. **Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"** — ⚠️ **pendência externa:** **Google Takeout** ("YouTube and YouTube Music", JSON) **solicitado em 2026-09-21 — aguardando o Google enviar o link de download**. Quando os dados chegarem: rodar a ferramenta pessoal isolada `ler-takeout.mjs` (fora do repo, em `Temp\opencode\yt-music`), extrair o sinal musical (YT Music, sem Shorts), escrever a §6 do [`MANIFEST.md`](./MANIFEST.md) e fechar o commit final. `MANIFEST.md` v0.1 já está commitado na raiz com a §6 em rascunho pendente.
+
+> A ampliação da **bateria de testes** acompanha as fases (ver seção "Plano de testes por fase" abaixo).
+
+---
+
+## Plano de testes por fase (ampliação da bateria)
+
+> **Situação atual (2026-09-21):** Vitest + RTL + jsdom com **29 testes** (rooms/utils, i18n, consent cookies/geo, componente Onboarding). Smoke HTTP manual (anon/autenticado) e e2e ad-hoc de RLS da Fase 3. **Ainda não há** MSW, Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
+>
+> Princípios: testar o que agrega (helpers de domínio e componentes críticos em unit; fluxos de usuário em e2e); manter a suíte rápida; RLS validada via smoke/e2e, não em unit.
+
+- [ ] **Fase 3.5 (Etapa 2):** extrair regras de domínio de bar/mesa/karaokê (resolução mesa→karaokê, código de bar, payload de QRs) em funções puras e cobrir em unit; testes de componentes das telas novas (`/entrar` reescrito, criar bar, dashboard "meus bares"); smoke HTTP do fluxo de entrada (anon/autenticado, 1 karaokê vs N).
+- [ ] **Fase 4 (Etapa 3):** adicionar **MSW** para mockar chamadas de rede — serviço de busca do YouTube (parse de itens, cadeia de credenciais host→app→dev, cache miss/hit, rate-limit) e `addSongToQueueAction` (validação via RLS mockada, matriz de geolocalização); unit da store de fila; smoke HTTP da rota `/salas/[codigo]/buscar` e de adicionar à fila.
+- [ ] **Fase 5:** testes de componentes do painel de aprovação/reorder da fila e do modal `requireSongConfirmation`; unit das actions de reorder/controle do player (fila vazia/pausada, dedupe).
+- [ ] **Fase 6:** smoke HTTP da rota pública `/player/[codigo]` (sem sessão, modo quiosque).
+- [ ] **E2E transversal (Playwright):** instalar Playwright quando o MVP estiver estável (pós-Fase 6) e automatizar os fluxos principais — Tela 1 (aceite LGPD) → `/login` → dashboard à proteger, entrada em karaokê por código/QR, participante sem geo bloqueado de adicionar (e host não), player aberto em tela externa. Transformar o e2e RLS manual da Fase 3 em script replayável (`scripts/`).
+- [ ] **Rastreabilidade:** marcar no CHANGELOG quando MSW/Playwright entrarem; atualizar `TESTING.md` §2 ao longo das fases.
 
 ---
 
@@ -39,6 +57,8 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 ## Fase 1 — Banco de dados + RLS (Supabase)
 
 > **Pendência externa:** ~~aguardando credenciais válidas~~ — **resolvida em 2026-09-21**: projeto Supabase `kskoipyzqcacccepcqpc` reativado (estava pausado), credenciais atualizadas e validadas. `YOUTUBE_API_KEY` **validada** (`search.list` respondeu OK em 2026-09-21) — usada em dev; **não vai para produção** (ver Fase 4). Credenciais OAuth `YOUTUBE_OAUTH_CLIENT_ID/SECRET` adicionadas no `.env.local` para o modelo chave-por-host.
+>
+> ⚠️ **OAuth client (2026-09-21):** o client **Web** (redirect `http://localhost:3000`) foi **deletado** no Google Cloud; o client atual é **Desktop app** (`555657479128-…googleusercontent.com`, loopback — para ferramentas dev e coleta do manifesto; JSON gitignored em `credentials/`). Para a **Fase 4 (OAuth por-host)** será preciso **recriar o client Web** (+ verificar tela de consentimento/test users).
 
 **Decisão:** migrations versionadas com **Supabase CLI** (`supabase/migrations`, aplicadas via `supabase db push`).
 

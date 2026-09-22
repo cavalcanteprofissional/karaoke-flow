@@ -107,12 +107,14 @@ Cada franquia desta casa é única — e o dono é o rei dela. O que o sistema f
 ## 6. Acerca das Belas Artes
 
 > *Seção pessoal do autor do sistema. O tom aqui é íntimo — a licença poética do manifesto.
-> Baseada em dados reais das minhas curtidas do YouTube (coletadas via OAuth, escopo
-> `youtube.readonly`), conforme planejado na spec §16/§17.*
+> Baseada em dados reais do meu ouvido: históricos de escuta/canal do YouTube (Google Takeout –
+> "YouTube and YouTube Music"), conforme planejado na spec §16/§17.*
 
-> **⟨ rascunho pendente — seção será preenchida após a coleta OAuth (playlist “Vídeos
-> curtidos”, LL) e análise por canal/ano ; em caso de falha do consentimento, será escrita
-> sem dados. ⟩**
+> **⟨ rascunho pendente — aguardando dados. O Google Takeout ("YouTube and YouTube Music")
+> foi solicitado em 2026-09-21 e o Google ainda não enviou o link. Quando os dados chegarem,
+> rodarei a ferramenta pessoal isolada `ler-takeout.mjs` (fora do repositório,
+> `Temp\opencode\yt-music`), extrairei o sinal musical (histórico YT Music, sem Shorts) e
+> escreverei esta seção com o retrato real. ⟩**
 
 ---
 

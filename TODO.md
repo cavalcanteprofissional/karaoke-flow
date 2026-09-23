@@ -16,7 +16,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 1. ~~Tela 1 — Onboarding + consentimento LGPD + base i18n~~ (**entregue em 2026-09-21** — ver sub-bloco da Fase 2).
 2. ~~**Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5)~~ (**entregue em 2026-09-23** — Blocos A–F concluídos: migrations 00010–00014 aplicadas no projeto Cloud via `apply-sql.mjs`, anonymous sign-ins, reseed (Bar 1/Bar 2), lib+actions+16 testes de `qr.ts`, UI Bloc E, docs Bloc F; lint/typecheck/build e 45 testes verdes. **Decisões de modelo fechadas com o PO** — ver bloco da Fase 3.5 abaixo). *Pendências residuais registradas ao final da Fase 3.5.*
-3. **Busca + fila end-to-end** (Fase 4) — rota de busca com cache/rate-limit/cadeia de credenciais, OAuth por-host e do app, `addSongToQueueAction` com a matriz de geolocalização e lista simples da fila (escopo ampliado com o PO em 2026-09-21 — ver seção Fase 4).
+3. ~~**Busca + fila end-to-end** (Fase 4)~~ (**entregue em 2026-09-23** — Blocos A–H concluídos; ver seção Fase 4 abaixo).
 4. ~~**Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"**~~ (**entregue em 2026-09-22**): Google Takeout "YouTube and YouTube Music" (2 pedidos, 1 recebido) recebido; `ler-takeout.mjs` (fora do repo, `Temp\opencode\yt-music`) ajustado p/ nomes pt-BR + strip ` - Topic` e rodado → 8.216 eventos de escuta (2025→2026, sem Shorts/vídeo, 2.842 faixas); §6 do [`MANIFEST.md`](./MANIFEST.md) escrita com o retrato real (Florence + The Machine dominante, AURORA, década 2020); nota de instrução do autor e cartão do ouvido removidos, nota de rodapé aponta a etapa de ciência de dados; fonte no §8 e nota da spec §16/§17 atualizadas. Zip do Takeout isolado em `.local-data/takeout/` (gitignored, nunca versionado). *Pendência residual anotada:* análise cruzada (histórico × curtidas) fica para o futuro repo `karaoke-flow-data` (ciência de dados — ver `docs/ciencia-de-dados/segmentacao-sentimental.md`).
 
 > A ampliação da **bateria de testes** acompanha as fases (ver seção "Plano de testes por fase" abaixo).
@@ -25,12 +25,12 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Plano de testes por fase (ampliação da bateria)
 
-> **Situação atual (2026-09-23):** Vitest + RTL + jsdom com **45 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, consent cookies/geo, componente Onboarding). Smoke HTTP manual (anon/autenticado) e e2e ad-hoc de RLS da Fase 3. **Ainda não há** MSW, Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
+> **Situação atual (2026-09-23):** Vitest + RTL + jsdom com **146 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 31, `queue` matriçada, rota `/api/youtube/search` **16 via MSW**). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
 >
 > Princípios: testar o que agrega (helpers de domínio e componentes críticos em unit; fluxos de usuário em e2e); manter a suíte rápida; RLS validada via smoke/e2e, não em unit.
 
 - [x] **Fase 3.5 (Etapa 2):** regras de domínio de bar/mesa/karaokê (parse/extração/rotas de QR, token de entrada) extraídas em `src/lib/bars/qr.ts` e cobertas em unit (**16 testes**); smoke HTTP do fluxo de entrada (anon/autenticado, 1 karaokê) validado manualmente. **Ainda falta:** testes de componentes das telas novas (`/entrar` reescrito, `CreateBarDialog`, dashboard "meus bares").
-- [ ] **Fase 4 (Etapa 3):** adicionar **MSW** para mockar chamadas de rede — serviço de busca do YouTube (parse de itens, cadeia de credenciais host→app→dev, cache miss/hit, rate-limit) e `addSongToQueueAction` (validação via RLS mockada, matriz de geolocalização); unit da store de fila; smoke HTTP da rota `/salas/[codigo]/buscar` e de adicionar à fila.
+- [x] **Fase 4 (Etapa 3):** **MSW** adicionado e mockando a YouTube Data API nas provas de rota — serviço de busca (parse de itens, cadeia de credenciais host→app→dev, cache miss/hit, rate-limit, geo gate, credencial fora do payload) e `addSongToQueueAction` (matriz de geolocalização unit). **Fica para a Fase 5:** unit da store de fila e smoke HTTP da rota `/salas/[codigo]/buscar`.
 - [ ] **Fase 5:** testes de componentes do painel de aprovação/reorder da fila e do modal `requireSongConfirmation`; unit das actions de reorder/controle do player (fila vazia/pausada, dedupe).
 - [ ] **Fase 6:** smoke HTTP da rota pública `/player/[codigo]` (sem sessão, modo quiosque).
 - [ ] **E2E transversal (Playwright):** instalar Playwright quando o MVP estiver estável (pós-Fase 6) e automatizar os fluxos principais — Tela 1 (aceite LGPD) → `/login` → dashboard à proteger, entrada em karaokê por código/QR, participante sem geo bloqueado de adicionar (e host não), player aberto em tela externa. Transformar o e2e RLS manual da Fase 3 em script replayável (`scripts/`).
@@ -58,7 +58,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 > **Pendência externa:** ~~aguardando credenciais válidas~~ — **resolvida em 2026-09-21**: projeto Supabase `kskoipyzqcacccepcqpc` reativado (estava pausado), credenciais atualizadas e validadas. `YOUTUBE_API_KEY` **validada** (`search.list` respondeu OK em 2026-09-21) — usada em dev; **não vai para produção** (ver Fase 4). Credenciais OAuth `YOUTUBE_OAUTH_CLIENT_ID/SECRET` adicionadas no `.env.local` para o modelo chave-por-host.
 >
-> ⚠️ **OAuth client (2026-09-21):** o client **Web** (redirect `http://localhost:3000`) foi **deletado** no Google Cloud; o client atual é **Desktop app** (`555657479128-…googleusercontent.com`, loopback — para ferramentas dev e coleta do manifesto; JSON gitignored em `credentials/`). Para a **Fase 4 (OAuth por-host)** será preciso **recriar o client Web** (+ verificar tela de consentimento/test users).
+> ⚠️ **OAuth client (2026-09-21):** o client **Web** (redirect `http://localhost:3000`) foi **deletado** no Google Cloud; o client atual é **Desktop app** (`555657479128-…googleusercontent.com`, loopback — para ferramentas dev e coleta do manifesto; JSON gitignored em `credentials/`). Para a **Fase 4 (OAuth por-host)** é preciso **recriar o client Web** (+ verificar tela de consentimento/test users) — código das rotas e o script de coleta do app já estão prontos (2026-09-23); é a única pendência para o E2E real do OAuth.
 
 **Decisão:** migrations versionadas com **Supabase CLI** (`supabase/migrations`, aplicadas via `supabase db push`).
 
@@ -156,27 +156,52 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] Dashboard: host vê "meus bares"; participante vê "bares que visito"; `/salas/[codigo]` = página do karaokê
 - [ ] Docs/fluxos (`docs/flows/*`) e **spec §5 (Entidades)** migrados para a terminologia/entidades bar/karaokê/mesa/consents
 
+## Requisito — presença física (geo gate) — registrado 2026-09-23
+
+> **Definição:** participação na sala de karaokê (entrar/confirmar mesa **e** adicionar música) exige que o usuário **esteja fisicamente no bar**. Compara-se o GPS do usuário (cookie `kf-geo`, sob consentimento) com as coordenadas do bar ± raio. Bloqueia usuários remotos. Host isento (é o bar). Ver spec §2.5.4.
+>
+> **Análise:** coords do cookie com 3 casas (~±50–111 m) → raio por bar default **150 m** (50–1000, ajustável); bar **sem coords registradas** ⇒ participante não comprova presença e é bloqueado (geo-unavailable) — localização vira requisito de facto no cadastro (hint no dialog); GPS de dispositivo **não é prova criptográfica** (spoofing) — é trava de fricção, não fronteira de segurança; consentimento LGPD vira **mandatório p/ participação** (view-only mantido); raio pertence ao **bar** (aplica-se a N salas). Geocode gratuito via **Nominatim/OSM** com fallback **GPS do dispositivo** no cadastro.
+
+- [x] Migration `20260923000015_bars_geo` aplicada no projeto Cloud (via `apply-sql.mjs`, padrão do time) — validação real do gate no banco; reseed com coords do **ZEHBAR** (Bar 1) e raio default 150.
+- [x] `src/lib/bars/geo.ts` (haversine, `withinRadius`, `checkPresence`, `geocodeAddress`) + `presence.ts` (leitura do cookie server-side) — **23 testes** verdes.
+- [x] `joinEntryAction`/`getEntryPreviewAction` exigem presença (host isento); `EntryPreview` com banner de bloqueio + CTA "Permitir localização" (re-captura e revalida).
+- [x] `CreateBarDialog` + schema: endereço → geocode (Nominatim) → fallback "usar minha localização atual"; campo **raio** com hint explicando a finalidade; default 150.
+- [x] Questionário: **Q16** (endereço/cidade — localização física), **Q17** (nº médio de mesas), **Q18** (aceitação de exigir GPS); nota de raio de presença registrada; 18 perguntas.
+- [x] Docs: spec §2.5/§3/§13, CHANGELOG, `docs/flows` (fluxo de entrada com gate), README (stack/questionário).
+- [x] **Pendência resolvida:** refresh do `kf-geo` em `entry-preview` recaptura GPS — rota reexecutada no servidor revalida a presença a cada submissão da action.
+
 ## Fase 4 — Busca no YouTube + fila end-to-end
 
 > **Escopo ampliado com o PO (2026-09-21):** além da busca, esta fase entrega a **adição à fila + lista simples da fila** (mutation com `position` por advisory lock e status inicial por modo de aprovação). Realtime completo, painel de aprovação do host, reordenar/remover e modal `requireSongConfirmation` ficam na Fase 5. A busca respeita a **matriz de permissão por geolocalização**.
 
-- [ ] Rota de servidor `/api/youtube/search` — credencial injetada apenas no backend, **nunca no client**
-- [ ] `safeSearch=strict` + `videoEmbeddable=true` no `search.list` (moderação + só vídeos embutíveis)
-- [ ] Busca + `videos.list?part=contentDetails` (lote) para duração; resultados com thumbnail + título + duração
-- [ ] Campo de busca único e persistente no topo da tela; resultados em lista mobile-first
-- [ ] Botão "Adicionar à fila" grande (alvo de toque generoso, ambiente de bar)
-- [ ] Debounce na busca (~500ms + AbortController contra corridas de request)
-- [ ] `song_cache` compartilhado entre karaokês (query normalizada; reusar antes de chamar a API; TTL 7 dias)
-- [ ] Rate limiting por usuário/IP na rota de busca (independente da cota do YouTube)
-- [ ] Fallback amigável de cota esgotada ("tente novamente mais tarde", sem erro cru)
-- [ ] Cadeia de credenciais: **OAuth do host → `rooms.youtubeApiKey` → OAuth do app → `YOUTUBE_API_KEY`** (dev, só quando setada)
-- [ ] OAuth por-host: rotas authorize/callback + tabela `youtube_oauth_tokens` (user_id, refresh_token, atualizado_em; sem policies — só service role); script `scripts/youtube-app-oauth.mjs` (consent único do dev → `YOUTUBE_APP_REFRESH_TOKEN` no `.env.local`)
-- [ ] Bloco "Conexão YouTube do host" no `RoomSettings` (conectar conta Google / colar key própria)
-- [ ] **Registro p/ produção:** `YOUTUBE_API_KEY` do dev **não** entra na produção (produção = OAuth por-host + OAuth do app como default). Nota: `YOUTUBE_APP_REFRESH_TOKEN` (script) é **pré-requisito** do fallback do app — sem ele, produção depende só de OAuth por-host
-- [ ] Server action `addSongToQueueAction`: insert em `queue_items` (position advisory lock, status por `queue_approval_mode`, `.select()` para validar RLS)
-- [ ] **Matriz de geolocalização:** não-host sem geolocalização concedida **não pode adicionar música** (erro amigável + botão re-permitir), mantém view da fila/player ao vivo/thumbnail; host isento
-- [ ] `/salas/[codigo]/buscar` (rota filha) + lista simples da fila na página da sala (atualiza ao adicionar)
-- [ ] Instalar MSW + testes da rota/lib (sucesso, cota esgotada, 429, cache hit, credencial nunca no payload) e da `addSongToQueueAction` (geo gate, RLS)
+### Plano de implementação (Blocos A–H, 2026-09-23) — ✅ concluídos
+
+- [x] **A. Lib:** `src/lib/youtube/*` — `types`, `errors` (`YouTubeApiError`, mensagem amigável de cota), `rate-limit` (janela deslizante em memória, 60/h), `cache` (`normalizeQuery` em bucket alfabético, TTL 7d), `app-oauth` (refresh/exchange), `credentials` (cadeia key-room → **OAuth host** → OAuth app → dev), `search` (`safeSearch=strict` + `videoEmbeddable=true`, durações em lotes de 50), `service` (busca orquestrada com portas: rate limit, cache, geo gate, credencial) — **31 testes** verdes.
+- [x] **B. Banco:** migration `20260923000016_youtube_oauth_tokens` (host_id unique, refresh_token, updated_at; **sem policies — só service role**) **aplicada** no Cloud via `apply-sql.mjs`; `src/lib/supabase/admin.ts` (client service role).
+- [x] **C. Rota + action:** `/api/youtube/search` (GET autenticado; rate limit `ip:userId`; cache `song_cache` compartilhado via admin; cadeia de credenciais injetada; credencial **nunca no payload**; 400/403/404/429+**Retry-After**/502 com fallback amigável; geo gate server-side via `kf-geo`), `src/lib/rooms/queue.ts` (`queueSongSchema`, `buildQueueSongItem` com a matriz de presença — **códigos** `GEO_UNAVAILABLE`/`OUTSIDE_BAR`) + `queue.test.ts`, `src/lib/rooms/queue-actions.ts` (`addSongToQueueAction` com `.select()` para validar RLS host/membro + `revalidatePath`).
+- [x] **D. UI:** `src/lib/youtube/format.ts` (duração); `SongSearch` (debounce 500ms + **AbortController**, thumbnail reutilizável, banner geo com CTA "Permitir localização" + `window.location.reload`, "Adicionar à fila"), rota `/salas/[codigo]/buscar` (server: auth → sala → membership → `requirePresence`), `QueueList` (inicial server + subscribe Realtime `postgres_changes` em `queue_items`) integrada à página da sala.
+- [x] **E. OAuth por-host:** rotas `/auth/youtube/authorize` (state nonce → cookie `kf-yt-oauth` httpOnly; `access_type=offline&prompt=consent`) e `/auth/youtube/callback` (exchange → upsert em `youtube_oauth_tokens`), `scripts/youtube-app-oauth.mjs` (coleta do `YOUTUBE_APP_REFRESH_TOKEN`), **cadeia com OAuth do host** (`getHostAccessToken` via `admin`), Bloco "Conexão YouTube do host" no `RoomSettings` (chave manual própria + Conectar com Google) + `updateYoutubeKeyAction`.
+- [x] **F. MSW:** devDep instalado; **16 testes** de rota `route.test.ts` (401, 404, PENDING, sucesso+chave do bar, **chave fora do payload**, cache miss→hit sem bater no YouTube, cota friendly 502, erro genérico 502, NO_CREDENTIAL, 429+Retry-After, OUTSIDE_BAR, dentro do raio, GEO_UNAVAILABLE, host isento).
+- [x] **G. Docs:** spec §4/§6/§12/§13, `docs/flows` (busca no fluxo da sala), CHANGELOG, README (se for o caso) atualizados; lint/typecheck/build e **146 testes** verdes.
+- [x] **H. Pendências externas (registradas):** `YOUTUBE_APP_REFRESH_TOKEN` a coletar (script E); recriar **client Web** do OAuth no Google Cloud (`YOUTUBE_OAUTH_CLIENT_ID` já no `.env.local`); **`queue_items` publicada** na `supabase_realtime` (migration `20260923000017` — aplicada; antes só `room_members` estava).
+
+- [x] Rota de servidor `/api/youtube/search` — credencial injetada apenas no backend, **nunca no client**
+- [x] `safeSearch=strict` + `videoEmbeddable=true` no `search.list` (moderação + só vídeos embutíveis)
+- [x] Busca + `videos.list?part=contentDetails` (lote) para duração; resultados com thumbnail + título + duração
+- [x] Campo de busca único e persistente no topo da tela; resultados em lista mobile-first
+- [x] Botão "Adicionar à fila" grande (alvo de toque generoso, ambiente de bar)
+- [x] Debounce na busca (~500ms + AbortController contra corridas de request)
+- [x] `song_cache` compartilhado entre karaokês (query normalizada; reusar antes de chamar a API; TTL 7 dias)
+- [x] Rate limiting por usuário/IP na rota de busca (independente da cota do YouTube)
+- [x] Fallback amigável de cota esgotada ("tente novamente mais tarde", sem erro cru)
+- [x] Cadeia de credenciais: chave do bar → **OAuth do host** → OAuth do app → `YOUTUBE_API_KEY` (dev, só quando setada)
+- [x] OAuth por-host: rotas authorize/callback + tabela `youtube_oauth_tokens` (sem policies — só service role); script `scripts/youtube-app-oauth.mjs` (consent único do dev → `YOUTUBE_APP_REFRESH_TOKEN` no `.env.local`)
+- [x] Bloco "Conexão YouTube do host" no `RoomSettings` (conectar conta Google / colar key própria)
+- [x] **Registro p/ produção:** `YOUTUBE_API_KEY` do dev **não** entra na produção (produção = OAuth por-host + OAuth do app como default). `YOUTUBE_APP_REFRESH_TOKEN` (script) é **pré-requisito** do fallback do app — sem ele, produção depende só de OAuth por-host
+- [x] Server action `addSongToQueueAction`: insert em `queue_items` (position advisory lock, status por `queue_approval_mode`, `.select()` para validar RLS)
+- [x] **Matriz de presença física (Requisito §2.5.4):** participante precisa de consentimento + geo concedida + dentro do raio do bar (haversine, server-side via `kf-geo`) para **entrar e adicionar música** (erro amigável + botão re-permitir); host isento; view da fila/player/thumbnail mantido
+- [x] `/salas/[codigo]/buscar` (rota filha) + lista simples da fila na página da sala (atualiza ao adicionar)
+- [x] Instalar MSW + testes da rota/lib (sucesso, cota esgotada, 429, cache hit, credencial nunca no payload) e da `addSongToQueueAction` (geo gate, RLS)
 
 ## Fase 5 — Fila: realtime, aprovação e confirmação
 

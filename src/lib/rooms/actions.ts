@@ -91,6 +91,32 @@ export async function closeRoomAction(
   return { ok: true };
 }
 
+export async function updateYoutubeKeyAction(
+  roomId: string,
+  apiKey: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const trimmed = apiKey?.trim() || null;
+
+  const { data, error } = await supabase
+    .from("rooms")
+    .update({ youtube_api_key: trimmed })
+    .eq("id", roomId)
+    .select("id");
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível salvar a chave do YouTube."),
+    };
+  }
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Só o dono pode configurar a chave do YouTube da sala." };
+  }
+
+  revalidatePath("/salas/[codigo]", "page");
+  return { ok: true };
+}
+
 export async function leaveRoomAction(
   roomId: string
 ): Promise<{ ok: boolean; error?: string }> {

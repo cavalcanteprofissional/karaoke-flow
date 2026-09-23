@@ -9,6 +9,9 @@ export type Bar = {
   cidade: string | null;
   endereco: string | null;
   quantidade_mesas: number;
+  latitude: number | null;
+  longitude: number | null;
+  raio_permitido_metros: number;
   criado_em: string;
 };
 
@@ -31,6 +34,9 @@ export type EntryBarPreview = {
   bar_nome: string;
   bar_cidade: string | null;
   quantidade_mesas: number;
+  bar_latitude: number | null;
+  bar_longitude: number | null;
+  bar_raio_permitido_metros: number;
   room_id: string;
   room_code: string;
   host_id: string;

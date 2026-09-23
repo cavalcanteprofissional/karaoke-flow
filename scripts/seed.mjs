@@ -136,6 +136,9 @@ async function main() {
       cidade: "São Paulo",
       endereco: "Rua das Flores, 123",
       quantidade_mesas: 12,
+      latitude: -23.550_66,
+      longitude: -46.633_38,
+      raio_permitido_metros: 150,
     },
     {
       id: BAR2,
@@ -145,6 +148,7 @@ async function main() {
       cidade: "São Paulo",
       endereco: "Av. Brasil, 456",
       quantidade_mesas: 6,
+      raio_permitido_metros: 150,
     },
   ]);
   if (barsErr) throw new Error("bars: " + barsErr.message);

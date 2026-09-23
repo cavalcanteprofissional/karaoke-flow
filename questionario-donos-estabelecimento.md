@@ -14,7 +14,7 @@ Pesquisa de campo do **Karaokê Watch Party** (app mobile-first de fila de karao
 
 ---
 
-> **Dica de aplicação (fora das 15 perguntas):** registre também, para classificação da amostra e segmentação da análise financeira, o tipo de estabelecimento (bar/restaurante/casa de show), a cidade e o porte aproximado (nº de mesas ou de funcionários).
+> **Dica de aplicação (além das 18 perguntas):** registre o **tipo de estabelecimento** (bar/restaurante/casa de show) para classificação da amostra e segmentação da análise financeira. O endereço/cidade e o nº de mesas agora fazem parte das perguntas formais (Q16 e Q17 — base da validação de presença física).
 
 ---
 
@@ -89,10 +89,25 @@ Opções: as músicas entram direto na fila assim que o cliente pede (sem aprova
 - **Tipo:** numérica
 - **Meta:** produto (com reflexo financeiro) — mede a rotatividade de participantes por noite; orienta a rotação justa da fila e estima a comunidade ativa para a rede social.
 
+### 16. Qual é o endereço e a cidade do estabelecimento? (localização física)
+- **Tipo:** aberto (endereço completo + cidade)
+- **Meta:** produto/infraestrutura — a **localização física** do bar é usada pela app para validar que quem pede música está **presente no estabelecimento** (comparação do GPS do celular com as coordenadas do bar), bloqueando acesso remoto à fila (Requisito — presença física, 2026-09-23). Também alimenta a futura descoberta de bares próximos (spec §2.5.2).
+- **Nota (raio de presença):** para calibrar a comparação GPS × endereço é necessário estimar a **área/raio de tolerância** do estabelecimento — ex.: bar de calçada (raio menor) vs casa de show com quintal amplo (raio maior). Registre, se possível, o tamanho aproximado da área atendida.
+
+### 17. Quantas mesas o estabelecimento tem, em média?
+- **Tipo:** numérica
+- **Meta:** produto — dimensiona o porte físico (capacidade simultânea) e calibra a experiência de escolha de mesa; a média das respostas orienta o default de `quantidade_mesas` no cadastro do bar.
+
+### 18. Numa escala de 1 a 5, o quanto você concorda em exigir que o cliente esteja fisicamente na casa (via GPS do celular) para poder pedir música na fila?
+(1 = discordo totalmente · 5 = concordo totalmente)
+- **Tipo:** escala 1–5
+- **Meta:** produto — valida o **requisito de presença física** (gate de geolocalização) com os donos e mede a aceitação de um modelo que impede pedidos remotos; respostas baixas apontam necessidade de alternativa (ex.: raio maior, validação por código com validade).
+
 ---
 
 ## Como usar os resultados
 
 - **Financeiro:** agrupar respostas 1, 3–10 por segmento (tipo de casa/cidade/porte) para projetar receita (assinatura + comissão) e definir preço/plano.
 - **Produto:** respostas 2, 11–15 alimentam a priorização de funcionalidades do MVP (fila/moderação/tela) e da visão pós-MVP (integração social dos donos e rede social dos cantores — spec §§16–17).
+- **Geo/presença:** as respostas 16–18 fundamentam o requisito de presença física (spec §2.5/§13 e o cadastro do bar — endereço, coordenadas e raio de presença) e a calibração do raio-default (150 m) por tipo de estabelecimento.
 - Registrar os dados do questionário e da coleta OAuth dos donos (spec §16) como insumo de qualificação de leads comerciais.

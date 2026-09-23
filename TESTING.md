@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom instalados e configurados na Fase 3** (`vitest.config.mts`, `src/test/setup.ts`, scripts `test`/`test:watch`/`test:coverage`; primeiros unitários: `src/lib/rooms/utils.test.ts`). **Etapa 1 (2026-09-21):** suite com **29 testes** (i18n, cookies de consentimento, geo, componente Onboarding) — `globals: true` no Vitest p/ autocleanup do RTL. MSW (mock de redes) e Playwright (e2e) entram nas próximas fases. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-23):** suite com **146 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, e a rota `/api/youtube/search` com **16 provas via MSW** mockando a YouTube Data API). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 
 ---
 
@@ -109,12 +109,15 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 
 ### 3.4 Busca YouTube (Fase 4)
 
-- [ ] Busca com debounce (não dispara por tecla).
-- [ ] `safeSearch=strict` aplicado (verificar no request).
-- [ ] Resultados com thumbnail + título + duração.
-- [ ] **Chave não aparece em nenhum request do client** (inspecionar DevTools → Network).
-- [ ] Quota esgotada → mensagem amigável "tente novamente mais tarde".
-- [ ] Rate limit por usuário/IP bloqueia spam de buscas.
+- [x] Busca com debounce (não dispara por tecla) — **500 ms + AbortController** (rota `/salas/[codigo]/buscar`).
+- [x] `safeSearch=strict` aplicado (verificar no request) — **+ `videoEmbeddable=true`**.
+- [x] Resultados com thumbnail + título + duração.
+- [x] **Chave não aparece em nenhum request do client** (inspecionar DevTools → Network) — **teste MSW assegura** (chave fora do payload).
+- [x] Quota esgotada → mensagem amigável "tente novamente mais tarde".
+- [x] Rate limit por usuário/IP bloqueia spam de buscas — **429 + `Retry-After`**.
+- [x] Cache compartilhado reusa resultados (2ª busca do mesmo termo **sem bater na Google** — `cached: true`).
+- [x] **Gate de presença física na busca e na adição** (fora do raio / sem geo → bloqueado com CTA "Permitir localização"; host isento).
+- [x] OAuth por-host: "Conectar conta do Google" no RoomSettings grava `youtube_oauth_tokens` e vira a credencial da busca.
 
 ### 3.5 Fila — adicionar música (Fase 5)
 

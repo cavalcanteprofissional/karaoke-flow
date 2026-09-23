@@ -1,6 +1,6 @@
 # Fluxos do sistema
 
-Fluxos técnicos end-to-end no estado atual do MVP (Fases 1–3.5 concluídas) + propostas.
+Fluxos técnicos end-to-end no estado atual do MVP (Fases 1–3.5 **e Fase 4 — busca + fila** concluídas) + propostas.
 
 ---
 
@@ -104,9 +104,11 @@ flowchart TD
 
 Fase 3.5: **1 host = 1 bar** (`bars.host_id` único), que por padrão tem **1 karaokê** (`rooms.bar_id`; multi-sala desabilitado na UI — affordance "Adicionar sala" desabilitada). O QR/código do bar já resolve direto para o karaokê único ativo.
 
+Requisito presença (2026-09-23): o cadastro também registra a **localização física** (geocode Nominatim com fallback GPS do dispositivo) e o **raio de presença** (`raio_permitido_metros`, default 150 m) — base do gate de presença (§2.2 e §2.2.1).
+
 ```mermaid
 flowchart TD
-    A["Dashboard → 'Criar meu bar' (Dialog)"] --> B["RPC create_bar(nome, cidade, endereco, quantidade_mesas, rotulos) — (backend, security definer)"]
+    A["Dashboard → 'Criar meu bar' (Dialog)"] --> B["RPC create_bar(nome, cidade, endereco, quantidade_mesas, rotulos, latitude, longitude, raio) — (backend, security definer)"]
     B --> C["bar + mesas 1..N + room única criados em transação (backend)"]
     C --> D["Exige login real (anônimo → erro 'crie uma conta')"]
     D --> E["redirect → /salas/[code]"]
@@ -117,16 +119,20 @@ flowchart TD
 
 A RPC `get_room_preview` **foi substituída** pela `get_entry_preview(p_code, p_mesa)` (migration `20260923000013`): `p_code` aceita **código de bar** **ou** código de room (QR legado de sala); o karaokê é a **única sala ativa do bar**.
 
+**Gate de presença física** (requisito 2026-09-23): antes de `join_room`, o servidor lê o cookie `kf-geo` (geo do participante coletada sob consentimento §2.5) e compara com as coordenadas do bar (haversine ≤ `raio_permitido_metros`). **Participante fora do raio/sem geo → bloqueado** (banner + CTA "Permitir localização"); **host isento**; sem geo o participante mantém only-view (não entra).
+
 ```mermaid
 flowchart TD
     A["Participante digita code / escaneia QR de bar ou de mesa"] --> V["RPC get_entry_preview(p_code, p_mesa) — (backend, security definer)"]
-    V --> W["Resolve bar → karaokê único ativo → preview<br/>(bar_nome, host, entry_mode, status, quantidade_mesas)"]
+    V --> W["Resolve bar → karaokê único ativo → preview<br/>(bar_nome, host, entry_mode, status, quantidade_mesas, coords)"]
     W --> X{Bar tem mesa pré-selecionada?}
     X -->|sim| X1["Mesa pré-selecionada (QR / ?mesa=N): valida p_mesa (1..quantidade_mesas e existe em mesas)"]
     X -->|não| X2["UI pede a mesa (grid 1..N); default 1 quando mesa única"]
     X1 --> X3["Confirmar entrada"]
     X2 --> X3
-    X3 --> B["RPC join_room(p_code=room_code, p_mesa) — (backend, security definer)"]
+    X3 --> P{"Presente no bar? (kf-geo × coords ± raio)"}
+    P -->|não| P1["bloqueado: banner geo + permitir localização (host isento)"]
+    P -->|sim| B["RPC join_room(p_code=room_code, p_mesa) — (backend, security definer)"]
     B --> C{Sala ativa?}
     C -->|não| Z["erro: sala não encontrada/inativa"]
     C -->|sim| D{É o host?}
@@ -160,20 +166,67 @@ flowchart TD
 
 ### 3.1 Adicionar música
 
+**Matriz de presença física (Fase 4):** antes do `INSERT`, a server action `addSongToQueueAction` revalida **membro aprovado/pendente** e a **presença** do participante (`kf-geo` × coords do bar ± raio) — mesmos códigos da busca: `GEO_UNAVAILABLE` (bar sem coords ou geo ausente) / `OUTSIDE_BAR` (fora do raio); **host isento**.
+
 ```mermaid
 flowchart TD
-    A["Participante busca + toca 'Adicionar'"] --> B{requireSongConfirmation?}
+    A["Participante busca + toca 'Adicionar' em /buscar"] --> G{"Membro + presente?<br/>addSongToQueueAction (server)"}
+    G -->|não| G1["403: NOT_MEMBER/PENDING/GEO_UNAVAILABLE/OUTSIDE_BAR<br/>(banner geo + re-permitir localização)"]
+    G -->|sim| B{requireSongConfirmation?}
     B -->|sim| C["Modal confirmação (título/thumb/duração)"]
-    C --> D["INSERT queue_items"]
+    C --> D["INSERT queue_items (.select() p/ validar RLS)"]
     B -->|não| D
     D --> E["Trigger position: advisory lock por sala, max+1 (backend)"]
     D --> F["Trigger status: lê queue_approval_mode (backend)"]
-    F --> G{Modo da sala}
-    G -->|auto| H["status = approved (entra na fila)"]
-    G -->|manual| I["status = pending (fila de aprovação)"]
-    H --> J["Realtime room:{id} → tela atualiza"]
+    F --> G2{Modo da sala}
+    G2 -->|auto| H["status = approved (entra na fila)"]
+    G2 -->|manual| I["status = pending (fila de aprovação)"]
+    H --> J["revalidatePath + Realtime → QueueList atualiza"]
     I --> J
 ```
+
+## 3.1.1 Busca de música no YouTube (Fase 4 — implementado)
+
+Rota `/api/youtube/search` consumida pelo `SongSearch` (rota filha `/salas/[codigo]/buscar`). Credencial é resolvida **apenas no servidor** (service role); cache `song_cache` compartilhado entre karaokês; rate limit independente da cota da Google.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor P as Participante (mobile)
+    participant S as SongSearch (client)
+    participant R as /api/youtube/search (server)
+    participant DB as Supabase (RLS + service role)
+    participant YT as YouTube Data API v3
+
+    P->>S: digita (debounce 500ms + AbortController)
+    S->>R: GET /api/youtube/search?room=CODE&q=...
+    R->>DB: auth → rooms + bars (coords/raio) + membership (RLS)
+    alt não membro / pendente
+        R-->>S: 403 (NOT_MEMBER / PENDING)
+    else participante
+        R->>DB: presença: kf-geo × coords (host isento)
+        alt fora do raio / sem geo
+            R-->>S: 403 (OUTSIDE_BAR / GEO_UNAVAILABLE, geoRequired)
+        end
+    end
+    R->>R: rate limit ip:userId 60/h
+    alt estourou
+        R-->>S: 429 + Retry-After
+    end
+    R->>DB: song_cache (query normalizada em bucket)
+    alt cache fresco
+        R-->>S: 200 { results, cached: true }
+    else cache miss
+        R->>R: credencial: chave do bar → OAuth host → OAuth app → dev
+        R->>YT: search.list (safeSearch=strict, videoEmbeddable) + videos.list (duração)
+        YT-->>R: itens
+        R->>DB: song_cache.upsert (TTL 7d)
+        R-->>S: 200 { results, cached: false, source }
+    end
+    S-->>P: lista (thumbnail + título + duração) + "Adicionar à fila"
+```
+
+**OAuth por-host:** bloco "Conexão YouTube do host" no `RoomSettings` → `/auth/youtube/authorize` (estado nonce em cookie httpOnly, `access_type=offline&prompt=consent`) → Google → `/auth/youtube/callback` (exchange → `youtube_oauth_tokens`, **sem policies — service role**) → redirect à sala. Fallback do app: `scripts/youtube-app-oauth.mjs` (loopback) coleta o `YOUTUBE_APP_REFRESH_TOKEN` para o `.env.local`.
 
 ### 3.2 Aprovação (host)
 

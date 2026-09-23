@@ -56,7 +56,11 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
             A sala do bar está encerrada no momento.
           </div>
         ) : (
-          <EntryPreview preview={result.preview} requestedMesa={result.mesa ?? null} />
+          <EntryPreview
+            preview={result.preview}
+            requestedMesa={result.mesa ?? null}
+            presence={result.presence}
+          />
         )}
         <div className="border-border rounded-xl border border-dashed p-4">
           <p className="text-muted-foreground mb-2 text-sm">Outra casa?</p>

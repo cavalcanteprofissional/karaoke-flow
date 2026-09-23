@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DoorOpen, Lock, Mic2, Power, QrCode, Store, Table2, User } from "lucide-react";
+import { DoorOpen, Lock, Power, QrCode, Store, Table2, User } from "lucide-react";
 
 import { PendingEntries } from "@/components/rooms/pending-entries";
 import type { PendingEntry } from "@/components/rooms/pending-entries";
+import { QueueList } from "@/components/rooms/queue-list";
+import type { QueueItem } from "@/components/rooms/queue-list";
 import { RoomQr } from "@/components/rooms/room-qr";
 import { RoomSettings } from "@/components/rooms/room-settings";
 import { CloseRoomButton } from "@/components/rooms/close-room-button";
@@ -119,6 +121,15 @@ export default async function RoomPage({ params }: RoomPageProps) {
     }));
   }
 
+  const { data: queueRows } = await supabase
+    .from("queue_items")
+    .select("id, title, status, position, duration_seconds, thumbnail_url, added_by_user_id")
+    .eq("room_id", room.id)
+    .in("status", ["pending", "approved", "playing"])
+    .order("position", { ascending: true })
+    .limit(100);
+  const queueInitial = (queueRows ?? []) as QueueItem[];
+
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
@@ -231,29 +242,24 @@ export default async function RoomPage({ params }: RoomPageProps) {
       {isHost && (
         <RoomSettings
           roomId={room.id}
+          roomCode={code}
           initial={{
             entry_mode: room.entry_mode,
             queue_approval_mode: room.queue_approval_mode,
             require_song_confirmation: room.require_song_confirmation,
+            youtube_api_key: room.youtube_api_key ?? null,
           }}
         />
       )}
 
       {isHost && <PendingEntries roomId={room.id} initial={pendingInitial} />}
 
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center gap-2 p-6 text-center">
-          <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-            <Mic2 className="size-6" />
-          </span>
-          <CardTitle className="text-base">
-            A fila e o player chegam nas próximas fases
-          </CardTitle>
-          <CardDescription>
-            Em breve: busca do YouTube, aprovação de músicas e a tela kiosk da casa.
-          </CardDescription>
-        </CardContent>
-      </Card>
+      <QueueList
+        roomId={room.id}
+        roomCode={code}
+        initial={queueInitial}
+        isHost={isHost}
+      />
 
       {isHost ? (
         <CloseRoomButton roomId={room.id} disabled={closed} />

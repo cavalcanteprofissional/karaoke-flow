@@ -2,7 +2,7 @@
 
 Aplicação **mobile-first** para karaokê ao vivo em bares e restaurantes: o público adiciona músicas na fila **pelo próprio celular** (escaneando o QR da mesa) e a playlist toca numa tela compartilhada (TV/projetor), controlada pelo dono da casa pelo celular — sem tocar no dispositivo da TV.
 
-> **Estado atual (2026-09-23):** Fase 3.5 (domínio **bar/mesas/karaokês** + **acesso anônimo**) entregue. Próxima: Fase 4 (busca YouTube + fila end-to-end). Detalhes no [`TODO.md`](./TODO.md) e no [`CHANGELOG.md`](./CHANGELOG.md) (versão atual `0.1.0`).
+> **Estado atual (2026-09-23):** Fase 4 (**busca YouTube + fila end-to-end**) entregue — busca com cache/rate-limit/cadeia de credenciais (chave do bar → OAuth do host → OAuth do app → dev), adicionar à fila com gate de presença física, lista da fila em tempo real, **146 testes** (inclui MSW) verdes. Próxima: Fase 5 (realtime completo, aprovação/reorder da fila e modal de confirmação). Detalhes no [`TODO.md`](./TODO.md) e no [`CHANGELOG.md`](./CHANGELOG.md) (versão atual `0.1.0`).
 
 ## Índice
 
@@ -38,7 +38,7 @@ O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é di
 - **Página do karaokê** — contexto "Bar · Mesa N"; o host vê o QR do bar e a grade de QRs das mesas (exportáveis em PNG).
 - **Login ampliado** — OAuth GitHub (ativo), Google (configuração pendente), Spotify/Discord/Facebook/X prontos na camada; dev login e-mail/senha fora de produção.
 
-**Em construção / a seguir:** busca no YouTube com cache/rate-limit/cadeia de credenciais, fila end-to-end com aprovação/modal de confirmação/reorder (Fases 4 e 5) e player kiosk controlado pelo celular (Fases 6 e 7). Ver [Roadmap](#-roadmap).
+**Em construção / a seguir:** fila completa — realtime, aprovação/modal de confirmação/reorder (Fase 5) e player kiosk controlado pelo celular (Fases 6 e 7). A **busca no YouTube** (cache compartilhado, rate limit, cadeia de credenciais, adicionar à fila com gate de presença) **já está entregue** (Fase 4). Ver [Roadmap](#-roadmap).
 
 ## 🧱 Stack
 
@@ -48,7 +48,7 @@ O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é di
 | Banco/Backend | **Supabase** (Postgres + Auth + Realtime + RLS) — free tier                                        |
 | Vídeo         | **YouTube Data API v3** (busca) + **YouTube IFrame Player API** (playback)                         |
 | QR            | `qrcode` (geração PNG) + `@zxing/browser` (leitura por câmera)                                     |
-| Testes        | Vitest + React Testing Library + jsdom (MSW e Playwright vêm nas próximas fases)                   |
+| Testes        | Vitest + React Testing Library + jsdom + **MSW** (Playwright e2e vem na Fase 6)                    |
 
 ## 🏗️ Arquitetura
 
@@ -141,8 +141,8 @@ Enquanto não há provedor, use a seção **"Acesso de desenvolvimento"** (somen
 
 Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./TESTING.md).
 
-- **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **45 testes** verdes — inclui `src/lib/bars/qr.test.ts`).
-- **Mock de rede:** MSW entra junto do código de rede (Fase 4) — serviços externos nunca são chamados em teste.
+- **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **146 testes** verdes — inclui `src/lib/bars/qr.test.ts`, `src/lib/youtube/*` e a fila com a matriz de presença).
+- **Mock de rede:** **MSW** instalado (Fase 4) — mocka a YouTube Data API nas provas da rota `/api/youtube/search`; serviços externos nunca são chamados em teste.
 - **E2E:** Playwright no pós-MVP-stable (player kiosk com YouTube IFrame Player API mockada).
 - **Banco/RLS:** validado via smoke e e2e, não em unit.
 
@@ -156,8 +156,8 @@ Plano detalhado por fases (com checklist) no [`TODO.md`](./TODO.md). Linha do te
 | ---- | ------ |
 | Fase 0 — Fundação / 1 — Banco+RLS / 2 — Auth / 3 — Salas | ✅ Concluídas |
 | **3.5 — Bar/mesas/karaokês + acesso anônimo** | ✅ **Concluída (2026-09-23)** |
-| Fase 4 — Busca YouTube + fila end-to-end | ⏭️ **Próxima** |
-| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música | ⏳ Planejada |
+| **Fase 4 — Busca YouTube + fila end-to-end** | ✅ **Concluída (2026-09-23)** |
+| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música | ⏳ **Próxima** |
 | Fase 6 — Player kiosk | ⏳ Planejada |
 | Fase 7 — Controle do host pelo celular | ⏳ Planejada |
 | Fase 8 — Não-funcionais, segurança, LGPD | ⏳ Planejada |
@@ -168,9 +168,9 @@ Pendência aberta conhecida: **diagramas Mermaid de `docs/flows/*`** já foram s
 
 - [`karaoke-watch-party-spec.md`](./karaoke-watch-party-spec.md) — especificação técnica (arquitetura, segurança, UX, entidades, roadmap pós-MVP).
 - [`MANIFEST.md`](./MANIFEST.md) — manifesto do produto: visão, princípios e a camada social futura (inclui a seção de Belas Artes construída a partir do histórico musical real).
-- [`questionario-donos-estabelecimento.md`](./questionario-donos-estabelecimento.md) — questionário de validação (15 perguntas) com donos de estabelecimentos.
+- [`questionario-donos-estabelecimento.md`](./questionario-donos-estabelecimento.md) — questionário de validação (18 perguntas) com donos de estabelecimentos.
 - [`karaoke-pesquisa-academica.md`](./karaoke-pesquisa-academica.md) — pesquisa acadêmica e de mercado que fundamenta o produto.
-- [`TODO.md`](./TODO.md) — plano de implementação por fase (**estado recente**: Fase 3.5 concluída, Fase 4 em seguida).
+- [`TODO.md`](./TODO.md) — plano de implementação por fase (**estado recente**: Fase 3.5 e Fase 4 concluídas; Fase 5 em seguida).
 - [`CHANGELOG.md`](./CHANGELOG.md) — histórico por release (**versão atual `0.1.0`**).
 - [`TESTING.md`](./TESTING.md) — estratégia de testes, checklist funcional e DoD.
 
@@ -209,6 +209,7 @@ Projeto Google Cloud `karaoke-flow-509317` (YouTube Data API v3):
 | --- | --- | --- | --- |
 | Busca de músicas (default) | API key | `YOUTUBE_API_KEY` (só dev — **não vai para produção**) | `.env.local` (não versionado) |
 | Ferramentas dev / manifesto pessoal | **Desktop app** | Client ID `555657479128-nou62soqjjneto0as5fcivck7ijlkeg9…` (público), OAuth YouTube `readonly` | `.env.local` + JSON gitignored |
-| OAuth por-host (Fase 4 — futuro) | **Web app** | a criar no Google Cloud (redirect `http://localhost:3000`); o client antigo foi deletado | — |
+| OAuth por-host (Fase 4 — código pronto) | **Web app** | a **criar** no Google Cloud (redirect `http://localhost:3000`); o client antigo foi deletado — única pendência para o E2E real; client ID/secret já esperados em `YOUTUBE_OAUTH_CLIENT_ID`/`SECRET` | — |
+| OAuth do app (fallback de busca — Fase 4) | **Web/Desktop app** | `YOUTUBE_APP_REFRESH_TOKEN` a coletar com `node scripts/youtube-app-oauth.mjs` | `.env.local` |
 
 O Client ID é **público** e pode aparecer aqui; o **Client Secret nunca** (só `.env.local` e `credentials/`, ignorados pelo git).

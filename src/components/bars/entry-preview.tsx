@@ -2,25 +2,36 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DoorOpen, Hourglass, LoaderCircle, LogIn, ShieldCheck, Table2, User } from "lucide-react";
+import { DoorOpen, Hourglass, LoaderCircle, LogIn, MapPin, ShieldCheck, Table2, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { joinEntryAction } from "@/lib/bars/actions";
+import type { PresenceDecision } from "@/lib/bars/geo";
+import { hasConsent } from "@/lib/consent/cookies";
+import { captureGeolocation, writeGeoCookie } from "@/lib/consent/geo";
 import type { EntryBarPreview } from "@/types/bar";
 import { cn } from "cn";
 
 type EntryPreviewProps = {
   preview: EntryBarPreview;
   requestedMesa?: number | null;
+  presence?: PresenceDecision;
 };
 
-export function EntryPreview({ preview, requestedMesa = null }: EntryPreviewProps) {
+export function EntryPreview({ preview, requestedMesa = null, presence }: EntryPreviewProps) {
   const router = useRouter();
   const [mesa, setMesa] = useState<number>(requestedMesa ? clampMesa(requestedMesa) : 1);
   const [state, setState] = useState<"idle" | "joining" | "pending">("idle");
+  const [geoState, setGeoState] = useState<"none" | "blocked">(
+    presence && !presence.ok ? "blocked" : "none"
+  );
+  const [geoError, setGeoError] = useState<string>(
+    presence && !presence.ok ? presence.error : ""
+  );
+  const [permitindo, setPermitindo] = useState(false);
 
   function clampMesa(n: number) {
     return Math.min(Math.max(1, Math.round(n)), preview.quantidade_mesas);
@@ -31,6 +42,11 @@ export function EntryPreview({ preview, requestedMesa = null }: EntryPreviewProp
     const result = await joinEntryAction(preview.room_code, mesa);
     if (!result.ok) {
       setState("idle");
+      if (result.geoRequired) {
+        setGeoState("blocked");
+        setGeoError(result.error);
+        return;
+      }
       toast.error(result.error);
       return;
     }
@@ -40,6 +56,27 @@ export function EntryPreview({ preview, requestedMesa = null }: EntryPreviewProp
       return;
     }
     setState("pending");
+  }
+
+  async function permitirLocalizacao() {
+    if (!hasConsent()) {
+      toast.error("Aceite os cookies de consentimento para liberar a localização.");
+      return;
+    }
+    setPermitindo(true);
+    const geo = await captureGeolocation();
+    writeGeoCookie(geo);
+    setPermitindo(false);
+    if (geo.status === "granted") {
+      toast.success("Localização liberada. Agora é só entrar!");
+      setGeoState("none");
+      setGeoError("");
+      router.refresh();
+    } else if (geo.status === "denied") {
+      toast.error("Localização negada no navegador. Libere nas configurações e tente de novo.");
+    } else {
+      toast.error("Não foi possível obter sua localização. Verifique o GPS.");
+    }
   }
 
   if (state === "pending") {
@@ -80,6 +117,27 @@ export function EntryPreview({ preview, requestedMesa = null }: EntryPreviewProp
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {geoState === "blocked" && (
+          <div className="text-destructive border-destructive/30 bg-destructive/10 flex flex-col gap-3 rounded-lg border p-3">
+            <p className="flex items-start gap-2 text-sm">
+              <MapPin className="mt-0.5 size-4 shrink-0" />
+              {geoError} Para proteger a casa, é preciso confirmar que você está no
+              estabelecimento.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={permitirLocalizacao}
+              disabled={permitindo}
+              className="self-start"
+            >
+              {permitindo ? <LoaderCircle className="size-4 animate-spin" /> : <MapPin className="size-4" />}
+              Permitir localização
+            </Button>
+          </div>
+        )}
+
         {!singleMesa && (
           <div className="flex flex-col gap-2">
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
@@ -132,14 +190,14 @@ export function EntryPreview({ preview, requestedMesa = null }: EntryPreviewProp
           size="lg"
           className="w-full"
           onClick={handleJoin}
-          disabled={state === "joining"}
+          disabled={state === "joining" || geoState === "blocked"}
         >
           {state === "joining" ? (
             <LoaderCircle className="size-4 animate-spin" />
           ) : (
             <LogIn className="size-4" />
           )}
-          {singleMesa ? "Entrar no bar" : `Entrar na mesa ${mesa}`}
+          {geoState === "blocked" ? "Habilitar localização para entrar" : singleMesa ? "Entrar no bar" : `Entrar na mesa ${mesa}`}
         </Button>
       </CardContent>
     </Card>

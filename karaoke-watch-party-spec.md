@@ -32,10 +32,22 @@ A tela contém apenas dois elementos — nenhum outro elemento é permitido (sem
 Coleta transparente, vinculada ao consentimento da §2.5.1 e executada **independentemente de qual botão o usuário escolher**, desde que o cookie tenha sido aceito:
 
 - **Idioma/localização do navegador** (`navigator.language`/locales) — usado para definir o idioma da UI, incluindo o texto dos dois botões.
-- **Localização geográfica** — coletada e armazenada para uso futuro de **descoberta de bares/salas próximas**. Sem funcionalidade ativa no MVP, apenas a coleta.
+- **Localização geográfica** — coletada e armazenada. Duas finalidades: **(a) descoberta de bares/salas próximas** (futuro) e **(b) requisito de presença física — o participante precisa estar geograficamente no bar para participar da fila** (comparação do GPS com as coordenadas do bar, dentro de um raio de tolerância; ver §2.5.4). **Sem consentimento, a participação na sala é bloqueada** (view-only liberado); para o host (dono), o consentimento não bloqueia nada.
 - **Cookie de preferências do usuário** — persiste idioma escolhido e último modo selecionado ("quero cantar" / "sou dono") entre visitas.
 
 Ordem garantida em qualquer fluxo: usuário **aceita cookies** → coleta de idioma/geolocalização + gravação do cookie de preferências → roteamento pelo botão escolhido.
+
+> O consentimento de cookies (onde se inclui a geolocalização) é **mandatório para participação** (entrar na sala e adicionar músicas). Quem recusa pode navegar e visualizar a fila, mas não participa. Isso é uma decisão explícita de produto (a presença física é o coração da experiência de karaokê ao vivo), registrada no requisito de 2026-09-23.
+
+### 2.5.4 Requisito — presença física (geo gate)
+
+Para participar de uma sala de karaokê (entrar/confirmar mesa **e** adicionar música) é exigido que o usuário **esteja fisicamente no estabelecimento**:
+
+- O bar registra **localização física** (coordenadas de GPS) e um **raio de presença** (`raio_permitido_metros`, default **150 m**, ajustável 50–1000).
+- O participante fornece a localização sob consentimento (cookie `kf-geo`); a validação ocorre **no servidor** (server action lê o cookie e compara com as coordenadas do bar — distância haversine ≤ raio).
+- **Host isento** (é o próprio bar). Participante **sem geo concedida**, **geonegada** ou **fora do raio** → bloqueado com erro amigável e CTA de "permitir localização novamente"; mantém **view-only** (fila/player/thumbnail).
+- **Limitação honesta:** geolocalização de dispositivo não é prova criptográfica (GPS spoofing é possível). O gate é uma **trava de fricção/participação** — impede acesso remoto casual — não uma fronteira de segurança. Documentar nos termos de uso.
+- O release deste requisito inclui: migration `bars` (coords + raio), geocode gratuito (Nominatim/OSM) com fallback de GPS do dispositivo no cadastro do bar, hint ao host sobre a finalidade do dado, e as perguntas 16–18 do questionário de validação.
 
 ### 2.5.3 Roteamento
 
@@ -61,10 +73,11 @@ flowchart LR
 2. Usuário faz login.
 3. Usuário cria uma sala (vira host) OU entra em uma sala existente escaneando QR code ou digitando um código.
 4. Se a sala exigir aprovação de entrada, o host recebe e aprova/rejeita pedidos de entrada.
-5. Dentro da sala, qualquer participante busca músicas (via YouTube Data API) e adiciona à fila.
-6. Se a fila exigir aprovação, o item entra como "pendente" até o host aprovar; senão, entra direto na fila.
-7. A tela da sala (TV/projetor) reproduz a fila em sequência, tocando o próximo item automaticamente ao fim do atual.
-8. O host controla playback (pular, pausar, reordenar, remover) pelo próprio celular, através da aplicação web — sem precisar tocar no dispositivo da TV.
+5. **Presença física (§2.5.4):** antes de entrar e de adicionar músicas, o participante precisa ter consentimento + geolocalização concedida e estar dentro do raio do bar (compara-se o GPS com as coordenadas do estabelecimento). Sem isso, participação bloqueada (view-only mantido); host isento.
+6. Dentro da sala, qualquer participante busca músicas (via YouTube Data API) e adiciona à fila.
+7. Se a fila exigir aprovação, o item entra como "pendente" até o host aprovar; senão, entra direto na fila.
+8. A tela da sala (TV/projetor) reproduz a fila em sequência, tocando o próximo item automaticamente ao fim do atual.
+9. O host controla playback (pular, pausar, reordenar, remover) pelo próprio celular, através da aplicação web — sem precisar tocar no dispositivo da TV.
 
 ## 4. Configurações da Sala (Room Settings)
 
@@ -89,6 +102,7 @@ Bar
 - id, hostId (único — 1 host = 1 bar), code (6 chars, QR/código públicas)
 - nome, cidade, endereco
 - quantidadeMesas (1..999, default 1)
+- latitude, longitude (localização física — gate de presença §2.5.4), raioPermitidoMetros (default 150)
 - criadoEm
 
 Mesa
@@ -137,11 +151,13 @@ Consents (LGPD/GDPR — §2.5/§13)
 
 **Estratégia recomendada:**
 
-1. Solicitar aumento de cota via formulário de auditoria do Google Cloud assim que houver tração real (não garantido, sem prazo definido).
-2. Implementar `SongCache` compartilhado entre salas para reduzir chamadas repetidas de busca.
-3. Debounce nas buscas (disparo só após confirmação/pausa de digitação, não por tecla).
-4. Considerar um catálogo pré-indexado de músicas populares de karaokê, alimentado localmente, como fallback quando a cota de busca se esgotar.
-5. Rotina de fallback amigável: se a cota estourar, avisar o usuário para tentar novamente mais tarde em vez de erro cru.
+1. Solicitar aumento de cota via formulário de auditoria do Google Cloud assim que houver tração real (não garantido, sem prazo definido). — *Roadmap.*
+2. Implementar `SongCache` compartilhado entre salas para reduzir chamadas repetidas de busca. — ✅ **implementado (Fase 4)**: tabela `song_cache` com query normalizada em bucket, TTL 7 dias, escrita/leitura via service role; busca reusa o cache antes de chamar a API (`cached: true` no payload da rota).
+3. Debounce nas buscas (disparo só após confirmação/pausa de digitação, não por tecla). — ✅ **implementado (Fase 4)**: campo único no topo de `/salas/[codigo]/buscar` com debounce ~500 ms + `AbortController` contra corridas de request.
+4. Considerar um catálogo pré-indexado de músicas populares de karaokê, alimentado localmente, como fallback quando a cota de busca se esgotar. — *Roadmap* (TODO Fase 4/Roadmap).
+5. Rotina de fallback amigável: se a cota estourar, avisar o usuário para tentar novamente mais tarde em vez de erro cru. — ✅ **implementado (Fase 4)**: `toFriendlyYouTubeError` ("A cota de buscas … acabou por hoje") quando a API devolve `quotaExceeded`; `NO_CREDENTIAL` também fallback friendly.
+6. **Credencial injetada só no backend** — ✅ **implementado (Fase 4)**: rota `/api/youtube/search` resolve a chave via service role e nunca a devolve ao client (verificado por teste — a chave não aparece no payload).
+7. **Cadeia de credenciais (Fase 4):** 1) chave própria do bar (`rooms.youtube_api_key`, colada no RoomSettings); 2) **OAuth da conta Google do host** (`youtube_oauth_tokens`, sem policies — só service role; rotas `/auth/youtube/authorize` + `/auth/youtube/callback`, `access_type=offline&prompt=consent`); 3) OAuth do app (conta dev via `YOUTUBE_APP_REFRESH_TOKEN` — coleta com `scripts/youtube-app-oauth.mjs`); 4) chave de dev `YOUTUBE_API_KEY`, somente quando setada (nunca em produção).
 
 **Observação fora do escopo técnico:** execução pública de música com fins comerciais em estabelecimento (bar/restaurante) normalmente envolve licenciamento próprio (ex: ECAD no Brasil), responsabilidade do estabelecimento — deve constar nos termos de uso do produto.
 
@@ -182,7 +198,7 @@ Decisão para o MVP: **sem hardware/IoT dedicado**, usando qualquer navegador em
 - Tela do projetor/TV: **navegador em modo quiosque** (TV Box/Fire Stick), sem hardware dedicado no MVP.
 - Restrição global: toda a stack deve operar em **free tier**.
 - Escala-alvo: protótipo com **1 sala e ~50 usuários simultâneos**, evoluindo para **10+ salas e ~5.000 usuários** (detalhes na seção 12).
-- YouTube API: modelo **chave por host** — cada sala/host pode ter sua própria chave, mas há uma **chave default fornecida pelo desenvolvedor via variável de ambiente (`.env.local`)** usada quando o host não configurar a própria. YouTube Premium não concede nenhum benefício de cota (é assinatura de consumo, sem relação com o Google Cloud/API).
+- YouTube API: modelo **chave por host** com **cadeia de credenciais implementada na Fase 4**: chave do bar → **OAuth da conta Google do host** (cota sai do projeto do próprio host) → **OAuth do app** (conta dev, refresh token coletado por script) → chave default de dev (`YOUTUBE_API_KEY`, **somente em dev**). YouTube Premium não concede nenhum benefício de cota (é assinatura de consumo, sem relação com o Google Cloud/API).
 - Letra de música: **não sincronizada** — o vídeo do YouTube é exibido como está.
 
 ## 11. Decisões Pendentes
@@ -201,10 +217,10 @@ Escala-alvo confirmada: protótipo com **1 sala e ~50 usuários simultâneos**; 
 O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um dos serviços cogitados. Os pontos que **vão quebrar primeiro** ao escalar, em ordem de prioridade:
 
 1. **Cota de busca do YouTube (maior risco).** 100 buscas/dia é suficiente pra 1 sala de teste, mas inviável para 10 salas em bares distintos no mesmo dia. Ações, em ordem de implementação:
-   - Cache de busca compartilhado (tabela `SongCache` já prevista na seção 5) — reaproveitar resultados entre salas diferentes para o mesmo termo.
-   - Pré-indexar um catálogo próprio de "clássicos de karaokê" (as ~500-1000 músicas mais pedidas), evitando busca ao vivo na maior parte dos pedidos.
-   - Ao aproximar-se da escala de 10 salas, iniciar o processo de auditoria/extensão de cota junto ao Google **com antecedência** (não é aprovação instantânea) — alternativa complementar ao modelo de chave por host abaixo.
-   - Modelo adotado: **chave por host** — cada sala pode ter sua própria chave de API configurada pelo dono; quando não configurada, o sistema usa uma **chave default fornecida pelo desenvolvedor via variável de ambiente (`YOUTUBE_API_KEY` em `.env.local`)**. Isso isola parte do consumo de cota por sala assim que os hosts começarem a configurar as próprias chaves (protótipo atual usa só a chave default, já que **YouTube Premium não concede nenhum benefício de cota** — a cota é vinculada ao projeto no Google Cloud, não à assinatura do usuário).
+   - ✅ **Implementado (Fase 4) — cache de busca compartilhado** (`SongCache`, tabela `song_cache` com query normalizada e TTL 7 dias), reaproveitando resultados entre salas para o mesmo termo — inclusive **com reuso de cota** (o cache vale para a consulta ativa e futura; bucket ignora ordem das palavras/acentos).
+   - ✅ **Implementado (Fase 4) — modelo de credenciais por host** com OAuth: cada dono pode conectar a própria conta Google (cota do projeto dele) ou colar a própria chave de API; quando nada configurado, o app cai no OAuth do app (conta dev) ou na chave default de dev (`YOUTUBE_API_KEY`, **só dev**).
+   - ✅ **Implementado (Fase 4) — mitigação de abuso:** rate limit em memória (60 buscas/hora por `ip:userId`) na rota de busca, independente da cota do Google (evita um único usuário esgotar a cota do dia).
+   - ⏳ *Roadmap:* pré-indexar um catálogo próprio de "clássicos de karaokê" (~500–1000 músicas) e iniciar a auditoria/ampliação de cota junto ao Google quando houver 10+ salas (não é aprovação instantânea).
 
 2. **Conexões simultâneas do Supabase Realtime (free tier tem teto de conexões concorrentes).** Com 5.000 usuários, nem todos precisam de canal realtime aberto o tempo todo — só quem está com a tela do app ativa. Estratégia: desconectar/pausar o canal quando o app vai para background (mobile) e reconectar ao voltar; e escopar canais por sala (`room:{id}`), nunca um canal global, para não multiplicar tráfego desnecessário.
 
@@ -217,12 +233,13 @@ O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um d
 ## 13. Segurança — pontos a corrigir/prever desde o MVP
 
 - **Row Level Security (RLS) do Supabase ligado desde o dia 1**, mesmo no protótipo: um participante só pode ler/escrever na fila da sala em que está aprovado (`RoomMember.status = approved`), nunca em salas alheias.
-- **Nunca expor a chave de API do YouTube no client.** Toda chamada de `search.list` deve passar por uma rota de servidor (API Route/Edge Function) que injeta a chave no backend — o frontend nunca deve carregar a chave do YouTube diretamente, senão qualquer pessoa pode extraí-la do bundle e consumir a cota livremente (ou pior, usá-la fora do seu app).
-- **Rate limiting por usuário/IP na rota de busca**, independente da cota da própria YouTube API — evita que um único participante mal-intencionado esgote a cota do dia sozinho.
+- **Nunca expor a chave de API do YouTube no client.** Toda chamada de `search.list` deve passar por uma rota de servidor (API Route/Edge Function) que injeta a chave no backend — o frontend nunca deve carregar a chave do YouTube diretamente, senão qualquer pessoa pode extraí-la do bundle e consumir a cota livremente (ou pior, usá-la fora do seu app). — ✅ **implementado (Fase 4)** em `/api/youtube/search` (teste MSW garante que a chave não aparece no payload).
+- **Rate limiting por usuário/IP na rota de busca**, independente da cota da própria YouTube API — evita que um único participante mal-intencionado esgote a cota do dia sozinho. — ✅ **implementado (Fase 4)**: 60/h por `ip:userId`, janela deslizante em memória, resposta `429` com `Retry-After`.
 - **Validação de entrada na sala:** código de sala deve ter tamanho/entropia suficiente pra não ser adivinhado por força bruta (ex: 6 caracteres alfanuméricos, não sequenciais); QR code deve apontar para uma URL assinada/com token de curta duração, não só o código puro, se quiser reforçar contra fraude.
 - **Autorização de ações de host** (aprovar entrada, aprovar música, pular, remover) sempre validada no backend (RLS/policy), nunca só escondendo o botão na UI — qualquer participante pode inspecionar a rede e tentar chamar o endpoint direto.
-- **Moderação básica de conteúdo:** como a busca é livre no YouTube, considerar um filtro simples de categoria/idade (ex: usar `safeSearch=strict` no `search.list`) para evitar que vídeos impróprios sejam tocados publicamente em um ambiente comercial.
-- **LGPD:** já que o Supabase vai guardar dados de usuários (login social, e-mails), definir desde já política de retenção e um caminho de exclusão de conta/dados.
+- **Moderação básica de conteúdo:** como a busca é livre no YouTube, considerar um filtro simples de categoria/idade (ex: usar `safeSearch=strict` no `search.list`) para evitar que vídeos impróprios sejam tocados publicamente em um ambiente comercial. — ✅ **implementado (Fase 4)**: `safeSearch=strict` + `videoEmbeddable=true` no `search.list` (só vídeos embutíveis no player).
+- **Presença física** (requisito 2026-09-23 — §2.5.4): a participação na sala exige consentimento + geolocalização concedida e dentro do raio do bar, validado **no servidor** (cookie `kf-geo` × coords do bar). Impede usuários remotos de pedir música. Limitação honesta: GPS de dispositivo não é prova criptográfica (spoofing) — é trava de fricção, não fronteira de segurança.
+- **LGPD:** já que o Supabase vai guardar dados de usuários (login social, e-mails) e a geolocalização é coletada como finalidade de produto (presença), definir desde já política de retenção e um caminho de exclusão de conta/dados.
 
 ## 14. Padrões de UX/UI recomendados
 

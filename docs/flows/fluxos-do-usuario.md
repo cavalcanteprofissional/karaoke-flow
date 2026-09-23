@@ -39,7 +39,8 @@ flowchart TD
     A["/dashboard"] --> B["'Criar meu bar' (Dialog): nome, cidade, endereço,<br/>quantidade de mesas"]
     B --> C["Bar criado: código 6 chars + QR do bar + QR das mesas"]
     C --> D["Configura: modo de entrada (open/aprovação),<br/>fila (auto/manual), confirmação de música"]
-    D --> E["Tela do host: fila + painéis de aprovação"]
+    D --> D1["Configura busca: 'Conexão YouTube do host'<br/>(conectar Google / colar chave de API)"]
+    D1 --> E["Tela do host: fila + painéis de aprovação"]
     E --> F["Publica QR das mesas (cartaz) p/ participantes"]
     F --> G["Host acompanha em aprovação realtime e controla playback pelo celular"]
     G --> H["Fim da noite: fechar a sala (não aceita mais ninguém)"]
@@ -55,15 +56,19 @@ flowchart TD
     P --> M{"Mesa definida?"}
     M -->|não| M1["Escolhe a mesa (grid 1..N)"]
     M -->|sim| M1
-    M1 --> B["join_room(room_code, mesa) (RPC)"]
+    M1 --> G0{"Presente no bar? (geo × raio)"}
+    G0 -->|não| G1["bloqueado: 'Permitir localização' (host isento)"]
+    G0 -->|sim| B["join_room(room_code, mesa) (RPC)"]
     B --> C{Sala em modo open?}
     C -->|sim| D["Entra direto — vê a fila e busca ('Bar · Mesa N')"]
     C -->|não| E["Pedido pendente — 'aguardando aprovação do host'"]
     E --> F{Host aprova?}
     F -->|sim| D
     F -->|não| G["Aviso: entrada recusada (pode tentar de novo)"]
-    D --> H["Busca música (YouTube)"]
-    H --> I{Sala pede confirmação?}
+    D --> H["Busca música (YouTube — /salas/[codigo]/buscar)"]
+    H --> H0{"Ainda presente no bar?<br/>addSongToQueueAction revalida geo"}
+    H0 -->|não| G1
+    H0 -->|sim| I{Sala pede confirmação?}
     I -->|sim| J["Confirma thumbnail/título/duração"]
     J --> K["Música adicionada à fila"]
     I -->|não| K
@@ -73,6 +78,10 @@ flowchart TD
     M2 --> O["Participante acompanha a fila ao vivo (Realtime)"]
     N --> O
 ```
+
+> **Requisito presença física (2026-09-23):** o gate de geo (`kf-geo` × coordenadas do bar ± raio, validado no servidor) é obrigatório para **entrar** e para **adicionar música** (revalidado em `addSongToQueueAction`) — impede participação remota. Ver `fluxos-do-sistema.md` §2.2 e §3.1.
+>
+> **Busca (Fase 4):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida só no servidor (chave do bar → OAuth do host → OAuth do app → dev); cota esgotada vira mensagem amigável; 429 por excesso de buscas.
 
 ### 3.3 Participante — trocar a própria música mantendo a posição (Proposta, Fase 5)
 

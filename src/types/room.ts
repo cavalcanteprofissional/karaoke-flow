@@ -11,6 +11,8 @@ export type Room = {
   code: string;
   qr_code_url: string | null;
   host_id: string;
+  /** Bar (perfil do host) dono desta sala/karaokê. */
+  bar_id: string | null;
   entry_mode: RoomEntryMode;
   queue_approval_mode: RoomQueueApprovalMode;
   require_song_confirmation: boolean;
@@ -24,6 +26,8 @@ export type RoomMember = {
   user_id: string;
   status: MemberStatus;
   joined_at: string;
+  /** Etiqueta da mesa do participante (obrigatória para não-host). */
+  mesa_numero: number | null;
 };
 
 /** Retorno da RPC `get_room_preview` (lista com 1 item). */

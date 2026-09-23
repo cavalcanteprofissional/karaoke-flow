@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, LoaderCircle, ShieldAlert } from "lucide-react";
+import { AlertCircle, LoaderCircle, ShieldAlert, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -66,6 +66,21 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
     }
   }
 
+  async function handleAnonymous() {
+    setSubmitting(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInAnonymously();
+    setSubmitting(false);
+    if (error) {
+      toast.error("Não foi possível entrar como visitante.", {
+        description: "Verifique se o acesso anônimo está habilitado no projeto.",
+      });
+      return;
+    }
+    router.push("/entrar");
+    router.refresh();
+  }
+
   async function handleDevLogin(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
@@ -90,8 +105,8 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
       <CardHeader>
         <CardTitle className="text-lg">Entrar na sua conta</CardTitle>
         <CardDescription>
-          O acesso da galera à fila é feito pelo QR code da casa — este login é para quem
-          controla o karaokê.
+          Entre sem login para pedir músicas pelo QR do bar. Para abrir o seu próprio
+          bar, faça login com uma conta.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -106,6 +121,27 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
         )}
 
         <div className="flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            disabled={submitting}
+            onClick={handleAnonymous}
+          >
+            {submitting ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <UserRound className="size-4" />
+            )}
+            Continuar sem login
+          </Button>
+
+          <div className="text-muted-foreground relative flex items-center gap-2 text-xs">
+            <span className="bg-border h-px flex-1" />
+            ou entre com
+            <span className="bg-border h-px flex-1" />
+          </div>
+
           {providers.map((provider) => {
             const Icon = PROVIDER_ICONS[provider.id as AuthProviderId];
             const pending = pendingProvider === provider.id;

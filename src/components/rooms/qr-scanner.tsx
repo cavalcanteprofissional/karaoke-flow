@@ -16,11 +16,17 @@ import {
 import { extractRoomCodeFromQr } from "@/lib/rooms/utils";
 
 type QrScannerProps = {
-  onResult: (code: string) => void;
+  onResult: (token: string) => void;
   triggerLabel?: string;
+  /** Extrai o token do texto lido (padrão: QR de sala legado `?code=`). */
+  match?: (text: string) => string | null;
 };
 
-export function QrScanner({ onResult, triggerLabel = "Escanear QR" }: QrScannerProps) {
+export function QrScanner({
+  onResult,
+  triggerLabel = "Escanear QR",
+  match = extractRoomCodeFromQr,
+}: QrScannerProps) {
   const [open, setOpen] = useState(false);
   const [cameraError, setCameraError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -44,15 +50,17 @@ export function QrScanner({ onResult, triggerLabel = "Escanear QR" }: QrScannerP
     reader
       .decodeFromVideoDevice(undefined, video, (result, _error, controls) => {
         if (!result) return;
-        const code = extractRoomCodeFromQr(result.getText());
-        if (!code) {
-          toast.error("O QR lido não parece ser um código de sala.");
+        const token = match(result.getText());
+        if (!token) {
+          toast.error("QR não reconhecido.", {
+            description: "Tente digitar o código do bar ou da casa.",
+          });
           return;
         }
         controls.stop();
         stopRef.current = null;
         setOpen(false);
-        onResult(code);
+        onResult(token);
       })
       .then((controls) => {
         if (cancelled) controls.stop();
@@ -70,7 +78,7 @@ export function QrScanner({ onResult, triggerLabel = "Escanear QR" }: QrScannerP
       cancelled = true;
       stopRef.current = null;
     };
-  }, [open, onResult]);
+  }, [open, onResult, match]);
 
   useEffect(() => {
     if (!open) stopScan();

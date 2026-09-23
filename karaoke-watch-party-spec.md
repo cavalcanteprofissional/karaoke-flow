@@ -76,23 +76,37 @@ Ambos os campos abaixo são toggles controlados pelo host, persistidos na sala:
 | `queueApprovalMode`       | `auto` \| `manual`   | `auto`: música entra direto na fila ao ser adicionada. `manual`: música fica pendente até o host aprovar.                                                                                                                                                       |
 | `requireSongConfirmation` | `true` \| `false`    | `true`: ao adicionar música, um popup de confirmação (thumbnail + título + duração) é exibido antes de enviar à fila — o próprio usuário confirma/cancela. `false`: adiciona direto. Não substitui `queueApprovalMode` (aprovação do host); são complementares. |
 
-## 5. Entidades de Dados (rascunho)
+## 5. Entidades de Dados
+
+> Rascunho consolidado com o modelo **efetivamente implementado** na Fase 3.5 (ver `docs/flows/banco-de-dados.md` — ERD, RLS e migrations). **O host é um bar** (`bars`, 1:1 com `auth.users`); o bar tem **mesas** (etiquetas) e **1..N karaokês** (`rooms`, default **1** — multi-sala desabilitado no MVP, affordance na UI).
 
 ```
-User
-- id, nome, email, avatar, authProvider
+User (auth.users)
+- id, email, authProvider, is_anonymous (jwt)
+- anônimo: pode entrar como participante e pedir música; NÃO cria bar
 
-Room
-- id, code (código curto único), qrCodeUrl, hostId
+Bar
+- id, hostId (único — 1 host = 1 bar), code (6 chars, QR/código públicas)
+- nome, cidade, endereco
+- quantidadeMesas (1..999, default 1)
+- criadoEm
+
+Mesa
+- id, barId, numero (único por bar), rotulo (etiqueta opcional)
+- mesa = etiqueta; a playlist é a do karaokê/room do bar
+
+Room (karaokê = fila + player próprios)
+- id, code, qrCodeUrl (legado; QR agora é do bar/mesa), barId, hostId
 - entryMode: open | approval
 - queueApprovalMode: auto | manual
-- requireSongConfirmation: boolean (modal de confirmação antes de adicionar música)
-- youtubeApiKey (opcional; se nulo, usa a chave default de `YOUTUBE_API_KEY` do `.env.local`)
+- requireSongConfirmation: boolean
+- youtubeApiKey (opcional; se nulo, usa a chave default)
 - status: active | closed
 - createdAt
 
 RoomMember
 - roomId, userId, status: pending | approved | rejected, joinedAt
+- mesaNumero (etiqueta da mesa do participante — obrigatória p/ não-host)
 
 QueueItem
 - id, roomId, addedByUserId
@@ -104,7 +118,12 @@ QueueItem
 SongCache (mitigação de quota da YouTube API)
 - query normalizada, resultados (videoId, title, thumb, duration), timestamp
 - usado para evitar repetir search.list para termos já buscados recentemente/por outras salas
+
+Consents (LGPD/GDPR — §2.5/§13)
+- userId, termsVersion, cookiesPreferences, geolocation, acceptedAt
 ```
+
+> **Acesso anônimo (Fase 3.5):** anonymous sign-in habilitado no Supabase Auth (Management API + `config.toml`). RLS dá leitura de `bars`/`mesas` a qualquer sessão autenticada (inclusive anônima); criação de bar (`create_bar`), preview e entrada (`get_entry_preview`/`join_room`) são RPCs `security definer`.
 
 ## 6. Integração com YouTube — Restrições e Estratégia
 

@@ -9,9 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 type RoomQrProps = {
   value: string;
   alt?: string;
+  fileName?: string;
 };
 
-export function RoomQr({ value, alt = "QR da sala" }: RoomQrProps) {
+export function RoomQr({ value, alt = "QR da sala", fileName = "qr-sala.png" }: RoomQrProps) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export function RoomQr({ value, alt = "QR da sala" }: RoomQrProps) {
       />
       <a
         href={dataUrl}
-        download="qr-sala.png"
+        download={fileName}
         className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2"
       >
         <Download className="size-3.5" />

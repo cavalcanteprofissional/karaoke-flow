@@ -27,8 +27,13 @@ export function UserMenu() {
     return null;
   }
 
-  const userInitials = initials(user.user_metadata.full_name ?? null, user.email ?? "");
-  const displayName = user.user_metadata.full_name ?? user.email ?? "Conta";
+  const isAnonymous = user.is_anonymous ?? user.app_metadata?.is_anonymous === true;
+  const userInitials = isAnonymous
+    ? "V"
+    : initials(user.user_metadata.full_name ?? null, user.email ?? "");
+  const displayName = isAnonymous
+    ? "Visitante"
+    : user.user_metadata.full_name ?? user.email ?? "Conta";
 
   return (
     <DropdownMenu>

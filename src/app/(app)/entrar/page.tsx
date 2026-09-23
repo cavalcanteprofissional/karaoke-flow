@@ -1,110 +1,107 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, DoorOpen, ShieldCheck, User } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
-import { EnterRoomForm } from "@/components/rooms/enter-room-form";
-import { JoinConfirm } from "@/components/rooms/join-confirm";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { getRoomPreviewAction } from "@/lib/rooms/actions";
+import { EntryPreview } from "@/components/bars/entry-preview";
+import { EntryTokenForm } from "@/components/bars/entry-token-form";
+import { getEntryPreviewAction } from "@/lib/bars/actions";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 
 type EnterPageProps = {
-  searchParams: Promise<{ code?: string }>;
+  searchParams: Promise<Partial<Record<string, string | string[]>>>;
 };
 
 export default async function EnterPage({ searchParams }: EnterPageProps) {
-  const { code: rawCode } = await searchParams;
-  const code = rawCode ? normalizeRoomCode(rawCode) : "";
+  const params = await searchParams;
+  const rawBar = firstParam(params.bar);
+  const rawCode = firstParam(params.code);
+  const rawMesa = firstParam(params.mesa);
+
+  const code = rawBar ?? rawCode;
+  const normalized = code ? normalizeRoomCode(code) : "";
+  const mesa = rawMesa ? Number(rawMesa) : null;
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (code) {
-    const { preview } = await getRoomPreviewAction(code);
+  if (normalized) {
+    const result = await getEntryPreviewAction(normalized, Number.isInteger(mesa) ? mesa : null);
 
-    if (preview) {
-      if (user && preview.host_id === user.id) {
-        redirect(`/salas/${code}`);
-      }
-
+    if ("error" in result) {
       return (
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-1">
-            <Link
-              href="/dashboard"
-              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
-            >
-              <ArrowLeft className="size-4" />
-              Voltar
-            </Link>
-            <h1 className="text-lg font-semibold tracking-tight">Entrar na sala</h1>
+          <SectionHeader title="Entrar na casa" href="/dashboard" linkLabel="Voltar" />
+          <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
+            {result.error}. Confira o código e tente de novo.
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-mono text-xl tracking-[0.2em]">
-                {preview.code}
-              </CardTitle>
-              <CardDescription className="flex items-center gap-1.5">
-                <User className="size-3.5" />
-                Sala de {preview.host_name}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                {preview.entry_mode === "open" ? (
-                  <Badge variant="secondary">
-                    <DoorOpen className="size-3.5" />
-                    Entrada livre
-                  </Badge>
-                ) : (
-                  <Badge variant="outline">
-                    <ShieldCheck className="size-3.5" />
-                    Entrada com aprovação
-                  </Badge>
-                )}
-              </div>
-              <JoinConfirm code={preview.code} />
-            </CardContent>
-          </Card>
-
-          <div className="border-border rounded-xl border border-dashed p-4">
-            <p className="text-muted-foreground mb-2 text-sm">Outra sala?</p>
-            <EnterRoomForm />
-          </div>
+          <EntryTokenForm />
         </div>
       );
     }
 
+    const isAnonymous = user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true;
+
+    if (user && result.preview.host_id === user.id && !isAnonymous) {
+      redirect(`/salas/${result.preview.room_code}`);
+    }
+
     return (
       <div className="flex flex-col gap-6">
-        <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
-          Sala não encontrada ou inativa. Confira o código e tente de novo.
+        <SectionHeader title="Entrar na casa" href="/dashboard" linkLabel="Voltar" />
+        {result.preview.status === "closed" ? (
+          <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
+            A sala do bar está encerrada no momento.
+          </div>
+        ) : (
+          <EntryPreview preview={result.preview} requestedMesa={result.mesa ?? null} />
+        )}
+        <div className="border-border rounded-xl border border-dashed p-4">
+          <p className="text-muted-foreground mb-2 text-sm">Outra casa?</p>
+          <EntryTokenForm />
         </div>
-        <EnterRoomForm />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Entrar em uma sala</h1>
-        <p className="text-muted-foreground text-sm">
-          Digite o código do cartaz ou escaneie o QR da casa.
-        </p>
-      </div>
-      <EnterRoomForm />
+      <SectionHeader title="Entrar em uma casa" />
+      <p className="text-muted-foreground text-sm">
+        Digite o código do cartaz ou da mesa, ou escaneie o QR da casa.
+      </p>
+      <EntryTokenForm />
     </div>
   );
+}
+
+function SectionHeader({
+  title,
+  href,
+  linkLabel,
+}: {
+  title: string;
+  href?: string;
+  linkLabel?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      {href && (
+        <Link
+          href={href}
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+        >
+          <ArrowLeft className="size-4" />
+          {linkLabel}
+        </Link>
+      )}
+      <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+    </div>
+  );
+}
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }

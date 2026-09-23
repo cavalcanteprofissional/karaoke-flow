@@ -5,8 +5,9 @@
  *   raw SQL em auth.users deixa o serviço Auth instável (validação OK: todos
  *   os fluxos de login funcionam após).
  * - O trigger handle_new_user cria os profiles automaticamente.
- * - Dados de domínio (salas/membros/fila) são inseridos via service role,
- *   de forma idempotente (re-executável).
+ * - Dados de domínio (bares/mesas/salas/membros/fila) são inseridos via
+ *   service role, de forma idempotente (re-executável): este script faz reset
+ *   COMPLETO do domínio (bares, mesas, rooms, membros, fila) antes de inserir.
  *
  * Uso: npm run seed
  * Requer credenciais válidas em .env.local.
@@ -56,11 +57,19 @@ const USERS = [
     email: "bruno@exemplo.com",
     name: "Participante Bruno",
   },
+  {
+    id: "00000000-0000-0000-0000-000000000004",
+    email: "betania@exemplo.com",
+    name: "Dona Betânia (host)",
+  },
 ];
 const PASSWORD = "senha123";
 
-const KARAOK = "10000000-0000-0000-0000-000000000001";
-const BAR2FO = "10000000-0000-0000-0000-000000000002";
+// IDs fixos do domínio.
+const BAR1 = "20000000-0000-0000-0000-000000000001"; // Karaokê do Zé
+const BAR2 = "20000000-0000-0000-0000-000000000002"; // Bar da Esquina
+const ROOM1 = "10000000-0000-0000-0000-000000000001"; // sala única do Bar1
+const ROOM2 = "10000000-0000-0000-0000-000000000002"; // sala única do Bar2
 
 async function ensureUsers(admin) {
   const { data: existing } = await admin.auth.admin.listUsers({ perPage: 1000 });
@@ -88,34 +97,79 @@ async function ensureUsers(admin) {
   return ids;
 }
 
+async function resetDomain(admin) {
+  // Reset completo do domínio (idempotente). Ordem respeita as FKs.
+  // Cada tabela é apagada por completo usando a primeira coluna (id é o padrão,
+  // mas room_members tem PK composta) + filtro universal nojento p/ PostgREST.
+  const NEVER = "00000000-0000-0000-0000-000000000000";
+  const plans = [
+    ["queue_items", "id", "fila"],
+    ["room_members", "user_id", "membros"],
+    ["rooms", "id", "salas"],
+    ["mesas", "id", "mesas"],
+    ["bars", "id", "bares"],
+  ];
+  for (const [table, col, label] of plans) {
+    const { error } = await admin.from(table).delete().neq(col, NEVER);
+    if (error) throw new Error(`reset ${table}: ` + error.message);
+    console.log(`reset: ${label} limpo`);
+  }
+}
+
 async function main() {
   const admin = createClient(url, serviceRole, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
   const ids = await ensureUsers(admin);
-  const [dono, ana, bruno] = ids;
+  const [dono, ana, bruno, betania] = ids;
 
-  // Dados de domínio — idempotente: remove e insere os registros do seed.
-  const { error: cleanQueue } = await admin
-    .from("queue_items")
-    .delete()
-    .in("room_id", [KARAOK, BAR2FO]);
-  if (cleanQueue) throw new Error("limpeza queue_items: " + cleanQueue.message);
-  const { error: cleanMembers } = await admin
-    .from("room_members")
-    .delete()
-    .in("room_id", [KARAOK, BAR2FO]);
-  if (cleanMembers) throw new Error("limpeza room_members: " + cleanMembers.message);
-  const { error: cleanRooms } = await admin
-    .from("rooms")
-    .delete()
-    .in("id", [KARAOK, BAR2FO]);
-  if (cleanRooms) throw new Error("limpeza rooms: " + cleanRooms.message);
+  await resetDomain(admin);
 
+  // ---- Bares (perfil-personificação do host, 1:1) ----
+  const { error: barsErr } = await admin.from("bars").insert([
+    {
+      id: BAR1,
+      host_id: dono,
+      code: "ZEHBAR",
+      nome: "Karaokê do Zé",
+      cidade: "São Paulo",
+      endereco: "Rua das Flores, 123",
+      quantidade_mesas: 12,
+    },
+    {
+      id: BAR2,
+      host_id: betania,
+      code: "BARSEG",
+      nome: "Bar da Esquina",
+      cidade: "São Paulo",
+      endereco: "Av. Brasil, 456",
+      quantidade_mesas: 6,
+    },
+  ]);
+  if (barsErr) throw new Error("bars: " + barsErr.message);
+  console.log("bares criados: Karaokê do Zé (ZEHBAR, 12 mesas, dono), Bar da Esquina (BARSEG, 6 mesas, Betânia)");
+
+  // ---- Mesas (etiquetas; rótulos opcionais) ----
+  const mesas1 = Array.from({ length: 12 }, (_, i) => ({
+    bar_id: BAR1,
+    numero: i + 1,
+    rotulo: `Mesa ${i + 1}`,
+  }));
+  const mesas2 = Array.from({ length: 6 }, (_, i) => ({
+    bar_id: BAR2,
+    numero: i + 1,
+    rotulo: `Mesa ${i + 1}`,
+  }));
+  const { error: mesasErr } = await admin.from("mesas").insert([...mesas1, ...mesas2]);
+  if (mesasErr) throw new Error("mesas: " + mesasErr.message);
+  console.log("mesas criadas: 12 no Zé, 6 na Esquina");
+
+  // ---- Salas (1 por bar — multi-sala desabilitado) ----
   const { error: roomsErr } = await admin.from("rooms").insert([
     {
-      id: KARAOK,
+      id: ROOM1,
+      bar_id: BAR1,
       code: "KARAOK",
       host_id: dono,
       entry_mode: "open",
@@ -124,9 +178,10 @@ async function main() {
       status: "active",
     },
     {
-      id: BAR2FO,
+      id: ROOM2,
+      bar_id: BAR2,
       code: "BAR2FO",
-      host_id: dono,
+      host_id: betania,
       entry_mode: "approval",
       queue_approval_mode: "auto",
       require_song_confirmation: false,
@@ -134,19 +189,21 @@ async function main() {
     },
   ]);
   if (roomsErr) throw new Error("rooms: " + roomsErr.message);
-  console.log("salas criadas: KARAOK (open/manual/confirm), BAR2FO (approval/auto)");
+  console.log("salas criadas: KARAOK (open/manual/confirm, bar ZEHBAR), BAR2FO (approval/auto, bar BARSEG)");
 
+  // ---- Membros (participante obrigatoriamente registra a mesa) ----
   const { error: membersErr } = await admin.from("room_members").insert([
-    { room_id: KARAOK, user_id: ana, status: "approved" },
-    { room_id: KARAOK, user_id: bruno, status: "approved" },
-    { room_id: BAR2FO, user_id: ana, status: "pending" },
+    { room_id: ROOM1, user_id: ana, status: "approved", mesa_numero: 3 },
+    { room_id: ROOM1, user_id: bruno, status: "approved", mesa_numero: 7 },
+    { room_id: ROOM2, user_id: ana, status: "pending", mesa_numero: 2 },
   ]);
   if (membersErr) throw new Error("room_members: " + membersErr.message);
-  console.log("membros criados: ana/bruno aprovados em KARAOK; ana pending em BAR2FO");
+  console.log("membros criados: ana (mesa 3)/bruno (mesa 7) aprovados em KARAOK; ana pending (mesa 2) em BAR2FO");
 
+  // ---- Fila (só na sala do Karaokê do Zé) ----
   const { error: queueErr } = await admin.from("queue_items").insert([
     {
-      room_id: KARAOK,
+      room_id: ROOM1,
       added_by_user_id: ana,
       youtube_video_id: "dQw4w9WgXcQ",
       title: "Never Gonna Give You Up (cover karaokê)",
@@ -154,7 +211,7 @@ async function main() {
       status: "approved",
     },
     {
-      room_id: KARAOK,
+      room_id: ROOM1,
       added_by_user_id: bruno,
       youtube_video_id: "9bZkp7q19f0",
       title: "Como Fazer Melhor (karaokê)",
@@ -166,7 +223,7 @@ async function main() {
   console.log("fila criada na KARAOK: 2 itens (approved + pending)");
 
   console.log(
-    "\nSeed concluído. Login dev: dono@exemplo.com | ana@exemplo.com | bruno@exemplo.com (senha123)"
+    "\nSeed concluído. Login dev: dono@exemplo.com | betania@exemplo.com | ana@exemplo.com | bruno@exemplo.com (senha123)"
   );
 }
 

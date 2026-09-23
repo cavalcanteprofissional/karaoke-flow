@@ -8,8 +8,10 @@ Modelo relacional, matriz de RLS e regras de integridade do MVP (reflete `supaba
 
 ```mermaid
 erDiagram
-    auth_users ||--o| profiles : "1:1 (id)"
-    auth_users ||--o{ rooms : "host de"
+    auth_users ||--o| bars : "1:1 (host)"
+    bars ||--o{ mesas : "tem (1..N)"
+    bars ||--o{ rooms : "karaokê (default 1)"
+    auth_users ||--o{ rooms : "host de (via bars)"
     auth_users ||--o{ room_members : "participa"
     auth_users ||--o{ queue_items : "adiciona"
 
@@ -18,7 +20,8 @@ erDiagram
     rooms {
         uuid id PK
         text code UK "6 chars, sem ambíguos"
-        text qr_code_url
+        text qr_code_url "legado (QR agora é do bar/mesa)"
+        uuid bar_id FK "bars.id (karaokê do bar)"
         uuid host_id FK "auth.users.id"
         room_entry_mode entry_mode "open | approval"
         text queue_approval_mode "auto | manual"
@@ -33,6 +36,26 @@ erDiagram
         uuid user_id PK,FK "auth.users.id"
         member_status status "pending|approved|rejected"
         timestamptz joined_at
+        integer mesa_numero "etiqueta da mesa do participante"
+    }
+
+    bars {
+        uuid id PK
+        uuid host_id UK,FK "auth.users.id (1 host = 1 bar)"
+        text code UK "6 chars, sem ambíguos"
+        text nome
+        text cidade
+        text endereco
+        integer quantidade_mesas "default 1 (1..999)"
+        timestamptz criado_em
+    }
+
+    mesas {
+        uuid id PK
+        uuid bar_id FK "bars.id"
+        integer numero "1..999 (único por bar)"
+        text rotulo "nullable (etiqueta da mesa)"
+        timestamptz criado_em
     }
 
     queue_items {
@@ -79,6 +102,8 @@ erDiagram
 
 > `consents` (migration `20260921000009`, spec §2.5/§13): registro de aceite LGPD/GDPR por usuário — RLS restrito ao próprio usuário (`consents_select_own`).
 
+> `bars`/`mesas` (migrations `20260923000010`/`20260923000011`): o bar é o perfil-personificação do host (1:1 `host_id` único); mesas são etiquetas do bar (playlist = a da sala/karaokê). `rooms.bar_id` e `room_members.mesa_numero` são adicionados pela migration `20260923000012`.
+
 ---
 
 ## 2. Regras de integridade no banco
@@ -89,8 +114,8 @@ flowchart LR
         A[insert] --> B["position = max+1 por sala"]
         B --> C["advisory xact lock por sala"]
         C --> D{queue_approval_mode}
-        D -- auto --> E[status = approved]
-        D -- manual --> F[status = pending]
+        D -->|auto| E["status = approved"]
+        D -->|manual| F["status = pending"]
         A --> G["added_by = auth.uid() (policy)"]
     end
     subgraph UPDATE queue_items
@@ -101,8 +126,8 @@ flowchart LR
         K[insert direto] --> L["sempre pending"]
         L --> M["authorizado? via RPC join_room"]
         M --> N{entry_mode}
-        N -- open --> O[approved]
-        N -- approval --> P[pending]
+        N -->|open| O[approved]
+        N -->|approval| P[pending]
     end
 ```
 
@@ -112,6 +137,8 @@ flowchart LR
 
 | Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                  | DELETE                         |
 | -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | ----------------------- | ------------------------------ |
+| `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                    | host                           |
+| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                       | —                              |
 | `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                    | host                           |
 | `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar) | self **ou** host               |
 | `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only**           | host only                      |
@@ -119,12 +146,15 @@ flowchart LR
 | `consents`     | só o próprio usuário                                                     | próprio usuário (ou service role)                    | próprio usuário (ou service role) | —                          |
 | `song_cache`   | sem política                                                            | sem política                                         | sem política            | sem política (só service role) |
 
+> **Anônimo (`is_anonymous`)**: lê `bars`/`mesas` (precisa ver código/QR e escolher mesa) — mas a RPC `create_bar` recusa sessão anônima; o anfitrião começa com sessão real.
+
 ### Pontos de atenção (segurança)
 
 - **Host actions nunca relaxam na UI**: aprovar/reordenar/deletar fila e aprovar/rejeitar entrada são host-only no banco.
 - **Status inicial da fila é derivado** (`queue_items_initial_status`): o client não escolhe; remove auto-aprovação por INSERT.
 - **Aprovação de entrada** só via RPC `join_room` (`security definer`) — INSERT direto sempre vira `pending`.
-- **Multi-tenancy**: toda tabela de domínio tem `room_id`; nada de assumir sala única.
+- **Preview / entrada e criação de bar são RPCs `security definer`** (`get_entry_preview`, `join_room`, `create_bar`) — o leitor não-membro não acessa `rooms`/`bars` por SELECT.
+- **Multi-tenancy**: toda tabela de domínio tem `room_id`/`bar_id`; nada de assumir bar/sala única.
 
 ---
 
@@ -178,10 +208,13 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A["node scripts/seed.mjs"] --> B["Auth Admin API: 3 usuários (IDs fixos)"]
+    A["node scripts/seed.mjs"] --> B["Auth Admin API: 4 usuários (IDs fixos)"]
     B --> C["trigger handle_new_user cria profiles"]
-    C --> D["INSERT rooms (KARAOK, BAR2FO) + room_members + queue_items (idempotente)"]
-    D --> E["Login dev: dono/ana/bruno @exemplo.com · senha123"]
+    C --> D["INSERT 2 bares + mesas + rooms + members + queue (idempotente)"]
+    D --> E["Bar1 ZEHBAR (12 mesas) / Bar2 BARSEG (6 mesas) / salas KARAOK·BAR2FO"]
+    E --> F["Login dev: dono/ana/bruno/betania @exemplo.com · senha123"]
 ```
 
 > Usuários **não** são criados por SQL raw em `auth.users` (deixa o serviço Auth instável) — sempre Auth Admin API.
+
+> O Bar 2 tem host próprio (`betania`, id `...0004`) porque **1 host = 1 bar** (`bars.host_id` único) — dono já é host do Bar 1.

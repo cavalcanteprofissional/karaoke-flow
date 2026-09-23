@@ -82,7 +82,22 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Rota protegida redireciona para login quando não autenticado.
 - [ ] Recarregar a página mantém a sessão (SSR + cookie).
 
-### 3.2 Salas — criar / entrar (Fase 3)
+### 3.2 Bares/mesas + acesso anônimo (Fase 3.5)
+
+- [ ] "Continuar sem login" inicia sessão anônima e cai em `/entrar`.
+- [ ] Anônimo escaneia QR do bar → preview com **escolha da mesa** → entra e vê a fila ("Bar · Mesa N").
+- [ ] QR de mesa (`?bar=ZEHBAR&mesa=3`) entra já com a mesa selecionada.
+- [ ] Código legado de sala (`/entrar?code=ROOM`) continua entrando no karaokê de um bar.
+- [ ] Criar bar (conta real) pede nome/cidade/endereço/quantidade de mesas; gera bar + mesas + karaokê único.
+- [ ] **Anônimo não consegue criar bar** (botão oculto; chamada RPC rejeitada).
+- [ ] Dashboard anônimo não aparece ao logado real; proxy desvia anônimo de `/`/`/login`/`/dashboard` → `/entrar`.
+- [ ] Dashboard mostra "Meu bar" (código + mesas + badge de karaokê) e "Bares que frequento · N".
+- [ ] Botão "Adicionar sala" aparece desabilitado (multi-sala fora do MVP).
+- [ ] Página do karaokê mostra contexto "Bar · Mesa N"; host vê QR do bar + QRs das mesas.
+- [ ] `join_room` com mesa: bar de 1 mesa usa a única; dano de mesa repetida/fora do range dá erro claro.
+- [ ] `npm test` (Vitest) passa — inclui `src/lib/bars/qr.test.ts` (16 testes de parse/extração/rotas de QR).
+
+### 3.3 Salas — criar / entrar (Fase 3)
 
 - [ ] Criar sala gera código de **6 caracteres únicos, não sequenciais**.
 - [ ] QR code da sala abrange dados suficientes para entrar em 1 toque.
@@ -92,7 +107,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Sair da sala remove membro; host fecha sala (`status=closed`).
 - [ ] Toggles persistidos recarregam corretos ao reentrar na sala.
 
-### 3.3 Busca YouTube (Fase 4)
+### 3.4 Busca YouTube (Fase 4)
 
 - [ ] Busca com debounce (não dispara por tecla).
 - [ ] `safeSearch=strict` aplicado (verificar no request).
@@ -101,7 +116,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Quota esgotada → mensagem amigável "tente novamente mais tarde".
 - [ ] Rate limit por usuário/IP bloqueia spam de buscas.
 
-### 3.4 Fila — adicionar música (Fase 5)
+### 3.5 Fila — adicionar música (Fase 5)
 
 - [ ] `queueApprovalMode=auto`: música entra direto na fila.
 - [ ] `queueApprovalMode=manual`: música entra `pending`; host aprova/rejeita.
@@ -112,7 +127,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Estados visuais: `pendente` vs `na fila` vs `tocando` legíveis.
 - [ ] Reordenação e remoção apenas pelo host (validação no backend, não só UI).
 
-### 3.5 Player device (Fase 6)
+### 3.6 Player device (Fase 6)
 
 - [ ] `/player/[code]` acessível **sem login**.
 - [ ] Primeira reprodução exige um toque (autoplay).
@@ -123,12 +138,12 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Estado vazio: QR grande + CTA "escaneie para adicionar uma música".
 - [ ] Sessão estável por horas (reconexão do Realtime automática).
 
-### 3.6 Controle do host (Fase 7)
+### 3.7 Controle do host (Fase 7)
 
 - [ ] Play/pause/skip/next do celular refletem na tela.
 - [ ] Estado `playing`/item atual persistem na sala.
 
-### 3.7 Segurança / LGPD / NFR (Fase 8)
+### 3.8 Segurança / LGPD / NFR (Fase 8)
 
 - [ ] RLS: participante aprovado de sala A **não** lê a fila da sala B (comprovar via API direta).
 - [ ] Ações de host rejeitadas no backend quando chamadas por não-host.

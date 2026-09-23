@@ -1,6 +1,6 @@
 # Fluxos do sistema
 
-Fluxos técnicos end-to-end no estado atual do MVP (Fases 1–3 concluídas; Fase 3.5 em andamento) + propostas.
+Fluxos técnicos end-to-end no estado atual do MVP (Fases 1–3.5 concluídas) + propostas.
 
 ---
 
@@ -28,17 +28,29 @@ sequenceDiagram
     D-->>U: tela autenticada
 ```
 
-### 1.2 Login dev (e-mail/senha — somente `NODE_ENV=development`)
+### 1.2 Acesso anônimo (visitante sem conta)
+
+Fase 3.5 habilita **anonymous sign-ins** (Management API `AuthConfig.external_anonymous_users_enabled` + `supabase/config.toml`), para a galera pedir música pelo QR **sem criar conta**. Anônimo **não** cria bar (RPC `create_bar` recusa `is_anonymous`); host exige login real.
 
 ```mermaid
 flowchart TD
-    A["/login (§ dev)"] --> B["signInWithPassword(email, senha)"]
-    B --> C{Sucesso?}
-    C -- não --> E[toast: credenciais inválidas]
-    C -- sim --> F["router.push('/dashboard') + refresh"]
+    A["/login → 'Continuar sem login'"] --> B["signInAnonymously()"]
+    B --> C["Sessão criada (is_anonymous = true)"]
+    C --> D["proxy: anônimo em / · /login → /entrar; anônimo em /dashboard → /entrar"]
+    D --> E["Participante entra no bar via QR/código e escolhe a mesa"]
 ```
 
-### 1.3 Manutenção de sessão (proxy)
+### 1.3 Login dev (e-mail/senha — somente `NODE_ENV=development`)
+
+```mermaid
+flowchart TD
+    A["/login (seção dev)"] --> B["signInWithPassword(email, senha)"]
+    B --> C{Sucesso?}
+    C -->|não| E["toast: credenciais inválidas"]
+    C -->|sim| F["router.push('/dashboard') + refresh"]
+```
+
+### 1.4 Manutenção de sessão (proxy)
 
 Em Next 16 o middleware chama-se `proxy` (`src/proxy.ts`). Roda em toda request, renova o token e delega o controle de rota.
 
@@ -46,15 +58,16 @@ Em Next 16 o middleware chama-se `proxy` (`src/proxy.ts`). Roda em toda request,
 flowchart TD
     A["Request"] --> B["createServerClient (cookies do request)"]
     B --> C["supabase.auth.getUser()"]
-    C --> D{Rota protegida?<br/>/dashboard* · /salas*}
-    D -- sim, sem usuário --> E["redirect → /login"]
-    D -- não --> F{Rota de auth?<br/>/login}
-    F -- sim, com usuário --> G["redirect → /dashboard"]
-    F -- não --> H["Set-Cookie: private, no-store"]
+    C --> D{Rota protegida?<br/>/dashboard* · /salas* · /entrar}
+    D -->|sem usuário| E["redirect → /login"]
+    D -->|não| F{Rota de auth?<br/>/ ou /login}
+    F -->|com usuário| G["anônimo → /entrar · real → /dashboard"]
+    F -->|anônimo no dashboard| G2["redirect → /entrar"]
+    F -->|não| H["Set-Cookie: private, no-store"]
     H --> I["response (com cookies de refresh atualizados)"]
 ```
 
-### 1.4 Logout
+### 1.5 Logout
 
 ```mermaid
 sequenceDiagram
@@ -85,51 +98,60 @@ flowchart TD
 
 ---
 
-## 2. Ciclo de vida da sala
+## 2. Ciclo de vida do bar e do karaokê
 
-### 2.1 Criar sala
+### 2.1 Criar bar (vira perfil + mesas + karaokê único)
+
+Fase 3.5: **1 host = 1 bar** (`bars.host_id` único), que por padrão tem **1 karaokê** (`rooms.bar_id`; multi-sala desabilitado na UI — affordance "Adicionar sala" desabilitada). O QR/código do bar já resolve direto para o karaokê único ativo.
 
 ```mermaid
 flowchart TD
-    A["Dashboard"] --> B["Criar sala (botão)"]
-    B --> C["INSERT rooms (host_id = auth.uid()) `(backend)`"]
-    C --> D["code gerado: 6 chars, sem ambíguos `(backend)`"]
-    D --> E["qr_code_url gerada"]
-    E --> F["redirect → /salas/[id]"]
-    F --> G["Mostra QR + código (entrada 1 toque)"]
+    A["Dashboard → 'Criar meu bar' (Dialog)"] --> B["RPC create_bar(nome, cidade, endereco, quantidade_mesas, rotulos) — (backend, security definer)"]
+    B --> C["bar + mesas 1..N + room única criados em transação (backend)"]
+    C --> D["Exige login real (anônimo → erro 'crie uma conta')"]
+    D --> E["redirect → /salas/[code]"]
+    E --> F["Mostra QR do bar + QR de cada mesa (entrada 1 toque)"]
 ```
 
-### 2.2 Entrar na sala (código/QR) — preview + RPC `join_room`
+### 2.2 Entrar no bar (código/QR) — preview unificada + RPC `join_room` com mesa
+
+A RPC `get_room_preview` **foi substituída** pela `get_entry_preview(p_code, p_mesa)` (migration `20260923000013`): `p_code` aceita **código de bar** **ou** código de room (QR legado de sala); o karaokê é a **única sala ativa do bar**.
 
 ```mermaid
 flowchart TD
-    A["Participante escaneia QR / digita code"] --> V["RPC get_room_preview(code) `(backend, security definer)`"]
-    V --> W["Preview: dono (nome), entry_mode, status `(backend)`"]
-    W --> X["Confirmar entrada (1–2 toques)"]
-    X --> B["RPC join_room(code) `(backend, security definer)`"]
+    A["Participante digita code / escaneia QR de bar ou de mesa"] --> V["RPC get_entry_preview(p_code, p_mesa) — (backend, security definer)"]
+    V --> W["Resolve bar → karaokê único ativo → preview<br/>(bar_nome, host, entry_mode, status, quantidade_mesas)"]
+    W --> X{Bar tem mesa pré-selecionada?}
+    X -->|sim| X1["Mesa pré-selecionada (QR / ?mesa=N): valida p_mesa (1..quantidade_mesas e existe em mesas)"]
+    X -->|não| X2["UI pede a mesa (grid 1..N); default 1 quando mesa única"]
+    X1 --> X3["Confirmar entrada"]
+    X2 --> X3
+    X3 --> B["RPC join_room(p_code=room_code, p_mesa) — (backend, security definer)"]
     B --> C{Sala ativa?}
-    C -- não --> Z[erro: sala não encontrada/inativa]
-    C -- sim --> D{É o host?}
-    D -- sim --> Y[erro: você já é o dono]
-    D -- não --> E{entry_mode = open?}
-    E -- sim --> F["status = approved (entra direto) `(backend)`"]
-    E -- não --> G["status = pending (aguarda host) `(backend)`"]
-    F --> H["Participante vê a fila"]
+    C -->|não| Z["erro: sala não encontrada/inativa"]
+    C -->|sim| D{É o host?}
+    D -->|sim| Y["erro: você já é o dono desta sala"]
+    D -->|não| E{Mesa válida?}
+    E -->|não| E1["erro: mesa inválida / fora de 1..quantidade_mesas ou inexistente"]
+    E -->|sim| E2{entry_mode = open?}
+    E2 -->|sim| F["status = approved · mesa_numero gravado (backend)"]
+    E2 -->|não| G["status = pending · mesa_numero gravado (backend)"]
+    F --> H["Participante vê a fila ('Bar · Mesa N')"]
     G --> I["Notifica host (Realtime room:{id})"]
     I --> J{Host aprova?}
-    J -- sim --> H
-    J -- não --> K[status = rejected - pode reentrar depois `(backend)`]
+    J -->|sim| H
+    J -->|não| K["status = rejected - pode reentrar depois (backend)"]
 ```
 
-Regra de reentrada (migration `20260921000004`): `rejected` pode reentrar (RPC atualiza), mas `approved`/`pending` existentes **não** são rebaixados.
+Regra de reentrada (migration `20260921000004`): `rejected` pode reentrar (RPC atualiza), mas `approved`/`pending` existentes **não** são rebaixados. O `mesa_numero` é atualizado no reentrar (`coalesce(excluded.mesa_numero, ...)`).
 
-### 2.3 Fechar sala / sair (host)
+### 2.3 Fechar/sair
 
 ```mermaid
 flowchart TD
-    A["Host: Fechar sala"] --> B["UPDATE rooms.status = closed `(backend: host-only)`"]
+    A["Host: Fechar sala"] --> B["UPDATE rooms.status = closed (backend: host-only)"]
     B --> C["Canal Realtime encerra as operações"]
-    A2["Participante: Sair"] --> B2["DELETE room_members (self) `(backend)`"]
+    A2["Participante: Sair"] --> B2["DELETE room_members (self) (backend)"]
 ```
 
 ---
@@ -141,14 +163,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     A["Participante busca + toca 'Adicionar'"] --> B{requireSongConfirmation?}
-    B -- sim --> C["Modal confirmação (título/thumb/duração)"]
+    B -->|sim| C["Modal confirmação (título/thumb/duração)"]
     C --> D["INSERT queue_items"]
-    B -- não --> D
-    D --> E["Trigger position: advisory lock por sala, max+1 `(backend)`"]
-    D --> F["Trigger status: lê queue_approval_mode `(backend)`"]
+    B -->|não| D
+    D --> E["Trigger position: advisory lock por sala, max+1 (backend)"]
+    D --> F["Trigger status: lê queue_approval_mode (backend)"]
     F --> G{Modo da sala}
-    G -- auto --> H["status = approved (entra na fila)"]
-    G -- manual --> I["status = pending (fila de aprovação)"]
+    G -->|auto| H["status = approved (entra na fila)"]
+    G -->|manual| I["status = pending (fila de aprovação)"]
     H --> J["Realtime room:{id} → tela atualiza"]
     I --> J
 ```
@@ -158,8 +180,8 @@ flowchart TD
 ```mermaid
 flowchart TD
     A["Item pending"] --> B["Host: aprovar/rejeitar"]
-    B -- aprovar --> C["UPDATE status = approved `(backend: host-only)`"]
-    B -- rejeitar --> D["UPDATE status = rejected `(backend: host-only)`"]
+    B -->|aprovar| C["UPDATE status = approved (backend: host-only)"]
+    B -->|rejeitar| D["UPDATE status = rejected (backend: host-only)"]
     C --> E["Realtime room:{id}"]
     D --> E
 ```
@@ -237,18 +259,18 @@ Cada item da fila é uma linha de `queue_items` com `position` atribuído no ban
 flowchart TD
     A["Item na minha fila: botão 'Trocar música'"] --> B["Abre busca (mesmo flow da Fase 4)"]
     B --> C{requireSongConfirmation?}
-    C -- sim --> D["Modal confirmação do vídeo novo"]
-    D --> E["RPC replace_queue_song(item_id, yt_video, title, thumb, duration) `(backend)`"]
-    C -- não --> E
+    C -->|sim| D["Modal confirmação do vídeo novo"]
+    D --> E["RPC replace_queue_song(item_id, yt_video, title, thumb, duration) — (backend)"]
+    C -->|não| E
     E --> F{Validações no banco}
     F --> F1["item existe e room está active"]
     F --> F2["added_by = auth.uid() OU is_host(room)"]
     F --> F3["status ∈ {pending, approved}"]
     F --> F4["youtube_video_id não vazio"]
-    F -- ok --> G["UPDATE das colunas de conteúdo (position e status intocados)"]
+    F -->|ok| G["UPDATE das colunas de conteúdo (position e status intocados)"]
     G --> H["updated_at atualizado (trigger)"]
     G --> I["Realtime room:{id} → fila reflete (single UPDATE)"]
-    F -- qualquer falha --> K["Erro retornado ao client (sem mudança)"]
+    F -->|qualquer falha| K["Erro retornado ao client (sem mudança)"]
 ```
 
 > **Reordenar (host) é operação distinta**: reescreve `position` de vários itens (pendências de Fase 5); a troca nunca muda a ordem.

@@ -12,11 +12,11 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 **Escopo:** MVP da spec (seções 1–14). Roadmap futuro (seção 15) documentado ao final, fora do MVP.
 
-**Próximas etapas (plano fechado em 2026-09-21):**
+**Próximas etapas (plano fechado em 2026-09-21, atualizado em 2026-09-23):**
 
 1. ~~Tela 1 — Onboarding + consentimento LGPD + base i18n~~ (**entregue em 2026-09-21** — ver sub-bloco da Fase 2).
-2. **Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5) — novo modelo de dados (`bars`, `mesas`, `rooms.bar_id`), reseed, `/entrar`, criar bar, QR por karaokê/mesa, anônimo.
-3. **Busca + fila end-to-end** (Fase 4) — rota de busca com cache/rate-limit/cadeia de credenciais, OAuth por-host e do app, `addSongToQueueAction` com a matriz de geolocalização e lista simples da fila.
+2. ~~**Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5)~~ (**entregue em 2026-09-23** — Blocos A–F concluídos: migrations 00010–00014 aplicadas no projeto Cloud via `apply-sql.mjs`, anonymous sign-ins, reseed (Bar 1/Bar 2), lib+actions+16 testes de `qr.ts`, UI Bloc E, docs Bloc F; lint/typecheck/build e 45 testes verdes. **Decisões de modelo fechadas com o PO** — ver bloco da Fase 3.5 abaixo). *Pendências residuais registradas ao final da Fase 3.5.*
+3. **Busca + fila end-to-end** (Fase 4) — rota de busca com cache/rate-limit/cadeia de credenciais, OAuth por-host e do app, `addSongToQueueAction` com a matriz de geolocalização e lista simples da fila (escopo ampliado com o PO em 2026-09-21 — ver seção Fase 4).
 4. ~~**Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"**~~ (**entregue em 2026-09-22**): Google Takeout "YouTube and YouTube Music" (2 pedidos, 1 recebido) recebido; `ler-takeout.mjs` (fora do repo, `Temp\opencode\yt-music`) ajustado p/ nomes pt-BR + strip ` - Topic` e rodado → 8.216 eventos de escuta (2025→2026, sem Shorts/vídeo, 2.842 faixas); §6 do [`MANIFEST.md`](./MANIFEST.md) escrita com o retrato real (Florence + The Machine dominante, AURORA, década 2020); nota de instrução do autor e cartão do ouvido removidos, nota de rodapé aponta a etapa de ciência de dados; fonte no §8 e nota da spec §16/§17 atualizadas. Zip do Takeout isolado em `.local-data/takeout/` (gitignored, nunca versionado). *Pendência residual anotada:* análise cruzada (histórico × curtidas) fica para o futuro repo `karaoke-flow-data` (ciência de dados — ver `docs/ciencia-de-dados/segmentacao-sentimental.md`).
 
 > A ampliação da **bateria de testes** acompanha as fases (ver seção "Plano de testes por fase" abaixo).
@@ -25,11 +25,11 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Plano de testes por fase (ampliação da bateria)
 
-> **Situação atual (2026-09-21):** Vitest + RTL + jsdom com **29 testes** (rooms/utils, i18n, consent cookies/geo, componente Onboarding). Smoke HTTP manual (anon/autenticado) e e2e ad-hoc de RLS da Fase 3. **Ainda não há** MSW, Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
+> **Situação atual (2026-09-23):** Vitest + RTL + jsdom com **45 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, consent cookies/geo, componente Onboarding). Smoke HTTP manual (anon/autenticado) e e2e ad-hoc de RLS da Fase 3. **Ainda não há** MSW, Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
 >
 > Princípios: testar o que agrega (helpers de domínio e componentes críticos em unit; fluxos de usuário em e2e); manter a suíte rápida; RLS validada via smoke/e2e, não em unit.
 
-- [ ] **Fase 3.5 (Etapa 2):** extrair regras de domínio de bar/mesa/karaokê (resolução mesa→karaokê, código de bar, payload de QRs) em funções puras e cobrir em unit; testes de componentes das telas novas (`/entrar` reescrito, criar bar, dashboard "meus bares"); smoke HTTP do fluxo de entrada (anon/autenticado, 1 karaokê vs N).
+- [x] **Fase 3.5 (Etapa 2):** regras de domínio de bar/mesa/karaokê (parse/extração/rotas de QR, token de entrada) extraídas em `src/lib/bars/qr.ts` e cobertas em unit (**16 testes**); smoke HTTP do fluxo de entrada (anon/autenticado, 1 karaokê) validado manualmente. **Ainda falta:** testes de componentes das telas novas (`/entrar` reescrito, `CreateBarDialog`, dashboard "meus bares").
 - [ ] **Fase 4 (Etapa 3):** adicionar **MSW** para mockar chamadas de rede — serviço de busca do YouTube (parse de itens, cadeia de credenciais host→app→dev, cache miss/hit, rate-limit) e `addSongToQueueAction` (validação via RLS mockada, matriz de geolocalização); unit da store de fila; smoke HTTP da rota `/salas/[codigo]/buscar` e de adicionar à fila.
 - [ ] **Fase 5:** testes de componentes do painel de aprovação/reorder da fila e do modal `requireSongConfirmation`; unit das actions de reorder/controle do player (fila vazia/pausada, dedupe).
 - [ ] **Fase 6:** smoke HTTP da rota pública `/player/[codigo]` (sem sessão, modo quiosque).
@@ -124,6 +124,24 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 ## Fase 3.5 — Domínio bar/mesas/karaokês + acesso anônimo
 
 > **Revisão do modelo decidida com o PO (2026-09-21):** o host é **um bar**; o bar tem **mesas 0–999** (cadastro rico) e **1..N karaokês simultâneos** (default: 1 fila por bar). Cada karaokê = uma `room` (fila + player próprios). Entrar no bar → default 1 karaokê: **direto na fila única**; N karaokês: a pessoa escolhe a **mesa** por número (0–999) ou QR → mesa resolve o karaokê. A infra de consentimento LGPD (`consents`) já nasce na **Etapa 1 (Tela 1)** e é alimentada por ela.
+
+> **Modelo fechado na implementação (2026-09-23) — prevalece sobre o texto acima:** bar = perfil-personificação do host (1:1), login real obrigatório; **salas/karaokês são do host**, default **1 por bar** (multi-sala desabilitado p/ criar; affordance "Adicionar sala"); **mesas pertencem ao bar** (tabela `mesas` + QR próprio), entrada direta com mesa pré-selecionada por código/QR; `quantidade_mesas` default **1**; mesas = etiqueta, playlist da sala; participante escolhe mesa obrigatoriamente (`room_members.mesa_numero`); stats do participante derivados por query; anon sign-in via Management API (host não pode ser anônimo).
+
+### Plano de implementação (Blocos A–F, 2026-09-23) — ✅ concluídos
+
+- [x] **A. Banco (migrations):** `20260923000010_bars` (bars: host_id unique, code, nome, cidade, endereco, `quantidade_mesas` default 1, `generate_bar_code`, RLS select-todos/escrita-host); `20260923000011_mesas` (bar_id, numero unique por bar, rotulo, RLS, helper `is_bar_host`); `20260923000012_rooms_bar` (`rooms.bar_id`, migração bar auto por host das rooms existentes, `room_members.mesa_numero`); `20260923000013_entry_preview` (`get_entry_preview` unifica bar/room, `get_room_preview` dropada, `join_room` com mesa validada + registrada via `coalesce`); `20260923000014_create_bar` (criação atômica bar + mesas + room única; recusa anônimo). **Aplicadas** no projeto Cloud via `node scripts/apply-sql.mjs` (padrão do time — sem `SUPABASE_DB_PASSWORD`, `supabase db push` falha em auth).
+- [x] **B. Sessão anônima:** script `scripts/enable-anonymous-signins.mjs` (Management API) rodado + config.toml local `enable_anonymous_sign_ins=true`; botão "Continuar sem login" no `/login` (`signInAnonymously` → `/entrar`); proxy desvia anônimo de `/`/`/login`/`/dashboard` para `/entrar`; `create_bar` recusa sessão anônima.
+- [x] **C. Reseed (`scripts/seed.mjs`):** 4 usuários via Auth Admin API (novo **betania**, host 1:1 do Bar 2); Bar 1 "Karaokê do Zé" (`ZEHBAR`, 12 mesas, sala `KARAOK` fila manual) + Bar 2 "Bar da Esquina" (`BARSEG`, 6 mesas, sala `BAR2FO` fila auto); ana/bruno com `mesa_numero`.
+- [x] **D. Actions + domain lib:** `src/lib/bars/actions.ts` (`createBarAction` zod com `default(1)` na quantidade de mesas, `getEntryPreviewAction`, `joinEntryAction`); `src/lib/bars/qr.ts` (puro: `parseEntryToken`, `extractEntryToken`, `barJoinUrl`/`mesaJoinUrl`, backcompat `?code=`) com **16 testes** (`qr.test.ts`).
+- [x] **E. UI:** `/entrar` reescrito (token → preview → escolha da mesa → join; QR de mesa pré-seleciona; se é host, redirect); `CreateBarDialog` (sem multi-sala); dashboard "Meu bar" + "Bares que frequento" + pendências + botão "Adicionar sala" desabilitado; QRs de bar/mesa (`RoomQr` com `fileName`); `/salas/[codigo]` contexto "Bar · Mesa N"; `QrScanner` com `match` customizado.
+- [x] **F. Docs + testes:** spec §5 (Entidades), `docs/flows/*` migrados, README/TESTING.md §3/CHANGELOG atualizados; unit de `qr.ts`; lint/typecheck/build e 45 testes verdes.
+
+### Pendências residuais (Fase 3.5)
+
+- [ ] **Docs/flows (`docs/flows/*.md`):** diagramas **Mermaid** sanitizados e validados com `mermaid.parse` **v10.9.8 + v11.17.2** (26/26 OK) — arestas **sem vírgula/parêntese** (`-->|label|` só palavras simples), `?` apenas no **fim** de nó `{…}`, ERD sem relacionamento encadeado, sem backticks/newline cru em labels. **Ainda falta:** conferir a renderização no renderizador/preview usado (limpar cache do editor — o erro antigo citado usava o texto pré-correção) e varrer os demais `.md` do repo com o mesmo critério de sintaxe.
+- [ ] **Migrations aplicadas via `apply-sql.mjs`** não registradas em `schema_migrations` (sem `SUPABASE_DB_PASSWORD`) — anotar reaplicação/criação local quando o acesso via CLI for resolvido.
+- [ ] **`YOUTUBE_APP_REFRESH_TOKEN`** (script `scripts/youtube-app-oauth.mjs`) — pré-requisito do fallback do app na Fase 4.
+- [ ] **Deploy Vercel** permanece adiado para o fim do MVP (decisão registrada no CHANGELOG).
 
 - [ ] Migration `bars` (1:1 com `profiles` de host): `host_id` unique, `code` 6 chars, `nome`, `cidade`, `endereco`, `quantidade_mesas` (0–999), `karaokes_simultaneos` (default 1), `criado_em`
 - [ ] Migration `mesas`: `bar_id`, `numero` (0–999, unique por bar), `rotulo`, `room_id` (karaokê a que pertence)

@@ -35,6 +35,7 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const isAnonymous = user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true;
 
   const { pathname } = request.nextUrl;
 
@@ -47,7 +48,15 @@ export async function proxy(request: NextRequest) {
 
   if (user && (pathname === "/" || matchesPrefix(pathname, AUTH_PREFIXES))) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = isAnonymous ? "/entrar" : "/dashboard";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Visitante anônimo não precisa do painel; leva ao fluxo de entrada.
+  if (user && isAnonymous && matchesPrefix(pathname, ["/dashboard"])) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/entrar";
     url.search = "";
     return NextResponse.redirect(url);
   }

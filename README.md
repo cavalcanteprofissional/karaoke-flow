@@ -1,108 +1,214 @@
-# Karaokê Watch Party
+# 🎤 Karaokê Watch Party
 
-Aplicação web **mobile-first** para karaokê ao vivo em ambientes com muitas pessoas (bares, restaurantes). O público adiciona músicas na fila pelo celular e a playlist é reproduzida em uma tela compartilhada (TV/projetor), controlada pelo dono da sala.
+Aplicação **mobile-first** para karaokê ao vivo em bares e restaurantes: o público adiciona músicas na fila **pelo próprio celular** (escaneando o QR da mesa) e a playlist toca numa tela compartilhada (TV/projetor), controlada pelo dono da casa pelo celular — sem tocar no dispositivo da TV.
 
-## Fluxo principal
+> **Estado atual (2026-09-23):** Fase 3.5 (domínio **bar/mesas/karaokês** + **acesso anônimo**) entregue. Próxima: Fase 4 (busca YouTube + fila end-to-end). Detalhes no [`TODO.md`](./TODO.md) e no [`CHANGELOG.md`](./CHANGELOG.md) (versão atual `0.1.0`).
 
-1. Usuário faz login (Google/GitHub).
-2. Cria uma sala (vira host) ou entra em uma existente via QR code/código.
-3. Participantes buscam músicas no YouTube e adicionam à fila.
-4. O host aprova entradas/músicas conforme a configuração da sala.
-5. A tela da sala reproduz a fila em sequência; o host controla o playback pelo celular.
+## Índice
 
-## Stack
+- [Visão geral](#-visão-geral)
+- [Funcionalidades](#-funcionalidades)
+- [Stack](#-stack)
+- [Arquitetura](#-arquitetura)
+- [Começando](#-começando)
+- [Login e acesso](#-login-e-acesso)
+- [Testes](#-testes)
+- [Roadmap](#-roadmap)
+- [Documentação](#-documentação)
+- [Changelog e versão](#-changelog-e-versão)
+- [Licença](#-licença)
 
-- **Next.js 16** (App Router, TypeScript) — deploied na Vercel
-- **Tailwind CSS** + **shadcn/ui**
-- **Supabase** (free tier): Postgres, Auth (OAuth Google/GitHub), Realtime
-- **YouTube Data API v3** (busca) + **YouTube IFrame Player API** (playback)
-- **Zustand** (estado), **react-hook-form + zod** (forms/validação)
+## 🚀 Visão geral
 
-## Configuração local
+O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é digitalizar a noite inteira:
 
-1. `npm install`
-2. Copie `.env.example` para `.env.local` e preencha as chaves:
+- quem canta **escolhe a mesa**, escaneia o QR e pede música sem instalar nada;
+- o host (dono da casa) **cria o bar** — com QR próprio e QR por mesa — e controla a fila, as aprovações e o playback;
+- a **tela da casa** (modo quiosque) mostra a fila e o vídeo em tempo real, legível à distância;
+- respeito à privacidade desde o dia 1 (**LGPD/GDPR**: consentimento antes de qualquer coleta).
+
+## ✨ Funcionalidades
+
+**Já implementadas (MVP):**
+- **Acesso anônimo** — qualquer pessoa entra e pede música **sem criar conta**; criar bar exige login real.
+- **Domínio bar → mesas → karaokê** — o host é 1 bar com `N` mesas (etiquetas); cada bar nasce com **1 karaokê** (fila + player próprios); "adicionar salas" fica desabilitado (multi-sala é futuro).
+- **QR por bar e por mesa** — `?bar=ZEHBAR` e `?bar=ZEHBAR&mesa=3` para entrar **em 1 toque** com a mesa já selecionada; QR legado de sala (`?code=...`) continua funcionando.
+- **Fluxo de entrada com preview** — digite o código ou escaneie → preview do bar (dono, modo de entrada, mesas) → escolha da mesa → `join_room`. Modo `open` entra direto; modo `approval` fica pendente até o host aprovar (Realtime).
+- **Dashboard** — "Meu bar" (código + mesas + badge de karaokê) para o host e "Bares que frequento" para participantes, com contador de entradas pendentes.
+- **Página do karaokê** — contexto "Bar · Mesa N"; o host vê o QR do bar e a grade de QRs das mesas (exportáveis em PNG).
+- **Login ampliado** — OAuth GitHub (ativo), Google (configuração pendente), Spotify/Discord/Facebook/X prontos na camada; dev login e-mail/senha fora de produção.
+
+**Em construção / a seguir:** busca no YouTube com cache/rate-limit/cadeia de credenciais, fila end-to-end com aprovação/modal de confirmação/reorder (Fases 4 e 5) e player kiosk controlado pelo celular (Fases 6 e 7). Ver [Roadmap](#-roadmap).
+
+## 🧱 Stack
+
+| Camada        | Tecnologia                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| Front/Back    | **Next.js 16** (App Router, TypeScript), Tailwind CSS + **shadcn/ui**, Zustand, react-hook-form + zod |
+| Banco/Backend | **Supabase** (Postgres + Auth + Realtime + RLS) — free tier                                        |
+| Vídeo         | **YouTube Data API v3** (busca) + **YouTube IFrame Player API** (playback)                         |
+| QR            | `qrcode` (geração PNG) + `@zxing/browser` (leitura por câmera)                                     |
+| Testes        | Vitest + React Testing Library + jsdom (MSW e Playwright vêm nas próximas fases)                   |
+
+## 🏗️ Arquitetura
+
+```mermaid
+flowchart LR
+    subgraph Celular
+        Host["Controller do host (celular)<br/>cria bar · aprova · controla playback"]
+        Player2["Participante (celular)<br/>QR/mesa · pede música"]
+    end
+    subgraph Casa
+        Kiosk["Player kiosk (TV/projetor)<br/>/player/[code] · sem login"]
+    end
+    subgraph Backend
+        SB["Supabase<br/>Postgres + RLS + Realtime + Auth"]
+    end
+    Host <--> SB
+    Player2 <--> SB
+    Kiosk <--> SB
+```
+
+- **Controller** — app web no celular do host/participante: busca, fila, aprovações e controle de playback.
+- **Player device** — rota pública `/player/[codigoDoKaraoke]` para navegador em modo quiosque na TV; sem overlays sobre o player do YouTube (TOS).
+- **Backend de verdade no banco** — `position` da fila por advisory lock, status inicial derivado do modo da sala (sem auto-aprovação por INSERT), **multi-tenancy** (`room_id`/`bar_id` em toda tabela) e **RLS** validando ações de host e o isolamento entre salas; preview, entrada e criação de bar via RPCs `security definer`.
+
+### Estrutura de pastas
+
+```
+src/
+├─ app/            # rotas (App Router): /, /login, /entrar, /dashboard, /salas/[codigo]
+├─ components/     # UI (bares, rooms, auth, shared)
+├─ lib/            # server actions, helpers Supabase/SSR, domínio (bars·rooms), i18n
+├─ stores/         # estado client (auth — Zustand)
+├─ types/          # tipos de domínio (room, bar)
+└─ test/           # setup do Vitest
+supabase/
+└─ migrations/     # SQL versionado (Fase 1 → 3.5)
+scripts/           # seed, apply-sql, enable-anonymous-signins, oauth
+docs/flows/        # fluxos do sistema, do usuário e banco de dados (Mermaid)
+```
+
+## ▶️ Começando
+
+Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start` local).
+
+1. Clone e instale as dependências:
+   ```bash
+   npm install
+   ```
+2. Configure o ambiente: copie `.env.example` para `.env.local` e preencha as chaves do Supabase (e as credenciais do Google Cloud, se for usar a busca):
    - `cp .env.example .env.local` (Windows: `copy .env.example .env.local`)
-3. (Opcional, para o seed de dev) `npm run seed`
-4. `npm run dev`
+   - **Nunca commite o `.env.local`** (está no `.gitignore`).
+3. (Opcional) Crie os dados de desenvolvimento:
+   ```bash
+   npm run seed        # 4 usuários + Bar 1 (ZEHBAR, 12 mesas) + Bar 2 (BARSEG, 6 mesas)
+   ```
+4. Rode:
+   ```bash
+   npm run dev
+   ```
 
-> **Importante:** nunca commite o `.env.local` (está no `.gitignore`).
+**Scripts disponíveis:**
 
-### Login OAuth (GitHub, Google, Spotify, Discord, Facebook, X)
+| Script                 | O que faz                                            |
+| ---------------------- | ---------------------------------------------------- |
+| `npm run dev`          | dev server (Next 16)                                  |
+| `npm run build`        | build de produção                                     |
+| `npm run lint`         | ESLint                                                |
+| `npm run typecheck`    | `tsc --noEmit`                                        |
+| `npm test`             | Vitest (unit)                                         |
+| `npm run seed`         | seed de dev no Supabase Cloud                         |
+| `node scripts/apply-sql.mjs <sql>` | aplica migration manualmente (padrão do time; veja `README` do `scripts/`) |
 
-Os botões de login OAuth dependem de provedores habilitados **no projeto Supabase** (credenciais ficam no dashboard, não no `.env`). A lista de provedores exibida na tela de login está em `src/lib/auth/providers.ts`; provedor sem credenciais válidas aparece **desabilitado** ("em breve").
+## 🔑 Login e acesso
 
-Configuração por provedor (a URL de callback é sempre `https://<ref>.supabase.co/auth/v1/callback`):
+- **Acesso anônimo:** botão "Continuar sem login" no `/login` → pode entrar no bar e pedir música; **não** pode criar bar (login real). Habilitação: Supabase Auth → *Allow anonymous sign-ins* (espelhado em `supabase/config.toml`; o script `scripts/enable-anonymous-signins.mjs` configura via Management API).
+- **Provedores OAuth** — configurados no projeto Supabase (credenciais no dashboard, não no `.env`); a lista exibida vive em `src/lib/auth/providers.ts`:
 
-| Provedor | Onde criar a OAuth App | Status atual |
-| -------- | ---------------------- | ------------ |
-| **GitHub** | <https://github.com/settings/developers> | ✅ Ativo |
-| **Google** | <https://console.cloud.google.com/apis/credentials> | Configurar credenciais |
-| **Spotify** | <https://developer.spotify.com/dashboard> | 🔒 Desabilitado — Web API exige Spotify Premium |
-| **Discord** | <https://discord.com/developers/applications> | 🔒 Em breve (sem credenciais) |
-| **Facebook** | <https://developers.facebook.com> | 🔒 Em breve (sem credenciais; exige app review p/ produção) |
-| **X** | <https://developer.x.com> | 🔒 Em breve (sem credenciais) |
+| Provedor | Status atual |
+| -------- | ------------ |
+| **GitHub** | ✅ Ativo |
+| **Google** | ⚙️ Configurar credenciais |
+| **Spotify** | 🔒 Desabilitado — Web API exige Spotify Premium |
+| **Discord / Facebook / X** | 🔒 Em breve (sem credenciais; app review para FB/X) |
 
-Em **Supabase → Authentication → Providers**, habilite cada provedor e cole os `Client ID`/`Secret` correspondentes. As credenciais podem ser espelhadas no `.env.local` (gitignored, **apenas para consulta** — o app usa as do dashboard; ver `.env.example`).
+Enquanto não há provedor, use a seção **"Acesso de desenvolvimento"** (somente dev) com os usuários do seed: `dono@exemplo.com`, `ana@exemplo.com`, `bruno@exemplo.com`, `betania@exemplo.com` — senha `senha123`.
 
-Enquanto os providers não estiverem habilitados, o login funciona apenas pela seção "Acesso de desenvolvimento" (e-mail/senha, exibida somente em dev) usando os usuários criados pelo `npm run seed` (`dono@exemplo.com`, `ana@exemplo.com`, `bruno@exemplo.com`, senha `senha123`).
+> **Credenciais de integração (dev):** a chave de busca `YOUTUBE_API_KEY` é **só de dev e não vai para produção** — ver `karaoke-watch-party-spec.md` §12/§13 e a tabela completa no fim deste arquivo.
 
-## Arquitetura
+## 🧪 Testes
 
-- **Controller:** app web no celular do host/participante — busca, fila, aprovações, controle de playback.
-- **Player device:** rota pública `/player/[codigoDaSala]` para navegador em modo quiosque — exibe o player do YouTube e a fila em tempo real.
-- **Realtime:** Supabase Realtime, canais escopados por sala (`room:{id}`).
+Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./TESTING.md).
 
-### Credenciais de integração (dev)
+- **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **45 testes** verdes — inclui `src/lib/bars/qr.test.ts`).
+- **Mock de rede:** MSW entra junto do código de rede (Fase 4) — serviços externos nunca são chamados em teste.
+- **E2E:** Playwright no pós-MVP-stable (player kiosk com YouTube IFrame Player API mockada).
+- **Banco/RLS:** validado via smoke e e2e, não em unit.
 
-O projeto usa dois planos de credencial no Google Cloud (projeto `karaoke-flow-509317`, YouTube Data API v3):
+> ⚠️ O pool do Vitest usa `threads` (não `forks`) por causa do caminho do workspace (`D:\BACK UP\...`) — ver CHANGELOG.
 
-| Uso                                   | Tipo OAuth      | Credencial                                                                                                             | Onde fica                    |
-| ------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Busca de músicas (chave default)      | API key (pública) | `YOUTUBE_API_KEY` (só dev — **não vai para produção**, ver spec §12/§13)                                             | `.env.local` (valor não versionado) |
-| Ferramentas dev / manifest pessoal    | **Desktop app** | Client ID `555657479128-nou62soqjjneto0as5fcivck7ijlkeg9.apps.googleusercontent.com` (público) — OAuth YouTube `readonly` | `.env.local` + JSON gitignored |
-| OAuth por-host (Fase 4 — futuro)      | Web app         | *a criar no Google Cloud* (redirect `http://localhost:3000`); client antigo foi deletado                                 | —                            |
+## 🗺️ Roadmap
 
-- **O Client ID é público** e pode aparecer neste README; o **Client Secret nunca** (apenas em `.env.local` e no JSON baixado em `credentials/`, ambos ignorados pelo git).
-- JSON original do Google (Desktop): `credentials/oauth/oauth-dev-desktop.json` (fora do versionamento).
+Plano detalhado por fases (com checklist) no [`TODO.md`](./TODO.md). Linha do tempo atual:
 
-## Documentação
+| Fase | Status |
+| ---- | ------ |
+| Fase 0 — Fundação / 1 — Banco+RLS / 2 — Auth / 3 — Salas | ✅ Concluídas |
+| **3.5 — Bar/mesas/karaokês + acesso anônimo** | ✅ **Concluída (2026-09-23)** |
+| Fase 4 — Busca YouTube + fila end-to-end | ⏭️ **Próxima** |
+| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música | ⏳ Planejada |
+| Fase 6 — Player kiosk | ⏳ Planejada |
+| Fase 7 — Controle do host pelo celular | ⏳ Planejada |
+| Fase 8 — Não-funcionais, segurança, LGPD | ⏳ Planejada |
 
-- `karaoke-watch-party-spec.md` — especificação técnica (decisões de arquitetura, segurança, UX, roadmap pós-MVP).
-- `questionario-donos-estabelecimento.md` — questionário de validação (15 perguntas) para donos de estabelecimentos.
-- `MANIFEST.md` — manifesto do produto (visão, princípios e a camada social futura).
-- `karaoke-pesquisa-academica.md` — pesquisa acadêmica e de mercado que fundamenta o produto.
-- `TODO.md` — plano de implementação por fases.
-- `CHANGELOG.md` — histórico de mudanças por release.
-- `docs/ciencia-de-dados/segmentacao-sentimental.md` — etapa futura de ciência de dados (segmentação sentimental do ouvinte; nasce neste repo, vira o repo independente `karaoke-flow-data`).
+Pendência aberta conhecida: **diagramas Mermaid de `docs/flows/*`** já foram sanitizados e validados em mermaid v10/v11 — falta confirmar a renderização no seu renderizador/preview. Registrado no `TODO.md`.
+
+## 📚 Documentação
+
+- [`karaoke-watch-party-spec.md`](./karaoke-watch-party-spec.md) — especificação técnica (arquitetura, segurança, UX, entidades, roadmap pós-MVP).
+- [`MANIFEST.md`](./MANIFEST.md) — manifesto do produto: visão, princípios e a camada social futura (inclui a seção de Belas Artes construída a partir do histórico musical real).
+- [`questionario-donos-estabelecimento.md`](./questionario-donos-estabelecimento.md) — questionário de validação (15 perguntas) com donos de estabelecimentos.
+- [`karaoke-pesquisa-academica.md`](./karaoke-pesquisa-academica.md) — pesquisa acadêmica e de mercado que fundamenta o produto.
+- [`TODO.md`](./TODO.md) — plano de implementação por fase (**estado recente**: Fase 3.5 concluída, Fase 4 em seguida).
+- [`CHANGELOG.md`](./CHANGELOG.md) — histórico por release (**versão atual `0.1.0`**).
+- [`TESTING.md`](./TESTING.md) — estratégia de testes, checklist funcional e DoD.
 
 ### Fluxos do MVP (`docs/flows`)
 
-Diagramas em **Mermaid** (rendezam nativamente no GitHub, VS Code com a extensão "Mermaid Preview", ou em <https://mermaid.live> copiando/colando o trecho).
+Diagramas em **Mermaid** (rendezam no GitHub, VS Code + "Mermaid Preview", ou <https://mermaid.live>):
 
-| Arquivo                                          | Conteúdo                                                                                                                                                                    |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/flows/fluxos-do-sistema.md`](./docs/flows/fluxos-do-sistema.md) | Fluxos técnicos de ponta a ponta: autenticação/sessão, ciclo de vida da sala, fila (regras de banco), player/playback e a proposta de **trocar música mantendo a posição**. |
-| [`docs/flows/fluxos-do-usuario.md`](./docs/flows/fluxos-do-usuario.md) | Jornadas por persona: host, participante e tela kiosk/player. Foco em UX (toques, telas, decisões).                                                                         |
-| [`docs/flows/banco-de-dados.md`](./docs/flows/banco-de-dados.md)       | Modelo relacional (ERD), matriz de RLS, máquina de estados da fila e regras de `position`/status do banco.                                                                  |
+| Arquivo | Conteúdo |
+| ------- | -------- |
+| [`docs/flows/fluxos-do-sistema.md`](./docs/flows/fluxos-do-sistema.md) | Fluxos técnicos end-to-end: autenticação/sessão (incl. anônimo), ciclo de vida do bar/karaokê, fila, player e a proposta de trocar música mantendo a posição. |
+| [`docs/flows/fluxos-do-usuario.md`](./docs/flows/fluxos-do-usuario.md) | Jornadas por persona: host, participante (entrada com mesa) e tela kiosk. |
+| [`docs/flows/banco-de-dados.md`](./docs/flows/banco-de-dados.md) | Modelo relacional (ERD), matriz de RLS, máquina de estados da fila e regras de `position`/status. |
 
-**Convenções dos diagramas:** em `flowchart`, o **quadrado** é uma tela/ação, o **losango** uma decisão e o **verde** um fim de sucesso. Eventos de **Realtime** aparecem como `publica: room:{id}`. Regras validadas **no banco** (RLS/policies/triggers) são marcadas com `(backend)`. Itens `Em aberto` dependem de decisão de produto.
+*Nota de manutenção:* todo diagrama reflete o **código real** (migrations, `src/proxy.ts`, helpers SSR) — sem virgula/parêntese no texto de arestas (limitação dos parsers mais antigos).
 
-**Como manter:** todo diagrama reflete o **código real** (`supabase/migrations/*`, `src/proxy.ts`, helpers SSR) — se uma migration mudar, atualize o diagrama correspondente no mesmo PR. Fluxos de UI só aparecem depois que a tela existir (ou como proposta marcada com `Proposta`). _Versão da doc de fluxos: corresponde ao estado do MVP após a Fase 3 (Salas) — Fase 3.5 (bar/mesas/karaokês) em andamento; novas fases são adicionadas conforme implementadas._
+### Ciência de dados (roadmap)
 
-## Testes
+- [`docs/ciencia-de-dados/segmentacao-sentimental.md`](./docs/ciencia-de-dados/segmentacao-sentimental.md) — camada PLN (embeddings SBERT + léxicos/ML, circumplexo valence-arousal, HDBSCAN) para classificar o ouvinte a partir de letras e metadados acústicos; nasce neste repo, vira o repo independente `karaoke-flow-data`.
 
-Estratégia completa, boas práticas e checklist funcional em [`TESTING.md`](./TESTING.md).
+## 📝 Changelog e versão
 
-- **Unitário / Integração:** Vitest + React Testing Library.
-- **Mock de redes:** MSW (Mock Service Worker) — serviços externos (YouTube, Supabase) nunca são chamados em teste.
-- **E2E:** Playwright (navegador real, com YouTube IFrame Player API mockada).
-- **Status:** stack definida; a instalação e configuração das ferramentas acontece nas próximas fases, junto do código que testam.
+- Seguimos [Versionamento Semântico](https://semver.org/lang/pt-BR/) (`MAJOR.MINOR.PATCH`). **Versão atual: `0.1.0`** (em desenvolvimento, sem release publicado).
+- Todo o histórico está em [`CHANGELOG.md`](./CHANGELOG.md); cada release recebe tag `v<versão>`.
 
-## Versionamento
+## 🎤 Licença
 
-O projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/) (`MAJOR.MINOR.PATCH`).
+MIT — veja o campo `license` em `package.json`. (Produto pessoal em desenvolvimento; o manifesto de visão está no [`MANIFEST.md`](./MANIFEST.md).)
 
-- **Versão atual:** `0.1.0` (em desenvolvimento — ainda sem release publicado).
-- Todo o histórico de mudanças está registrado em [`CHANGELOG.md`](./CHANGELOG.md).
-- Cada release deve receber uma tag git no padrão `v<versão>` (ex.: `v0.1.0`) e uma entrada correspondente no changelog.
+---
+
+### Apêndice — credenciais de integração (dev, Google Cloud)
+
+Projeto Google Cloud `karaoke-flow-509317` (YouTube Data API v3):
+
+| Uso | Tipo | Credencial | Onde fica |
+| --- | --- | --- | --- |
+| Busca de músicas (default) | API key | `YOUTUBE_API_KEY` (só dev — **não vai para produção**) | `.env.local` (não versionado) |
+| Ferramentas dev / manifesto pessoal | **Desktop app** | Client ID `555657479128-nou62soqjjneto0as5fcivck7ijlkeg9…` (público), OAuth YouTube `readonly` | `.env.local` + JSON gitignored |
+| OAuth por-host (Fase 4 — futuro) | **Web app** | a criar no Google Cloud (redirect `http://localhost:3000`); o client antigo foi deletado | — |
+
+O Client ID é **público** e pode aparecer aqui; o **Client Secret nunca** (só `.env.local` e `credentials/`, ignorados pelo git).

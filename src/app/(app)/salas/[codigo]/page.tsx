@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DoorOpen, Lock, Mic2, Power, QrCode, User } from "lucide-react";
+import { DoorOpen, Lock, Mic2, Power, QrCode, Store, Table2, User } from "lucide-react";
 
 import { PendingEntries } from "@/components/rooms/pending-entries";
 import type { PendingEntry } from "@/components/rooms/pending-entries";
@@ -16,8 +16,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { barJoinUrl, mesaJoinUrl } from "@/lib/bars/qr";
 import { createClient } from "@/lib/supabase/server";
-import { normalizeRoomCode, roomJoinUrl } from "@/lib/rooms/utils";
+import { normalizeRoomCode } from "@/lib/rooms/utils";
+import type { Bar } from "@/types/bar";
 
 type RoomPageProps = {
   params: Promise<{ codigo: string }>;
@@ -46,7 +48,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
           <Lock className="size-6" />
         </span>
         <div className="flex flex-col gap-1">
-          <p className="font-medium">Você ainda não entrou nesta sala</p>
+          <p className="font-medium">Você ainda não entrou neste karaokê</p>
           <p className="text-muted-foreground text-sm">
             Entre pelo QR ou pelo código para ver a fila e pedir músicas.
           </p>
@@ -70,6 +72,27 @@ export default async function RoomPage({ params }: RoomPageProps) {
     .eq("id", room.host_id)
     .maybeSingle();
   const hostName = hostProfile?.name ?? "Dono";
+
+  let bar: Bar | null | undefined;
+  if (room.bar_id) {
+    const { data: barData } = await supabase
+      .from("bars")
+      .select("*")
+      .eq("id", room.bar_id)
+      .maybeSingle();
+    bar = barData;
+  }
+
+  let myMesa: number | null = null;
+  if (!isHost) {
+    const { data: membership } = await supabase
+      .from("room_members")
+      .select("mesa_numero")
+      .eq("room_id", room.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    myMesa = membership?.mesa_numero ?? null;
+  }
 
   let pendingInitial: PendingEntry[] = [];
   if (isHost) {
@@ -102,9 +125,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h1 className="font-mono text-2xl font-bold tracking-[0.2em]">
-                {room.code}
-              </h1>
+              <h1 className="font-mono text-2xl font-bold tracking-[0.2em]">{room.code}</h1>
               {closed && (
                 <Badge variant="destructive">
                   <Power className="size-3" />
@@ -112,9 +133,40 @@ export default async function RoomPage({ params }: RoomPageProps) {
                 </Badge>
               )}
             </div>
-            <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
-              <User className="size-3.5" />
-              {isHost ? "Você é o dono" : `Sala de ${hostName}`}
+            <p className="text-muted-foreground flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-1.5">
+              {isHost ? (
+                <span className="flex items-center gap-1.5">
+                  <Store className="size-3.5" />
+                  Seu karaokê
+                  {bar && (
+                    <>
+                      <span className="text-border">·</span>
+                      {bar.nome} ({bar.code})
+                    </>
+                  )}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  {bar ? (
+                    <>
+                      <Store className="size-3.5" />
+                      {bar.nome} ({bar.code})
+                    </>
+                  ) : (
+                    <>
+                      <User className="size-3.5" />
+                      Sala de {hostName}
+                    </>
+                  )}
+                  {myMesa && (
+                    <>
+                      <span className="text-border">·</span>
+                      <Table2 className="size-3.5" />
+                      Mesa {myMesa}
+                    </>
+                  )}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-1.5">
@@ -133,22 +185,45 @@ export default async function RoomPage({ params }: RoomPageProps) {
         </div>
       </section>
 
-      {isHost && (
+      {isHost && bar && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <QrCode className="text-muted-foreground size-4" />
-              Conecte a galera
+              Cartaz e QR das mesas
             </CardTitle>
             <CardDescription>
-              Coloque este QR no cartaz da mesa. Um toque e o cliente entra.
+              QR do bar para quem ainda vai escolher a mesa; QR de cada mesa para a
+              galera entrar direto na sala.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center justify-center">
-            <RoomQr
-              value={room.qr_code_url ?? roomJoinUrl(room.code)}
-              alt={`QR da sala ${room.code}`}
-            />
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex justify-center">
+              <RoomQr
+                value={barJoinUrl(bar.code)}
+                alt={`QR do bar ${bar.nome}`}
+                fileName={`qr-bar-${bar.code}.png`}
+              />
+            </div>
+            {bar.quantidade_mesas > 1 && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                {Array.from({ length: bar.quantidade_mesas }, (_, i) => i + 1).map((n) => (
+                  <div
+                    key={n}
+                    className="border-border flex flex-col items-center gap-1 rounded-xl border p-2"
+                  >
+                    <span className="text-muted-foreground font-mono text-xs font-semibold">
+                      Mesa {n}
+                    </span>
+                    <RoomQr
+                      value={mesaJoinUrl(bar.code, n)}
+                      alt={`QR da mesa ${n} do bar ${bar.nome}`}
+                      fileName={`qr-mesa-${n}-${bar.code}.png`}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

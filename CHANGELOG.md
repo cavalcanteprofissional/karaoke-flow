@@ -24,6 +24,9 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ### Corrigido
 
+- **Vitest não iniciava os workers (`npm test`):** o pool default `forks` esbarrava no espaço do caminho do workspace (`D:\BACK UP\...`) e travava com "Timeout waiting for worker to respond". `vitest.config.mts` agora usa `pool: "threads"` — `npm test` roda e passa (29/29).
+- **`MANIFEST.md`:** cabeçalho de status removido (bloco "Status do documento / Fonte de verdade técnica / Validação de mercado") — continuação do cleanup da §6.
+
 - **Docs/fluxos (`docs/flows/*`) alinhados ao estado real do MVP:** `banco-de-dados.md` corrigido (ERD passa a refletir as migrations de verdade — `song_cache` no lugar do inexistente `queue_cache`, colunas de `profiles` (`name`/`avatar_url`), entidade `consents` (migration `0009`) adicionada; §5 deixa de dizer "esquema atual" e marca a RPC `replace_queue_song` como **proposta da Fase 5**, já que a RPC ainda não existe). `fluxos-do-sistema.md` atualizado (cabeçalho "Fases 1–3 concluídas; Fase 3.5 em andamento", §2.2 passa a incluir a etapa real de preview `get_room_preview` antes do `join_room`, §2.1 não é mais "Proposta"). `README.md` e `TODO.md`/`CHANGELOG.md` com referências atualizadas (estado da doc de fluxos pós-Fase 3, cleanup textual das notas de instrução do MANIFEST §6).
 
 - **Fase 1 — Banco de dados + RLS (Supabase):**

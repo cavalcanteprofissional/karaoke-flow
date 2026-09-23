@@ -28,15 +28,24 @@ Aplicação web **mobile-first** para karaokê ao vivo em ambientes com muitas p
 
 > **Importante:** nunca commite o `.env.local` (está no `.gitignore`).
 
-### Login OAuth (Google/GitHub)
+### Login OAuth (GitHub, Google, Spotify, Discord, Facebook, X)
 
-Os botões de login OAuth dependem de provedores configurados **no projeto Supabase** (credenciais ficam no dashboard, não no `.env`):
+Os botões de login OAuth dependem de provedores habilitados **no projeto Supabase** (credenciais ficam no dashboard, não no `.env`). A lista de provedores exibida na tela de login está em `src/lib/auth/providers.ts`; provedor sem credenciais válidas aparece **desabilitado** ("em breve").
 
-1. **Google:** crie um OAuth Client ID em <https://console.cloud.google.com/apis/credentials> e adicione a origem de redirect `https://<ref>.supabase.co/auth/v1/callback`.
-2. **GitHub:** crie uma OAuth App em <https://github.com/settings/developers> com a mesma URL de callback.
-3. Em **Supabase → Authentication → Providers**, habilite Google e GitHub e cole os `Client ID`/`Secret` correspondentes.
+Configuração por provedor (a URL de callback é sempre `https://<ref>.supabase.co/auth/v1/callback`):
 
-Enquanto os providers não forem habilitados, o login funciona apenas pela seção "Acesso de desenvolvimento" (e-mail/senha, exibida somente em dev) usando os usuários criados pelo `npm run seed` (`dono@exemplo.com`, `ana@exemplo.com`, `bruno@exemplo.com`, senha `senha123`).
+| Provedor | Onde criar a OAuth App | Status atual |
+| -------- | ---------------------- | ------------ |
+| **GitHub** | <https://github.com/settings/developers> | ✅ Ativo |
+| **Google** | <https://console.cloud.google.com/apis/credentials> | Configurar credenciais |
+| **Spotify** | <https://developer.spotify.com/dashboard> | 🔒 Desabilitado — Web API exige Spotify Premium |
+| **Discord** | <https://discord.com/developers/applications> | 🔒 Em breve (sem credenciais) |
+| **Facebook** | <https://developers.facebook.com> | 🔒 Em breve (sem credenciais; exige app review p/ produção) |
+| **X** | <https://developer.x.com> | 🔒 Em breve (sem credenciais) |
+
+Em **Supabase → Authentication → Providers**, habilite cada provedor e cole os `Client ID`/`Secret` correspondentes. As credenciais podem ser espelhadas no `.env.local` (gitignored, **apenas para consulta** — o app usa as do dashboard; ver `.env.example`).
+
+Enquanto os providers não estiverem habilitados, o login funciona apenas pela seção "Acesso de desenvolvimento" (e-mail/senha, exibida somente em dev) usando os usuários criados pelo `npm run seed` (`dono@exemplo.com`, `ana@exemplo.com`, `bruno@exemplo.com`, senha `senha123`).
 
 ## Arquitetura
 

@@ -5,7 +5,14 @@ import { AlertCircle, LoaderCircle, ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { GitHubIcon, GoogleIcon } from "@/components/auth/provider-icons";
+import {
+  DiscordIcon,
+  FacebookIcon,
+  GitHubIcon,
+  GoogleIcon,
+  SpotifyIcon,
+  XIcon,
+} from "@/components/auth/provider-icons";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,6 +30,10 @@ import { cn } from "cn";
 const PROVIDER_ICONS: Record<AuthProviderId, typeof GoogleIcon> = {
   google: GoogleIcon,
   github: GitHubIcon,
+  spotify: SpotifyIcon,
+  discord: DiscordIcon,
+  facebook: FacebookIcon,
+  x: XIcon,
 };
 
 type LoginFormProps = {
@@ -98,13 +109,15 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
           {providers.map((provider) => {
             const Icon = PROVIDER_ICONS[provider.id as AuthProviderId];
             const pending = pendingProvider === provider.id;
+            const disabled = provider.disabled === true || pendingProvider !== null;
             return (
               <Button
                 key={provider.id}
                 type="button"
                 variant="outline"
                 size="lg"
-                disabled={pendingProvider !== null}
+                disabled={disabled}
+                title={provider.disabledReason}
                 onClick={() => handleOAuth(provider)}
               >
                 {pending ? (
@@ -113,6 +126,11 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
                   <Icon className="size-4" />
                 )}
                 {provider.label}
+                {provider.disabled === true && (
+                  <span className="text-muted-foreground ml-auto text-xs font-normal">
+                    em breve
+                  </span>
+                )}
               </Button>
             );
           })}

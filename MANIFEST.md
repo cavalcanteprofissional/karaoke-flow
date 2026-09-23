@@ -1,9 +1,5 @@
 # MANIFESTO — Karakê Watch Party
 
-> **Status do documento:** rascunho em validação — v0.1 (2026-09-21)
-> **Fonte de verdade técnica:** [`karaoke-watch-party-spec.md`](./karaoke-watch-party-spec.md)
-> **Validação de mercado:** [`questionario-donos-estabelecimento.md`](./questionario-donos-estabelecimento.md)
->
 > Este manifesto não é a especificação. A especificação diz *como* o sistema funciona;
 > este manifesto diz *por que* ele existe. É lido devagar, é assinado de volta, e é revisto
 > pela camada de pessoas que esta casa serve — cantores e donos — antes de ser canônico.

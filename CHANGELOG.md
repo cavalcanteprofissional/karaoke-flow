@@ -10,6 +10,11 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ### Adicionado
 
+- **Camada de provedores de login ampliada (OAuth):**
+  - `src/lib/auth/providers.ts` passa a listar **Spotify, GitHub, Google, Discord, Facebook e X** (config desacoplada); `provider-icons.tsx` ganha ícones SVG para Spotify, Discord, Facebook e X; `login-form.tsx` renderiza botões com estado **desabilitado ("em breve")** quando o provedor não tem credenciais funcionais.
+  - **GitHub** configurado e ativo no Supabase (OAuth App `Karaoke Watch Party`); **Google** mantido; **Spotify** habilitado no Supabase mas com botão **desabilitado** na UI — a Web API exige **Spotify Premium** (a camada de autenticação do Spotify permanece construída, pronta para ativar quando a conta atender); Discord/Facebook/X prontos no código, aguardando apps OAuth externos + credenciais (app review necessário p/ Facebook e X em produção).
+  - Credenciais espelhadas em `.env.local` (gitignored, **consulta apenas**) + placeholders no `.env.example`; README ganha tabela de provedores com status e links de criação; spec §8/§10/§15 e TODO Fase 2 atualizados.
+
 - **MANIFEST v0.1 — §6 "Acerca das Belas Artes" concluída (2026-09-22):**
   - Google Takeout "YouTube and YouTube Music" recebido e processado pela ferramenta pessoal isolada `ler-takeout.mjs` (fora do repo, em `Temp\opencode\yt-music`) — ajustada nesta etapa para aceitar nomes de arquivo pt-BR (`histórico-de-visualização.json`) e limpar o sufixo ` - Topic` dos canais oficiais auto-gerados.
   - Sinal musical real extraído: **8.216 eventos de escuta** (2025→2026, sem Shorts/vídeo) sobre 48.200 entradas cruas, **2.842 faixas distintas**; top artista Florence + The Machine (1.716 ≈ 21%), segunda voz AURORA (818); década 2020 em 100% dos lançamentos; pico 2025-Q4 (2.112).

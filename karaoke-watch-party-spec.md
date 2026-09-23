@@ -143,7 +143,7 @@ Decisão para o MVP: **sem hardware/IoT dedicado**, usando qualquer navegador em
 - **Frontend/Framework:** Next.js (App Router), mobile-first, deploy na Vercel.
 - **Estilo:** Tailwind CSS.
 - **Backend/Banco/Tempo real:** Supabase (free tier obrigatório) — Postgres para dados de usuários/salas/fila, e **Supabase Realtime** (canais/broadcast ou replication de tabela) para sincronizar fila, controller e tela em tempo real. Firebase (Realtime DB/Firestore) fica como alternativa caso o free tier do Supabase Realtime se mostre insuficiente para o volume de mensagens necessário.
-- **Autenticação (MVP):** Supabase Auth, com provedores OAuth **Google e GitHub** apenas. **X (Twitter) e Meta (Facebook) ficam no roadmap para uma fase futura** — não implementar agora, mas manter o design do sistema de auth desacoplado o suficiente pra adicionar provedores depois sem retrabalho (ambos tendem a exigir processo de app review externo antes de produção, o que deve ser iniciado com antecedência quando chegar a hora).
+- **Autenticação (MVP):** Supabase Auth, com provedores OAuth **GitHub e Google** como login ativos e a estrutura desacoplada (config em `src/lib/auth/providers.ts`) já cobrindo **Spotify, Discord, Facebook e X** — botões renderizados desabilitados até as credenciais/processos externos ficarem prontos. **Spotify** fica indisponível enquanto a Web API do app exigir conta **Premium**; **Facebook e X** tendem a exigir processo de app review externo antes de produção, a ser iniciado com antecedência quando chegar a hora. Não implementar nenhum provedor como acoplamento fixo.
 - **YouTube:** YouTube Data API v3 (busca) + YouTube IFrame Player API (playback embutido).
 - **QR Code:** geração no backend/frontend ao criar a sala (ex: lib `qrcode`), leitura via câmera no navegador (ex: `@zxing/browser` ou `html5-qrcode`).
 
@@ -159,7 +159,7 @@ Decisão para o MVP: **sem hardware/IoT dedicado**, usando qualquer navegador em
 ## 10. Decisões Já Tomadas
 
 - Tempo real e banco: **Supabase** (free tier), com **Firebase** como plano B se o free tier do Supabase Realtime não comportar o volume de eventos.
-- Autenticação (MVP): **Supabase Auth** com OAuth de **Google e GitHub**. X e Meta ficam no roadmap futuro (ver seção 15).
+- Autenticação (MVP): **Supabase Auth** com OAuth de **GitHub e Google** ativos; Spotify, Discord, Facebook e X já construídos na camada (botões desabilitados até credenciais prontas) — ver seção 15 para processos externos/app review.
 - Tela do projetor/TV: **navegador em modo quiosque** (TV Box/Fire Stick), sem hardware dedicado no MVP.
 - Restrição global: toda a stack deve operar em **free tier**.
 - Escala-alvo: protótipo com **1 sala e ~50 usuários simultâneos**, evoluindo para **10+ salas e ~5.000 usuários** (detalhes na seção 12).
@@ -172,7 +172,7 @@ Nenhuma pendência crítica de arquitetura no momento — os itens anteriores fo
 
 ## 15. Roadmap Futuro (fora do MVP)
 
-- **Login via X (Twitter) e Meta (Facebook)**, além de Google/GitHub já implementados. Iniciar o processo de app review desses provedores com antecedência, pois normalmente não é aprovação instantânea.
+- **Ativar provedores OAuth já construídos na camada de auth (MVP+)**: Discord, Facebook, X — criar os apps externos, obter credenciais e habilitar no Supabase. Spotify volta quando a conta tiver **Premium** (necessário para a Web API de login). Iniciar o processo de app review de Facebook e X com antecedência, pois normalmente não é aprovação instantânea.
 - Reavaliar o modelo de chave de API do YouTube quando o número de hosts crescer: hoje é "chave por host com default do desenvolvedor via `.env.local`"; em escala maior, considerar pool de chaves rotativas ou aumento de cota oficial via auditoria do Google.
 
 ## 12. Escalonamento — de 1 sala/50 usuários para 10+ salas/5.000 usuários

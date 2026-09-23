@@ -79,7 +79,8 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Fase 2 — Autenticação (Google + GitHub)
 
-- [ ] Configurar providers Google e GitHub no projeto Supabase (credenciais OAuth externas — ver README)
+- [x] Configurar providers **GitHub** e **Spotify** no projeto Supabase (credenciais OAuth externas — ver README); **Google** pendente de credencial
+- [x] Camada de providers estendida (Spotify, Discord, Facebook, X) com botões desabilitados até credenciais prontas — **Spotify bloqueado: Web API exige Premium**
 - [x] Helpers Supabase SSR: `client`, `server`, middleware/proxy de sessão
 - [x] Página de login com botões OAuth (Google, GitHub)
 - [x] Rota de callback + exchange de código

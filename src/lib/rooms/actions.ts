@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { revokeGoogleToken } from "@/lib/youtube/app-oauth";
 import type { MemberStatus, RoomEntryMode, RoomQueueApprovalMode } from "@/types/room";
 
 function friendlyError(message: string, fallback: string): string {
@@ -72,18 +74,14 @@ export async function closeRoomAction(
   roomId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("rooms")
-    .update({ status: "closed" })
-    .eq("id", roomId)
-    .select("id");
+  const { data, error } = await supabase.rpc("close_room", { p_room_id: roomId });
   if (error) {
     return {
       ok: false,
       error: friendlyError(error.message, "Não foi possível encerrar a sala."),
     };
   }
-  if (!data || data.length === 0) {
+  if (data !== true) {
     return { ok: false, error: "Só o dono pode encerrar a sala." };
   }
   revalidatePath("/salas/[codigo]", "page");
@@ -136,5 +134,48 @@ export async function leaveRoomAction(
     return { ok: false, error: "Você não é membro desta sala." };
   }
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function youtubeDisconnectAction(
+  roomId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Faça login para administrar a sala." };
+  }
+
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("host_id")
+    .eq("id", roomId)
+    .maybeSingle();
+  if (!room || room.host_id !== user.id) {
+    return { ok: false, error: "Só o dono pode desconectar a conta do YouTube." };
+  }
+
+  const admin = createAdmin();
+  const { data: stored } = await admin
+    .from("youtube_oauth_tokens")
+    .select("refresh_token")
+    .eq("host_id", user.id)
+    .maybeSingle();
+
+  if (stored?.refresh_token) {
+    await revokeGoogleToken(stored.refresh_token);
+  }
+
+  const { error } = await admin.from("youtube_oauth_tokens").delete().eq("host_id", user.id);
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível remover a conexão."),
+    };
+  }
+
+  revalidatePath("/salas/[codigo]", "page");
   return { ok: true };
 }

@@ -43,7 +43,7 @@ flowchart TD
     D1 --> E["Tela do host: fila + painéis de aprovação"]
     E --> F["Publica QR das mesas (cartaz) p/ participantes"]
     F --> G["Host acompanha em aprovação realtime e controla playback pelo celular"]
-    G --> H["Fim da noite: fechar a sala (não aceita mais ninguém)"]
+    G --> H["Fim da noite: fechar a sala (só o dono) —<br/>cancela a fila, interrompe e expulsa todos os participantes"]
 ```
 
 ---
@@ -127,7 +127,7 @@ flowchart TD
     B --> C["1º toque destrava autoplay (restrição mobile)"]
     C --> D["Toca; fila lateral legível a distância; destaque para 'próxima'"]
     D --> E["Eventos realtime sem reload: play/pause/skip/reorder"]
-    E --> F["Fim da noite: sala fechada → tela de encerramento ou volta ao CTA de QR"]
+    E --> F["Fim da noite: dono encerra → fila cancelada, participantes expulsos,<br/>tela de encerramento (participantes) / volta ao CTA de QR"]
 ```
 
 ---

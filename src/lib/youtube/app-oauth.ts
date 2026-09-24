@@ -140,3 +140,20 @@ export async function getAppAccessToken(
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
   return refreshAppAccessToken(fetcher);
 }
+
+/** Revoga um refresh token na Google (oauth2.googleapis.com/revoke). */
+export async function revokeGoogleToken(
+  refreshToken: string,
+  fetcher: typeof fetch = fetch
+): Promise<boolean> {
+  if (!refreshToken) return false;
+  try {
+    const response = await fetcher(
+      `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refreshToken)}`,
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}

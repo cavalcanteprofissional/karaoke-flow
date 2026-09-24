@@ -21,6 +21,7 @@ import {
   SEARCH_RATE_LIMIT_WINDOW_MS,
 } from "@/lib/youtube/rate-limit";
 import { searchYouTube } from "@/lib/youtube/search";
+import type { YouTubeAuthMode } from "@/lib/youtube/types";
 import {
   searchYouTubeForRoom,
   type MembershipStatus,
@@ -180,7 +181,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         devApiKey: resolveDevApiKeyFromEnv(),
       });
     },
-    runSearch: async ({ query, apiKey }) => searchYouTube({ query, apiKey, maxResults: 10 }),
+    runSearch: async ({ query, credential }) => {
+      const authMode: YouTubeAuthMode =
+        credential.source === "app" || credential.source === "host" ? "bearer" : "key";
+      return searchYouTube({ query, apiKey: credential.key, authMode, maxResults: 10 });
+    },
   });
 
   return renderOutcome(outcome);

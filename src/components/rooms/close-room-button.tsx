@@ -19,7 +19,7 @@ export function CloseRoomButton({ roomId, disabled }: CloseRoomButtonProps) {
 
   async function handleClose() {
     const confirmed = window.confirm(
-      "Encerrar a sala? Ninguém mais consegue entrar, mas a fila atual continua tocando."
+      "Encerrar a sala? A fila será cancelada e interrompida, e todos os participantes serão expulsos. Só você (dono) pode reabrir."
     );
     if (!confirmed) return;
 

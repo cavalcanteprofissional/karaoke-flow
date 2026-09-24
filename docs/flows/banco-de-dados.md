@@ -66,7 +66,7 @@ erDiagram
         text title
         text thumbnail_url
         integer duration_seconds
-        queue_item_status status "pending|approved|playing|played|rejected|skipped"
+        queue_item_status status "pending|approved|playing|played|rejected|skipped|cancelled"
         integer position "max+1 por sala (advisory lock)"
         timestamptz added_at
         timestamptz updated_at
@@ -113,7 +113,9 @@ flowchart LR
     subgraph INSERT queue_items
         A[insert] --> B["position = max+1 por sala"]
         B --> C["advisory xact lock por sala"]
-        C --> D{queue_approval_mode}
+        C --> C1{added_by é o DONO?}
+        C1 -->|sim| E["status = approved"]
+        C1 -->|não| D{queue_approval_mode}
         D -->|auto| E["status = approved"]
         D -->|manual| F["status = pending"]
         A --> G["added_by = auth.uid() (policy)"]
@@ -151,7 +153,8 @@ flowchart LR
 ### Pontos de atenção (segurança)
 
 - **Host actions nunca relaxam na UI**: aprovar/reordenar/deletar fila e aprovar/rejeitar entrada são host-only no banco.
-- **Status inicial da fila é derivado** (`queue_items_initial_status`): o client não escolhe; remove auto-aprovação por INSERT.
+- **Status inicial da fila é derivado** (`queue_items_initial_status`): o client não escolhe; remove auto-aprovação por INSERT. Exceção: pedidos do **dono** entram `approved` sempre (não espera a própria aprovação).
+- **Encerrar sala = RPC `close_room` (`security definer`)** (migration `20260923000019`): checa `is_host`, marca `rooms.status='closed'`, cancela a fila toda (`cancelled`, status terminal novo) e **expulsa todos** (`DELETE room_members`). Atômico — o client não ajusta essas peças separadamente.
 - **Aprovação de entrada** só via RPC `join_room` (`security definer`) — INSERT direto sempre vira `pending`.
 - **Preview / entrada e criação de bar são RPCs `security definer`** (`get_entry_preview`, `join_room`, `create_bar`) — o leitor não-membro não acessa `rooms`/`bars` por SELECT.
 - **Multi-tenancy**: toda tabela de domínio tem `room_id`/`bar_id`; nada de assumir bar/sala única.
@@ -163,17 +166,21 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> pending: sala manual
-    [*] --> approved: sala auto
+    [*] --> pending: sala manual (não-host)
+    [*] --> approved: sala auto, ou pedido do DONO
     pending --> approved: host aprova
     pending --> rejected: host rejeita
     approved --> playing: player inicia
     approved --> rejected: host rejeita (antes de tocar)
     playing --> played: termina
     playing --> skipped: host pula
+    pending --> cancelled: dono encerra a sala
+    approved --> cancelled: dono encerra a sala
+    playing --> cancelled: dono encerra a sala (interrompe)
     rejected --> [*]
     played --> [*]
     skipped --> [*]
+    cancelled --> [*]
 ```
 
 ---

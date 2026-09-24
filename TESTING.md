@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-23):** suite com **146 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, e a rota `/api/youtube/search` com **16 provas via MSW** mockando a YouTube Data API). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-23):** suite com **152 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — e o **roundtrip authorize→callback** com 4 provas do estado). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 
 ---
 
@@ -104,7 +104,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Entrar via código digitado → entra direto com `entryMode=open`.
 - [ ] Entrar via scan de QR → nome da sala aparece → confirma → entra.
 - [ ] `entryMode=approval`: pedido de entrada fica `pending`; host aprova/rejeita pelo painel.
-- [ ] Sair da sala remove membro; host fecha sala (`status=closed`).
+- [ ] Sair da sala remove membro; **host encerra a sala**: a fila é **cancelada** (`cancelled`) e **todos são expulsos**; participantes veem tela de "sala encerrada"; não-host não consegue encerrar.
 - [ ] Toggles persistidos recarregam corretos ao reentrar na sala.
 
 ### 3.4 Busca YouTube (Fase 4)
@@ -117,12 +117,15 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [x] Rate limit por usuário/IP bloqueia spam de buscas — **429 + `Retry-After`**.
 - [x] Cache compartilhado reusa resultados (2ª busca do mesmo termo **sem bater na Google** — `cached: true`).
 - [x] **Gate de presença física na busca e na adição** (fora do raio / sem geo → bloqueado com CTA "Permitir localização"; host isento).
-- [x] OAuth por-host: "Conectar conta do Google" no RoomSettings grava `youtube_oauth_tokens` e vira a credencial da busca.
+- [x] OAuth por-host: "Conectar com o Google" no RoomSettings grava `youtube_oauth_tokens`, vira a credencial da busca (**Bearer**) e o bloco passa a mostrar **"conectado à conta Google · desde …"**.
+- [x] **Remover conexão** revoga o token na Google e apaga a linha; a busca cai para a próxima credencial da cadeia.
+- [x] Busca usando OAuth (host/app) envia `Authorization: Bearer` e **nunca** `?key=` — **testes MSW** (host e app cobrem os dois caminhos).
 
 ### 3.5 Fila — adicionar música (Fase 5)
 
 - [ ] `queueApprovalMode=auto`: música entra direto na fila.
 - [ ] `queueApprovalMode=manual`: música entra `pending`; host aprova/rejeita.
+- [ ] **Dono da sala** pedindo música entra **`approved` direto**, mesmo em `queueApprovalMode=manual` (trigger `queue_items_initial_status`).
 - [ ] **`requireSongConfirmation=true`**: ao clicar "Adicionar à fila", abre modal com thumbnail + título + duração; "Cancelar" não adiciona; "Confirmar" adiciona.
 - [ ] **`requireSongConfirmation=false`**: adiciona direto, sem modal.
 - [ ] Toggle `requireSongConfirmation` presente na config da sala (host) e persistido.

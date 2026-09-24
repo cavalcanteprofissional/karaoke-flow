@@ -29,7 +29,7 @@ export type SearchPorts = {
   resolveCredential: () => Promise<ResolvedApiKey | null>;
   runSearch: (params: {
     query: string;
-    apiKey: string;
+    credential: ResolvedApiKey;
   }) => Promise<YouTubeVideo[]>;
 };
 
@@ -139,7 +139,7 @@ export async function searchYouTubeForRoom(
   }
 
   try {
-    const results = await ports.runSearch({ query, apiKey: credential.key });
+    const results = await ports.runSearch({ query, credential });
     await ports.cache.put(query, results);
     return { ok: true, data: { results, cached: false, source: credential.source } };
   } catch (error) {

@@ -155,9 +155,14 @@ Regra de reentrada (migration `20260921000004`): `rejected` pode reentrar (RPC a
 
 ```mermaid
 flowchart TD
-    A["Host: Fechar sala"] --> B["UPDATE rooms.status = closed (backend: host-only)"]
-    B --> C["Canal Realtime encerra as operações"]
-    A2["Participante: Sair"] --> B2["DELETE room_members (self) (backend)"]
+    A["Host: Fechar sala (botão, confirm modal)"] --> B["RPC close_room(room_id) — (backend, security definer)"]
+    B --> B1{É o host? (is_host)}
+    B1 -->|não| B2["erro: só o dono pode encerrar a sala"]
+    B1 -->|sim| C["rooms.status = closed"]
+    C --> D["queue_items pendentes/approved/playing → cancelled (fila cancelada e interrompida)"]
+    C --> E["DELETE room_members (todos expulsos)"]
+    D --> F["Realtime → fila some da tela; participantes veem 'sala encerrada'"]
+    A2["Participante: Sair"] --> G["DELETE room_members (self) (backend)"]
 ```
 
 ---
@@ -177,10 +182,12 @@ flowchart TD
     C --> D["INSERT queue_items (.select() p/ validar RLS)"]
     B -->|não| D
     D --> E["Trigger position: advisory lock por sala, max+1 (backend)"]
-    D --> F["Trigger status: lê queue_approval_mode (backend)"]
-    F --> G2{Modo da sala}
-    G2 -->|auto| H["status = approved (entra na fila)"]
-    G2 -->|manual| I["status = pending (fila de aprovação)"]
+    D --> F["Trigger status: is_host(added_by) → approved; senão lê queue_approval_mode (backend)"]
+    F --> G2{Added_by é o dono?}
+    G2 -->|sim| H["status = approved (nunca espera a própria aprovação)"]
+    G2 -->|não| G3{Modo da sala}
+    G3 -->|auto| H
+    G3 -->|manual| I["status = pending (fila de aprovação)"]
     H --> J["revalidatePath + Realtime → QueueList atualiza"]
     I --> J
 ```
@@ -218,7 +225,7 @@ sequenceDiagram
         R-->>S: 200 { results, cached: true }
     else cache miss
         R->>R: credencial: chave do bar → OAuth host → OAuth app → dev
-        R->>YT: search.list (safeSearch=strict, videoEmbeddable) + videos.list (duração)
+        R->>YT: search.list (safeSearch=strict, videoEmbeddable) + videos.list (duração)<br/>OAuth (app/host) via `Authorization: Bearer`; API key via `?key=`
         YT-->>R: itens
         R->>DB: song_cache.upsert (TTL 7d)
         R-->>S: 200 { results, cached: false, source }
@@ -226,7 +233,7 @@ sequenceDiagram
     S-->>P: lista (thumbnail + título + duração) + "Adicionar à fila"
 ```
 
-**OAuth por-host:** bloco "Conexão YouTube do host" no `RoomSettings` → `/auth/youtube/authorize` (estado nonce em cookie httpOnly, `access_type=offline&prompt=consent`) → Google → `/auth/youtube/callback` (exchange → `youtube_oauth_tokens`, **sem policies — service role**) → redirect à sala. Fallback do app: `scripts/youtube-app-oauth.mjs` (loopback) coleta o `YOUTUBE_APP_REFRESH_TOKEN` para o `.env.local`.
+**OAuth por-host:** bloco "Conta do YouTube" no `RoomSettings` (mostra "conectado à conta Google + data" quando há token, com botão "Remover conexão" que **revoga na Google** e apaga a linha) → `/auth/youtube/authorize` (estado nonce em cookie httpOnly, `access_type=offline&prompt=consent`) → Google → `/auth/youtube/callback` (exchange → `youtube_oauth_tokens`, **sem policies — service role**) → redirect à sala. Fallback do app: `scripts/youtube-app-oauth.mjs` (loopback) coleta o `YOUTUBE_APP_REFRESH_TOKEN` para o `.env.local`.
 
 ### 3.2 Aprovação (host)
 
@@ -244,17 +251,21 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> pending: modo manual
-    [*] --> approved: modo auto
+    [*] --> pending: modo manual (não-host)
+    [*] --> approved: modo auto, ou pedido do DONO da sala
     pending --> approved: host aprova
     pending --> rejected: host rejeita
     approved --> playing: player inicia
     approved --> rejected: host rejeita (antes de tocar)
     playing --> played: termina
     playing --> skipped: host pula
+    pending --> cancelled: dono encerra a sala
+    approved --> cancelled: dono encerra a sala
+    playing --> cancelled: dono encerra a sala (interrompe)
     rejected --> [*]
     played --> [*]
     skipped --> [*]
+    cancelled --> [*]
 ```
 
 > A operação de **trocar música** (ver §5) mantém o item no mesmo estado de status em que está (com re-regra opcional conforme decisão de produto) — não cria um estado novo.

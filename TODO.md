@@ -16,7 +16,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 1. ~~Tela 1 — Onboarding + consentimento LGPD + base i18n~~ (**entregue em 2026-09-21** — ver sub-bloco da Fase 2).
 2. ~~**Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5)~~ (**entregue em 2026-09-23** — Blocos A–F concluídos: migrations 00010–00014 aplicadas no projeto Cloud via `apply-sql.mjs`, anonymous sign-ins, reseed (Bar 1/Bar 2), lib+actions+16 testes de `qr.ts`, UI Bloc E, docs Bloc F; lint/typecheck/build e 45 testes verdes. **Decisões de modelo fechadas com o PO** — ver bloco da Fase 3.5 abaixo). *Pendências residuais registradas ao final da Fase 3.5.*
-3. ~~**Busca + fila end-to-end** (Fase 4)~~ (**entregue em 2026-09-23** — Blocos A–H concluídos; ver seção Fase 4 abaixo).
+3. ~~**Busca + fila end-to-end** (Fase 4)~~ (**entregue em 2026-09-23** — Blocos A–H concluídos + hardening pós-entrega I; ver seção Fase 4 abaixo).
 4. ~~**Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"**~~ (**entregue em 2026-09-22**): Google Takeout "YouTube and YouTube Music" (2 pedidos, 1 recebido) recebido; `ler-takeout.mjs` (fora do repo, `Temp\opencode\yt-music`) ajustado p/ nomes pt-BR + strip ` - Topic` e rodado → 8.216 eventos de escuta (2025→2026, sem Shorts/vídeo, 2.842 faixas); §6 do [`MANIFEST.md`](./MANIFEST.md) escrita com o retrato real (Florence + The Machine dominante, AURORA, década 2020); nota de instrução do autor e cartão do ouvido removidos, nota de rodapé aponta a etapa de ciência de dados; fonte no §8 e nota da spec §16/§17 atualizadas. Zip do Takeout isolado em `.local-data/takeout/` (gitignored, nunca versionado). *Pendência residual anotada:* análise cruzada (histórico × curtidas) fica para o futuro repo `karaoke-flow-data` (ciência de dados — ver `docs/ciencia-de-dados/segmentacao-sentimental.md`).
 
 > A ampliação da **bateria de testes** acompanha as fases (ver seção "Plano de testes por fase" abaixo).
@@ -25,7 +25,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Plano de testes por fase (ampliação da bateria)
 
-> **Situação atual (2026-09-23):** Vitest + RTL + jsdom com **146 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 31, `queue` matriçada, rota `/api/youtube/search` **16 via MSW**). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
+> **Situação atual (2026-09-23):** Vitest + RTL + jsdom com **152 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 31, `queue` matriçada, rota `/api/youtube/search` **18 via MSW** — incl. Bearer de OAuth host/app — e **roundtrip OAuth authorize→callback 4**). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
 >
 > Princípios: testar o que agrega (helpers de domínio e componentes críticos em unit; fluxos de usuário em e2e); manter a suíte rápida; RLS validada via smoke/e2e, não em unit.
 
@@ -58,7 +58,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 > **Pendência externa:** ~~aguardando credenciais válidas~~ — **resolvida em 2026-09-21**: projeto Supabase `kskoipyzqcacccepcqpc` reativado (estava pausado), credenciais atualizadas e validadas. `YOUTUBE_API_KEY` **validada** (`search.list` respondeu OK em 2026-09-21) — usada em dev; **não vai para produção** (ver Fase 4). Credenciais OAuth `YOUTUBE_OAUTH_CLIENT_ID/SECRET` adicionadas no `.env.local` para o modelo chave-por-host.
 >
-> ⚠️ **OAuth client (2026-09-21):** o client **Web** (redirect `http://localhost:3000`) foi **deletado** no Google Cloud; o client atual é **Desktop app** (`555657479128-…googleusercontent.com`, loopback — para ferramentas dev e coleta do manifesto; JSON gitignored em `credentials/`). Para a **Fase 4 (OAuth por-host)** é preciso **recriar o client Web** (+ verificar tela de consentimento/test users) — código das rotas e o script de coleta do app já estão prontos (2026-09-23); é a única pendência para o E2E real do OAuth.
+> ⚠️ **OAuth client (2026-09-21 → resolvido 2026-09-23):** o client **Web** antigo havia sido deletado no Google Cloud (restava só o **Desktop app** `555657479128-nou62soqjj…`, loopback, p/ ferramentas dev). Para a **Fase 4 (OAuth por-host)** o client Web foi **recriado** em 2026-09-23 (`karaoke-flow-web`, redirects `http://localhost:3000/auth/youtube/callback` + `http://localhost:8891/`) e o `YOUTUBE_OAUTH_CLIENT_ID/SECRET` do `.env.local` agora apontam para ele (`credentials/oauth/oauth-dev-web.json`). O client Desktop permanece no console p/ ferramentas dev/manifesto (não é mais usado pelo app).
 
 **Decisão:** migrations versionadas com **Supabase CLI** (`supabase/migrations`, aplicadas via `supabase db push`).
 
@@ -140,7 +140,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 - [ ] **Docs/flows (`docs/flows/*.md`):** diagramas **Mermaid** sanitizados e validados com `mermaid.parse` **v10.9.8 + v11.17.2** (26/26 OK) — arestas **sem vírgula/parêntese** (`-->|label|` só palavras simples), `?` apenas no **fim** de nó `{…}`, ERD sem relacionamento encadeado, sem backticks/newline cru em labels. **Ainda falta:** conferir a renderização no renderizador/preview usado (limpar cache do editor — o erro antigo citado usava o texto pré-correção) e varrer os demais `.md` do repo com o mesmo critério de sintaxe.
 - [ ] **Migrations aplicadas via `apply-sql.mjs`** não registradas em `schema_migrations` (sem `SUPABASE_DB_PASSWORD`) — anotar reaplicação/criação local quando o acesso via CLI for resolvido.
-- [ ] **`YOUTUBE_APP_REFRESH_TOKEN`** (script `scripts/youtube-app-oauth.mjs`) — pré-requisito do fallback do app na Fase 4.
+- [x] **`YOUTUBE_APP_REFRESH_TOKEN`** coletado em 2026-09-23 via `scripts/youtube-app-oauth.mjs` (conta dev) e gravado no `.env.local` — fallback do app da Fase 4 ativo (expira em 7 dias enquanto o consent screen estiver em *Testing*).
 - [ ] **Deploy Vercel** permanece adiado para o fim do MVP (decisão registrada no CHANGELOG).
 
 - [ ] Migration `bars` (1:1 com `profiles` de host): `host_id` unique, `code` 6 chars, `nome`, `cidade`, `endereco`, `quantidade_mesas` (0–999), `karaokes_simultaneos` (default 1), `criado_em`
@@ -183,7 +183,8 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] **E. OAuth por-host:** rotas `/auth/youtube/authorize` (state nonce → cookie `kf-yt-oauth` httpOnly; `access_type=offline&prompt=consent`) e `/auth/youtube/callback` (exchange → upsert em `youtube_oauth_tokens`), `scripts/youtube-app-oauth.mjs` (coleta do `YOUTUBE_APP_REFRESH_TOKEN`), **cadeia com OAuth do host** (`getHostAccessToken` via `admin`), Bloco "Conexão YouTube do host" no `RoomSettings` (chave manual própria + Conectar com Google) + `updateYoutubeKeyAction`.
 - [x] **F. MSW:** devDep instalado; **16 testes** de rota `route.test.ts` (401, 404, PENDING, sucesso+chave do bar, **chave fora do payload**, cache miss→hit sem bater no YouTube, cota friendly 502, erro genérico 502, NO_CREDENTIAL, 429+Retry-After, OUTSIDE_BAR, dentro do raio, GEO_UNAVAILABLE, host isento).
 - [x] **G. Docs:** spec §4/§6/§12/§13, `docs/flows` (busca no fluxo da sala), CHANGELOG, README (se for o caso) atualizados; lint/typecheck/build e **146 testes** verdes.
-- [x] **H. Pendências externas (registradas):** `YOUTUBE_APP_REFRESH_TOKEN` a coletar (script E); recriar **client Web** do OAuth no Google Cloud (`YOUTUBE_OAUTH_CLIENT_ID` já no `.env.local`); **`queue_items` publicada** na `supabase_realtime` (migration `20260923000017` — aplicada; antes só `room_members` estava).
+- [x] **H. Pendências externas (resolvidas em 2026-09-23):** **client Web** criado no Google Cloud (`karaoke-flow-web`, redirects `http://localhost:3000/auth/youtube/callback` + `http://localhost:8891/`; `YOUTUBE_OAUTH_CLIENT_ID/SECRET` atualizados + JSON em `credentials/oauth/oauth-dev-web.json`); **`YOUTUBE_APP_REFRESH_TOKEN` coletado** com `scripts/youtube-app-oauth.mjs` e gravado no `.env.local` (conta dev autorizada; expira em 7 dias enquanto o consent screen estiver em *Testing*); **`queue_items` publicada** na `supabase_realtime` (migration `20260923000017` — aplicada; antes só `room_members` estava).
+- [x] **I. Hardening pós-entrega (2026-09-23):** **state do OAuth não era gravado** (duplo-encode → `state-mismatch` silencioso; removido extra `encodeURIComponent` + cookie `secure` condicional + helpers movidos p/ `src/app/auth/youtube/oauth.ts` — 4 testes de roundtrip); **busca 502 com OAuth** corrigida (`Authorization: Bearer` para app/host, `?key=` para room/dev — +2 testes MSW); **UI de conexão** no RoomSettings ("conectado · desde …" + "Remover conexão" com **revoke na Google**); **dono auto-aprovado** (migration `20260923000018`); **encerrar sala = RPC `close_room`** (migration `20260923000019`: status `cancelled` novo + expulsa membros; página mostra "sala encerrada"); docs/CHANGELOG/testes atualizados → **152 testes** verdes.
 
 - [x] Rota de servidor `/api/youtube/search` — credencial injetada apenas no backend, **nunca no client**
 - [x] `safeSearch=strict` + `videoEmbeddable=true` no `search.list` (moderação + só vídeos embutíveis)
@@ -203,11 +204,23 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] `/salas/[codigo]/buscar` (rota filha) + lista simples da fila na página da sala (atualiza ao adicionar)
 - [x] Instalar MSW + testes da rota/lib (sucesso, cota esgotada, 429, cache hit, credencial nunca no payload) e da `addSongToQueueAction` (geo gate, RLS)
 
+### Validação manual (E2E dev) — pendente de rodar (24/09)
+
+> Rode tudo em `npm run dev -- --webpack`, login dev `dono@exemplo.com`/`senha123`, sala `KARAOK` (bar `ZEHBAR`). Google OAuth client Web `karaoke-flow-web` ✓ (redirects `http://localhost:3000/auth/youtube/callback` + `http://localhost:8891/`). Consent screen ainda em **Testing** → refresh tokens expiram em ~7 dias (migrar para **Production** após validar).
+
+- [ ] **OAuth por-host conecta e grava de verdade:** "Conectar com o Google" no `RoomSettings` → volta para o callback → bloco mostra **"conectado à conta Google · desde …"**; conferir 1 linha nova em `youtube_oauth_tokens` (Management API).
+- [ ] **Busca com OAuth (sem 502):** `/salas/KARAOK/buscar` retorna resultados com o token do host (Bearer) — nada de "Não foi possível buscar no YouTube agora".
+- [ ] **Dono auto-aprovado:** com a sala em `queueApprovalMode=manual`, o dono pede uma música → status **`approved`** de primeira (trigger `queue_items_initial_status`).
+- [ ] **Busca/adicionar de participante:** entrar com mesa + geo (ex. `ana@exemplo.com`) → busca ok e adiciona música respeitando o modo da sala (geo gate: celular precisa permitir localização).
+- [ ] **Encerrar sala (só o dono):** botão "Encerrar sala" → confirm → sala `closed`, itens não tocados viram **`cancelled`**, **todos os `room_members` são deletados** (expulsos); quem era membro vê a tela "Esta sala foi encerrada"; tentativa de encerrar como não-host deve falhar (UI escondida + backend recusa).
+- [ ] **Remover conexão:** "Remover conexão" revoga o token na Google e apaga a linha de `youtube_oauth_tokens`; a busca volta a cair para o OAuth do app → dev.
+- [ ] **Uso normal da Fase 4 (regressão):** debounce, 429 com retry, cache hit (`cached: true`), quota friendly, presença física fora do raio bloqueando.
+
 ## Fase 5 — Fila: realtime, aprovação e confirmação
 
 > A adição à fila (com `position` por advisory lock e status inicial por modo de aprovação) já é entregue na Fase 4; esta fase fecha o ecossistema da fila.
 
-- [ ] Estados da fila e transições: `pending → approved → playing → played`; `rejected`, `skipped`
+- [ ] Estados da fila e transições: `pending → approved → playing → played`; `rejected`, `skipped`; `cancelled` (terminal — dono encerra a sala, já entregue na Fase 4)
 - [ ] `queueApprovalMode = auto`: entra direto na fila
 - [ ] `queueApprovalMode = manual`: entra como `pending` até host aprovar
 - [ ] `requireSongConfirmation = true`: modal de confirmação (Dialog) com thumbnail/título/duração antes de enviar à fila; só persiste após "Confirmar"

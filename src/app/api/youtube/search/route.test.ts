@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 
+import { clearCachedAppToken } from "@/lib/youtube/app-oauth";
+
 const h = vi.hoisted(() => {
   type Row = Record<string, unknown>;
   type GeoValue = string | null;
@@ -117,12 +119,19 @@ import { GET } from "./route";
 const ROOM_KEY = "YT-KEY-ROOM-SECRET-123";
 
 let googleMode: "ok" | "quota" | "search-error" = "ok";
-const searchCalls: Array<{ q: string | null; key: string | null }> = [];
+const searchCalls: Array<{ q: string | null; key: string | null; auth: string | null }> = [];
 
 const server = setupServer(
+  http.post("https://oauth2.googleapis.com/token", () =>
+    HttpResponse.json({ access_token: "ya29.TEST_ACCESS", expires_in: 3600 })
+  ),
   http.get("https://www.googleapis.com/youtube/v3/search", ({ request }) => {
     const url = new URL(request.url);
-    searchCalls.push({ q: url.searchParams.get("q"), key: url.searchParams.get("key") });
+    searchCalls.push({
+      q: url.searchParams.get("q"),
+      key: url.searchParams.get("key"),
+      auth: request.headers.get("authorization"),
+    });
     if (googleMode === "quota") {
       return HttpResponse.json(
         {
@@ -217,6 +226,8 @@ beforeAll(() => {
 afterEach(() => {
   googleMode = "ok";
   searchCalls.length = 0;
+  clearCachedAppToken();
+  vi.unstubAllEnvs();
   h.reset({});
 });
 afterAll(() => {
@@ -397,5 +408,36 @@ describe("GET /api/youtube/search", () => {
     const response = await GET(requestFor());
     expect(response.status).toBe(200);
     expect((await response.json()).source).toBe("room");
+  });
+
+  it("token OAuth do host é enviado como Bearer e a key não vaza", async () => {
+    seedRoom({ youtube_api_key: null });
+    vi.stubEnv("YOUTUBE_OAUTH_CLIENT_ID", "client.web");
+    vi.stubEnv("YOUTUBE_OAUTH_CLIENT_SECRET", "secret");
+    await h.makeAdmin().from("youtube_oauth_tokens").upsert({
+      host_id: "host-id",
+      refresh_token: "host-refresh",
+    });
+    h.state.user = { id: "host-id" };
+
+    const response = await GET(requestFor());
+    expect(response.status).toBe(200);
+    expect((await response.json()).source).toBe("host");
+    expect(searchCalls).toHaveLength(1);
+    expect(searchCalls[0].key).toBeNull();
+    expect(searchCalls[0].auth).toBe("Bearer ya29.TEST_ACCESS");
+  });
+
+  it("token OAuth do app é enviado como Bearer (sem chave de dev)", async () => {
+    seedRoom({ youtube_api_key: null });
+    vi.stubEnv("YOUTUBE_OAUTH_CLIENT_ID", "client.web");
+    vi.stubEnv("YOUTUBE_OAUTH_CLIENT_SECRET", "secret");
+    vi.stubEnv("YOUTUBE_APP_REFRESH_TOKEN", "app-refresh");
+
+    const response = await GET(requestFor());
+    expect(response.status).toBe(200);
+    expect((await response.json()).source).toBe("app");
+    expect(searchCalls[0].key).toBeNull();
+    expect(searchCalls[0].auth).toBe("Bearer ya29.TEST_ACCESS");
   });
 });

@@ -8,7 +8,7 @@ import {
   oauthBaseUrl,
   parseOauthState,
   YOUTUBE_OAUTH_STATE_COOKIE,
-} from "@/app/auth/youtube/authorize/route";
+} from "@/app/auth/youtube/oauth";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const query = request.nextUrl.searchParams;

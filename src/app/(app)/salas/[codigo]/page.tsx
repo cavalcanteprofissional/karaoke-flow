@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { barJoinUrl, mesaJoinUrl } from "@/lib/bars/qr";
+import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import type { Bar } from "@/types/bar";
@@ -67,6 +68,28 @@ export default async function RoomPage({ params }: RoomPageProps) {
 
   const isHost = room.host_id === user.id;
   const closed = room.status === "closed";
+
+  if (closed && !isHost) {
+    return (
+      <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
+        <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
+          <Power className="size-6" />
+        </span>
+        <div className="flex flex-col gap-1">
+          <p className="font-medium">Esta sala foi encerrada</p>
+          <p className="text-muted-foreground text-sm">
+            O dono encerrou o karaokê: a fila foi cancelada e a sala ficou indisponível.
+          </p>
+        </div>
+        <Link
+          href="/dashboard"
+          className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-semibold"
+        >
+          Voltar ao início
+        </Link>
+      </div>
+    );
+  }
 
   const { data: hostProfile } = await supabase
     .from("profiles_public")
@@ -129,6 +152,16 @@ export default async function RoomPage({ params }: RoomPageProps) {
     .order("position", { ascending: true })
     .limit(100);
   const queueInitial = (queueRows ?? []) as QueueItem[];
+
+  let youtubeConnectedAt: string | null = null;
+  if (isHost) {
+    const { data: oauth } = await createAdmin()
+      .from("youtube_oauth_tokens")
+      .select("updated_at")
+      .eq("host_id", user.id)
+      .maybeSingle();
+    youtubeConnectedAt = oauth?.updated_at ?? null;
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -249,6 +282,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
             require_song_confirmation: room.require_song_confirmation,
             youtube_api_key: room.youtube_api_key ?? null,
           }}
+          youtubeConnectedAt={youtubeConnectedAt}
         />
       )}
 

@@ -2,7 +2,7 @@
 
 Aplicação **mobile-first** para karaokê ao vivo em bares e restaurantes: o público adiciona músicas na fila **pelo próprio celular** (escaneando o QR da mesa) e a playlist toca numa tela compartilhada (TV/projetor), controlada pelo dono da casa pelo celular — sem tocar no dispositivo da TV.
 
-> **Estado atual (2026-09-23):** Fase 4 (**busca YouTube + fila end-to-end**) entregue — busca com cache/rate-limit/cadeia de credenciais (chave do bar → OAuth do host → OAuth do app → dev), adicionar à fila com gate de presença física, lista da fila em tempo real, **146 testes** (inclui MSW) verdes. Próxima: Fase 5 (realtime completo, aprovação/reorder da fila e modal de confirmação). Detalhes no [`TODO.md`](./TODO.md) e no [`CHANGELOG.md`](./CHANGELOG.md) (versão atual `0.1.0`).
+> **Estado atual (2026-09-23):** Fase 4 (**busca YouTube + fila end-to-end**) entregue e endurecida — busca com cache/rate-limit/cadeia de credenciais (chave do bar → OAuth do host → OAuth do app → dev, OAuth via `Authorization: Bearer`), adicionar à fila com gate de presença física (dono sempre auto-aprovado), OAuth por-host conectado/revogável na UI, lista da fila em tempo real, **encerrar sala** (só o dono: cancela a fila e expulsa todos), **152 testes** (inclui MSW) verdes. Próxima: Fase 5 (realtime completo, aprovação/reorder da fila e modal de confirmação). Detalhes no [`TODO.md`](./TODO.md) e no [`CHANGELOG.md`](./CHANGELOG.md) (versão atual `0.1.0`).
 
 ## Índice
 
@@ -37,6 +37,10 @@ O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é di
 - **Dashboard** — "Meu bar" (código + mesas + badge de karaokê) para o host e "Bares que frequento" para participantes, com contador de entradas pendentes.
 - **Página do karaokê** — contexto "Bar · Mesa N"; o host vê o QR do bar e a grade de QRs das mesas (exportáveis em PNG).
 - **Login ampliado** — OAuth GitHub (ativo), Google (configuração pendente), Spotify/Discord/Facebook/X prontos na camada; dev login e-mail/senha fora de produção.
+- **Busca no YouTube com cota do dono** — cadeia chave do bar → OAuth da conta Google do host (cota do projeto dele; **Bearer** no backend) → OAuth do app → chave dev; cache compartilhado, rate limit e gate de presença física.
+- **OAuth por-host gerenciável** — o host conecta a conta Google pelo `RoomSettings` e vê **"conectado à conta Google · desde …"** com botão **Remover conexão** (revoga o token na Google e apaga a linha).
+- **Fila com dono sempre aprovado** — música pedida pelo **dono** da sala entra direto (mesmo em fila manual); participantes seguem o modo da sala.
+- **Encerrar sala (só o dono)** — RPC atômica: fecha a sala, **cancela/interrompe a fila** (estado `cancelled`) e **expulsa todos** os participantes; quem era membro vê "sala encerrada".
 
 **Em construção / a seguir:** fila completa — realtime, aprovação/modal de confirmação/reorder (Fase 5) e player kiosk controlado pelo celular (Fases 6 e 7). A **busca no YouTube** (cache compartilhado, rate limit, cadeia de credenciais, adicionar à fila com gate de presença) **já está entregue** (Fase 4). Ver [Roadmap](#-roadmap).
 
@@ -141,7 +145,7 @@ Enquanto não há provedor, use a seção **"Acesso de desenvolvimento"** (somen
 
 Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./TESTING.md).
 
-- **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **146 testes** verdes — inclui `src/lib/bars/qr.test.ts`, `src/lib/youtube/*` e a fila com a matriz de presença).
+- **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **152 testes** verdes — inclui `src/lib/bars/qr.test.ts`, `src/lib/youtube/*`, a fila com a matriz de presença, o roundtrip OAuth authorize→callback e os Bearer de OAuth na rota de busca).
 - **Mock de rede:** **MSW** instalado (Fase 4) — mocka a YouTube Data API nas provas da rota `/api/youtube/search`; serviços externos nunca são chamados em teste.
 - **E2E:** Playwright no pós-MVP-stable (player kiosk com YouTube IFrame Player API mockada).
 - **Banco/RLS:** validado via smoke e e2e, não em unit.
@@ -208,8 +212,8 @@ Projeto Google Cloud `karaoke-flow-509317` (YouTube Data API v3):
 | Uso | Tipo | Credencial | Onde fica |
 | --- | --- | --- | --- |
 | Busca de músicas (default) | API key | `YOUTUBE_API_KEY` (só dev — **não vai para produção**) | `.env.local` (não versionado) |
-| Ferramentas dev / manifesto pessoal | **Desktop app** | Client ID `555657479128-nou62soqjjneto0as5fcivck7ijlkeg9…` (público), OAuth YouTube `readonly` | `.env.local` + JSON gitignored |
-| OAuth por-host (Fase 4 — código pronto) | **Web app** | a **criar** no Google Cloud (redirect `http://localhost:3000`); o client antigo foi deletado — única pendência para o E2E real; client ID/secret já esperados em `YOUTUBE_OAUTH_CLIENT_ID`/`SECRET` | — |
-| OAuth do app (fallback de busca — Fase 4) | **Web/Desktop app** | `YOUTUBE_APP_REFRESH_TOKEN` a coletar com `node scripts/youtube-app-oauth.mjs` | `.env.local` |
+| Ferramentas dev / manifesto pessoal | **Desktop app** | Client ID `555657479128-nou62soqjjneto0as5fcivck7ijlkeg9…` (público), OAuth YouTube `readonly`, redirect loopback `http://localhost` | `.env.local` (legado) + JSON gitignored |
+| OAuth por-host (Fase 4) | **Web app** | Client ID `555657479128-1qdqio5fd41o4tqbgs6t5o7l4qpbcb55…` — redirects `http://localhost:3000/auth/youtube/callback` e `http://localhost:8891/` | `.env.local` (`YOUTUBE_OAUTH_CLIENT_ID/SECRET`) + `credentials/oauth/oauth-dev-web.json` |
+| OAuth do app (fallback de busca — Fase 4) | conta dev | `YOUTUBE_APP_REFRESH_TOKEN` **coletado** 2026-09-23 com `node scripts/youtube-app-oauth.mjs` (expira em 7 d enquanto o consent screen estiver em *Testing*) | `.env.local` |
 
 O Client ID é **público** e pode aparecer aqui; o **Client Secret nunca** (só `.env.local` e `credentials/`, ignorados pelo git).

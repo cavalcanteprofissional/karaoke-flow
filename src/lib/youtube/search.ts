@@ -1,8 +1,24 @@
 import { YouTubeApiError } from "@/lib/youtube/errors";
-import type { YouTubeApiErrorPayload, YouTubeSearchParams, YouTubeVideo } from "@/lib/youtube/types";
+import type { YouTubeApiErrorPayload, YouTubeAuthMode, YouTubeSearchParams, YouTubeVideo } from "@/lib/youtube/types";
 
 const API_BASE = "https://www.googleapis.com/youtube/v3";
 const DURATION_BATCH_SIZE = 50;
+
+type SearchRequestInit = {
+  headers?: Record<string, string>;
+};
+
+/**
+ * Aplica a credencial na URL/chamada: OAuth (app/host) vai em `Authorization:
+ * Bearer`; API key vai como parâmetro `?key=`. Nunca os dois juntos.
+ */
+function withAuth(url: URL, apiKey: string, authMode: YouTubeAuthMode): SearchRequestInit {
+  if (authMode === "bearer") {
+    return { headers: { Authorization: `Bearer ${apiKey}` } };
+  }
+  url.searchParams.set("key", apiKey);
+  return {};
+}
 
 type SearchSnippet = {
   title?: string;
@@ -31,6 +47,7 @@ export async function searchYouTube(
   params: YouTubeSearchParams
 ): Promise<YouTubeVideo[]> {
   const { apiKey, fetchFn = fetch } = params;
+  const authMode = params.authMode ?? "key";
   const query = params.query.trim();
   if (!query) return [];
 
@@ -43,9 +60,9 @@ export async function searchYouTube(
   searchUrl.searchParams.set("maxResults", String(maxResults));
   searchUrl.searchParams.set("safeSearch", "strict");
   searchUrl.searchParams.set("videoEmbeddable", "true");
-  searchUrl.searchParams.set("key", apiKey);
+  const searchInit = withAuth(searchUrl, apiKey, authMode);
 
-  const searchBody = (await requestJson<SearchResponse>(searchUrl.toString(), fetchFn)).body;
+  const searchBody = (await requestJson<SearchResponse>(searchUrl.toString(), fetchFn, searchInit)).body;
 
   const items = searchBody?.items ?? [];
   if (items.length === 0) return [];
@@ -67,7 +84,7 @@ export async function searchYouTube(
 
   if (found.length === 0) return [];
 
-  const durations = await fetchDurations(found.map((f) => f.videoId), apiKey, fetchFn);
+  const durations = await fetchDurations(found.map((f) => f.videoId), apiKey, authMode, fetchFn);
 
   return found.map((f) => ({
     ...f,
@@ -78,6 +95,7 @@ export async function searchYouTube(
 async function fetchDurations(
   videoIds: string[],
   apiKey: string,
+  authMode: YouTubeAuthMode,
   fetchFn: typeof fetch
 ): Promise<Map<string, number>> {
   const durations = new Map<string, number>();
@@ -87,9 +105,9 @@ async function fetchDurations(
     const videosUrl = new URL(`${API_BASE}/videos`);
     videosUrl.searchParams.set("part", "contentDetails");
     videosUrl.searchParams.set("id", batch.join(","));
-    videosUrl.searchParams.set("key", apiKey);
+    const init = withAuth(videosUrl, apiKey, authMode);
 
-    const { body } = await requestJson<VideosResponse>(videosUrl.toString(), fetchFn);
+    const { body } = await requestJson<VideosResponse>(videosUrl.toString(), fetchFn, init);
     for (const item of body.items ?? []) {
       if (!item.id) continue;
       const seconds = parseIso8601Duration(item.contentDetails?.duration);
@@ -102,11 +120,12 @@ async function fetchDurations(
 
 async function requestJson<T>(
   url: string,
-  fetchFn: typeof fetch
+  fetchFn: typeof fetch,
+  init: SearchRequestInit = {}
 ): Promise<{ status: number; body: T }> {
   let response: Response;
   try {
-    response = await fetchFn(url);
+    response = await fetchFn(url, init);
   } catch {
     throw new YouTubeApiError("Falha de rede ao falar com o YouTube.", {}, null);
   }

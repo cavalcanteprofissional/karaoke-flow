@@ -6,10 +6,14 @@ export type YouTubeVideo = {
   durationSeconds: number | null;
 };
 
+export type YouTubeAuthMode = "key" | "bearer";
+
 export type YouTubeSearchParams = {
   query: string;
   apiKey: string;
   maxResults?: number;
+  /** key = `?key=` (API key). bearer = `Authorization: Bearer` (OAuth app/host). */
+  authMode?: YouTubeAuthMode;
   fetchFn?: typeof fetch;
 };
 

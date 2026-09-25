@@ -6,7 +6,8 @@ import { EnterRoomByCode } from "@/components/bars/enter-room-by-code";
 import { EntryPreview } from "@/components/bars/entry-preview";
 import { EntryTokenForm } from "@/components/bars/entry-token-form";
 import { LocationGate } from "@/components/bars/location-gate";
-import { getEntryPreviewAction } from "@/lib/bars/actions";
+import { PendingEntryRequests } from "@/components/bars/pending-entry-requests";
+import { getEntryPreviewAction, getMyEntryRequestsAction } from "@/lib/bars/actions";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 
@@ -59,6 +60,10 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
       }
 
       const presence = result.presence;
+      // Pedido já feito tem prioridade sobre o gate de presença: quem está
+      // `pending` precisa voltar para a tela de espera, não recadastrar o GPS.
+      const showWait = !!result.membership;
+      const showGate = !showWait && presence && !presence.ok;
 
       return (
         <div className="flex flex-col gap-6">
@@ -67,7 +72,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
             <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
               A sala do bar está encerrada no momento.
             </div>
-          ) : presence && !presence.ok ? (
+          ) : showGate ? (
             <LocationGate error={presence.error} />
           ) : (
             <EnterRoomByCode
@@ -111,12 +116,15 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
     );
   }
 
+  const myRequests = await getMyEntryRequestsAction();
+
   return (
     <div className="flex flex-col gap-4">
       <SectionHeader title="Entrar em uma casa" />
       <p className="text-muted-foreground text-sm">
         Digite o código do cartaz ou da mesa, ou escaneie o QR da casa.
       </p>
+      <PendingEntryRequests requests={myRequests} />
       <EntryTokenForm />
     </div>
   );

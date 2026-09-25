@@ -279,6 +279,78 @@ export async function joinEntryAction(
   return { ok: true, membership };
 }
 
+/** Pedido de entrada pendente do próprio participante (para a lista de
+ * "acompanhar/cancelar" no /entrar e no dashboard). */
+export type PendingEntryRequest = {
+  roomId: string;
+  roomCode: string;
+  barName: string;
+  barCode: string | null;
+  mesaNumero: number | null;
+  joinedAt: string;
+};
+
+/**
+ * Lista os pedidos `pending` do participante com nome do bar e código da sala.
+ * A RLS de `rooms` esconde a sala de quem não está `approved`, então a
+ * resolução de código/nome usa o client de service role — somente leitura,
+ * sem `youtube_api_key`. Bar sem vínculo (`bar_id` nulo) cai em `null`.
+ */
+export async function getMyEntryRequestsAction(): Promise<PendingEntryRequest[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: memberships } = await supabase
+    .from("room_members")
+    .select("room_id, mesa_numero, joined_at")
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .order("joined_at", { ascending: false });
+
+  const rows = memberships ?? [];
+  if (rows.length === 0) return [];
+
+  const admin = createAdmin();
+  const { data: rooms } = await admin
+    .from("rooms")
+    .select("id, code, status, bar_id")
+    .in(
+      "id",
+      rows.map((r) => r.room_id)
+    );
+  const activeRooms = (rooms ?? []).filter((room) => room.status === "active");
+  if (activeRooms.length === 0) return [];
+
+  const barIds = [
+    ...new Set(activeRooms.map((room) => room.bar_id).filter(Boolean)),
+  ] as string[];
+  const { data: bars } = barIds.length
+    ? await admin.from("bars").select("id, nome, code").in("id", barIds)
+    : { data: [] };
+  const barsById = new Map((bars ?? []).map((bar) => [bar.id, bar]));
+
+  const roomsById = new Map(activeRooms.map((room) => [room.id, room]));
+
+  return rows.flatMap((row) => {
+    const room = roomsById.get(row.room_id);
+    if (!room) return [];
+    const bar = room.bar_id ? barsById.get(room.bar_id) : undefined;
+    return [
+      {
+        roomId: room.id,
+        roomCode: room.code,
+        barName: bar?.nome ?? "Karaokê",
+        barCode: bar?.code ?? null,
+        mesaNumero: row.mesa_numero ?? null,
+        joinedAt: row.joined_at,
+      },
+    ];
+  });
+}
+
 export type GeocodeResult =
   { ok: true; latitude: number; longitude: number } | { ok: false; error: string };
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   DoorOpen,
+  Hourglass,
   Laugh,
   MapPin,
   Plus,
@@ -12,6 +13,8 @@ import {
 } from "lucide-react";
 
 import { CreateBarDialog } from "@/components/bars/create-bar-dialog";
+import { PendingEntryRequests } from "@/components/bars/pending-entry-requests";
+import { getMyEntryRequestsAction } from "@/lib/bars/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,6 +69,7 @@ export default async function DashboardPage() {
     .filter((m) => m.status === "approved")
     .map((m) => ({ room_id: m.room_id, mesa: m.mesa_numero }));
   const pendingCount = (memberships ?? []).filter((m) => m.status === "pending").length;
+  const pendingRequests = await getMyEntryRequestsAction();
 
   const visited: VisitedBar[] = [];
   if (approvedRooms.length > 0) {
@@ -226,7 +230,17 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {pendingCount > 0 && (
+      {pendingRequests.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-muted-foreground flex items-center gap-2 text-sm font-semibold">
+            <Hourglass className="size-4" />
+            Entradas aguardando aprovação · {pendingRequests.length}
+          </h2>
+          <PendingEntryRequests requests={pendingRequests} />
+        </section>
+      )}
+
+      {pendingCount > 0 && pendingRequests.length === 0 && (
         <Card className="border-dashed">
           <CardHeader>
             <CardTitle className="text-base">Entradas aguardando aprovação</CardTitle>

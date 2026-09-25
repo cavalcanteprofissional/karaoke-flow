@@ -102,6 +102,8 @@ flowchart TD
 >
 > **Pedido de entrada pendente (2026-09-25):** `EntryApprovalWait` (tela de espera) é compartilhada por `/entrar` (QR de bar/mesa e código) e `/salas/[código]`; acompanha `room_members` via Realtime + poll de 8 s e, na aprovação, entra sozinho na sala. O pedido **sobrevive à navegação**: `getEntryPreviewAction` devolve a membership do participante, `getMyEntryRequestsAction` lista os pedidos `pending` no `/entrar` sem token e no dashboard (com "Acompanhar aprovação" → `/entrar?code=…` e "Cancelar"), e a lista resolve nome/código do bar via client de service role porque a RLS de `rooms` esconde a sala de quem não está `approved`. `cancelEntryRequestAction` apaga a linha só quando `status = 'pending'`; quando a linha some, `getEntryRequestStateAction` diz se foi cancelamento ou `close_room`, para não mostrar "sala encerrada" a quem cancelou.
 >
+> **Raio de presença no painel do host (2026-09-25):** o card "Raio de presença" (abaixo dos toggles de "Como a sala funciona") explica que o gate de localização vale **mesmo com entrada livre ligada**, desenha o raio (**500 m**, padrão migrado) sobre o endereço do bar num mapa Leaflet/OpenStreetMap com a metragem visível, e mostra o campo de raio desabilitado com "Personalização em breve" (o host escolhe o valor em fase seguinte). Bar sem endereço geolocalizado: aviso de que todo participante é bloqueado (o host entra).
+>
 > **Busca (Fase 4):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida só no servidor (chave do bar → OAuth do host → OAuth do app → dev); cota esgotada vira mensagem amigável; 429 por excesso de buscas.
 
 ### 3.3 Participante — trocar a própria música mantendo a posição (Proposta, Fase 5)

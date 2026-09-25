@@ -123,6 +123,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] Tela de espera da aprovação (`EntryApprovalWait`) compartilhada por `/entrar` (QR e código) e `/salas/[código]`, com Realtime + poll, avanço automático na aprovação, retry na rejeição e estados "cancelado" × "sala encerrada" (2026-09-25)
 - [x] Pedido `pending` recuperável após sair da tela: membership devolvida pelo preview, lista de pedidos no dashboard e em `/entrar` sem token ("Acompanhar aprovação" → `/entrar?code=…`), e o gate de presença não esconde mais quem já tem pedido em andamento (2026-09-25)
 - [x] Participante cancela o próprio pedido `pending` (tela de espera e lista) e volta ao preview do bar/sala para poder pedir de novo (2026-09-25)
+- [x] Raio de presença visível para o host: aviso no toggle "Entrada livre" de que o gate barra **independente** do modo de entrada, mapa (Leaflet + OSM) com o círculo em **500 m** e a metragem, campo de raio **bloqueado/desabilitado** com "Personalização em breve", e migration do padrão 150 → 500 m (2026-09-25)
+- [ ] **Personalização do raio pelo host** (bloqueada nesta entrega): campo habilitado com validação 50–1000 m, preview do círculo em tempo real e persistência — o card já mostra o valor em vigor e o aviso de que a personalização chega depois (2026-09-25)
+- [ ] **HUD/sprites animados sobre o mapa do raio** (2026-09-25): o `PresenceRadiusMap` deixa o wrapper relativo para receber camadas sobrepostas (sprites de círculo por metragem, HUD com o número). Decisão registrada: Google Maps Embed foi descartado por exigir API key + billing e não permitir círculo nem update in-place; Leaflet + OSM é o caminho, com a chave de API habilitada para o embed no futuro, se fizer sentido
 
 ## Fase 3.5 — Domínio bar/mesas/karaokês + acesso anônimo
 

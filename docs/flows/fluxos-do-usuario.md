@@ -74,6 +74,13 @@ flowchart TD
     F -->|sim| D0
     F -->|não| G["Aviso: entrada recusada (pode tentar de novo)"]
     E2 --> F
+    E --> E3{"Cancela o pedido?"}
+    E3 -->|sim| E4["Apaga a linha pending → volta ao preview do bar/sala"]
+    E3 -->|não| F
+    E2 --> E3
+    E --> E5["Sai da tela e volta?<br/>(código, QR, dashboard ou /entrar sem token)"]
+    E5 -->|volta| E6["Tela de espera de novo (membership lida no servidor,<br/>sem gate de presença e sem pedir entrada de novo)"]
+    E6 --> F
     D0 --> H["Busca música (YouTube — /salas/[codigo]/buscar)"]
     D --> H
     H --> H0{"Ainda presente no bar?<br/>addSongToQueueAction revalida geo"}
@@ -91,7 +98,9 @@ flowchart TD
 
 > **Entrada por código puro (2026-09-24):** digitar o código do karaokê (ex.: `KARAOKE`, 3–12 caracteres, código do bar → vira o código de entrada) entra **direto na sala sem mesa** — a mesa é escolhida **dentro da sala** (`MesaPicker` → RPC `pick_mesa`) assim que o participante está `approved`. O QR de bar/mesa continua pré-selecionando a mesa no `join_room`. O host pode trocar o código da sala pelo RoomSettings (`updateRoomCodeAction`).
 
-> **Requisito presença física (2026-09-23):** o gate de geo (`kf-geo` × coordenadas do bar ± raio, validado no servidor) é obrigatório para **entrar** e para **adicionar música** (revalidado em `addSongToQueueAction`) — impede participação remota. Ver `fluxos-do-sistema.md` §2.2 e §3.1.
+> **Requisito presença física (2026-09-23):** o gate de geo (`kf-geo` × coordenadas do bar ± raio, validado no servidor) é obrigatório para **entrar** e para **adicionar música** (revalidado em `addSongToQueueAction`) — impede participação remota. Ver `fluxos-do-sistema.md` §2.2 e §3.1. **Exceção (2026-09-25):** quem já tem pedido `pending` volta direto para a tela de espera — o gate não esconde um pedido em andamento.
+>
+> **Pedido de entrada pendente (2026-09-25):** `EntryApprovalWait` (tela de espera) é compartilhada por `/entrar` (QR de bar/mesa e código) e `/salas/[código]`; acompanha `room_members` via Realtime + poll de 8 s e, na aprovação, entra sozinho na sala. O pedido **sobrevive à navegação**: `getEntryPreviewAction` devolve a membership do participante, `getMyEntryRequestsAction` lista os pedidos `pending` no `/entrar` sem token e no dashboard (com "Acompanhar aprovação" → `/entrar?code=…` e "Cancelar"), e a lista resolve nome/código do bar via client de service role porque a RLS de `rooms` esconde a sala de quem não está `approved`. `cancelEntryRequestAction` apaga a linha só quando `status = 'pending'`; quando a linha some, `getEntryRequestStateAction` diz se foi cancelamento ou `close_room`, para não mostrar "sala encerrada" a quem cancelou.
 >
 > **Busca (Fase 4):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida só no servidor (chave do bar → OAuth do host → OAuth do app → dev); cota esgotada vira mensagem amigável; 429 por excesso de buscas.
 

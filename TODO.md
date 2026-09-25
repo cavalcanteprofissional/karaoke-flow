@@ -120,6 +120,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] Toggles de config da sala persistidos no banco (`entryMode`, `queueApprovalMode`, `requireSongConfirmation`) com atualização otimista
 - [x] Toggle `requireSongConfirmation` na UI de config da sala ("Pedir confirmação antes de adicionar música")
 - [x] Instalar/configurar Vitest + RTL + jsdom + coverage (MSW fica para a Fase 4/5, junto do código de rede a mockar)
+- [x] Tela de espera da aprovação (`EntryApprovalWait`) compartilhada por `/entrar` (QR e código) e `/salas/[código]`, com Realtime + poll, avanço automático na aprovação, retry na rejeição e estados "cancelado" × "sala encerrada" (2026-09-25)
+- [x] Pedido `pending` recuperável após sair da tela: membership devolvida pelo preview, lista de pedidos no dashboard e em `/entrar` sem token ("Acompanhar aprovação" → `/entrar?code=…`), e o gate de presença não esconde mais quem já tem pedido em andamento (2026-09-25)
+- [x] Participante cancela o próprio pedido `pending` (tela de espera e lista) e volta ao preview do bar/sala para poder pedir de novo (2026-09-25)
 
 ## Fase 3.5 — Domínio bar/mesas/karaokês + acesso anônimo
 

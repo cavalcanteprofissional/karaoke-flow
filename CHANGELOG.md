@@ -20,6 +20,15 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
   - **`getEntryPreviewAction` agora devolve a membership do participante** (`status` + `mesa_numero`, novo tipo `EntryMembership`) e **`/entrar` não pede entrada de novo** para quem já tem `pending`/`rejected` na sala — o `EntryApprovalWait` assume a partir do status real, inclusive em `/salas` quando o participante chega pelo link direto (o unread de `rooms` por RLS escondia a sala). A página da sala também distingue "sala encerrada" de "link inválido" no fallback sem RLS.
   - **Testes:** `src/components/bars/entry-approval-wait.test.tsx` (4 testes: estado de espera, redirect automático na aprovação, retry na rejeição, limpeza do canal) — **`npm test` (163) passa**, junto com `npm run typecheck`, `npm run lint` e `npm run build`.
 
+- **Pedido de entrada pendente recuperável e cancelável (2026-09-25):**
+  - **Cancelar:** `cancelEntryRequestAction(roomId)` apaga a própria linha `room_members` **só quando `status = 'pending'`** (RLS `room_members_delete_self_or_host` já permite auto-delete; quem está `approved` continua usando `leaveRoomAction` para sair da sala). Botão "Cancelar pedido" na tela de espera, com confirmação (`window.confirm`) e volta ao **preview do bar/sala** — preservando a mesa quando a entrada veio do QR (`cancelHref` → `/entrar?bar=…&mesa=N`).
+  - **Cancelado ≠ encerrado:** `getEntryRequestStateAction(roomCode)` consulta o servidor quando a linha some (cancelamento em outra aba, expulsão ou `close_room`, que apaga todos). Antes, cancelar aparecia como "Esta sala foi encerrada"; agora o participante `pending` não lê `rooms` por RLS, então o status da sala vem do client de service role (**somente leitura**, sem `youtube_api_key`).
+  - **Retomar o pedido de qualquer página:**
+    - `/entrar?code=…` passa a mostrar a **tela de espera antes do gate de presença** — antes, quem estava `pending` sem o cookie `kf-geo` caía no "Permitir localização";
+    - `getMyEntryRequestsAction()` lista os pedidos `pending` do participante com bar, código da sala e mesa (a RLS de `rooms` esconde a sala de quem não está `approved`, então código/nome são resolvidos via service role, somente leitura);
+    - `PendingEntryRequests` entra no `/entrar` **sem token** e no **dashboard**: "Acompanhar aprovação" navega para `/entrar?code=…` com `push` + `refresh` (não depende do Router Cache de uma URL já visitada antes do pedido existir) e "Cancelar" remove o pedido da lista.
+  - **Testes:** 6 novos (cancelar após confirmar, não cancelar ao desistir, `cancelHref` do bar, erro amigável, cancelado × encerrado, lista com acompanhar/cancelar) — **`npm test` (174) passa**, com `npm run typecheck`, `npm run lint` e `npm run build`.
+
 - **Código da sala configurável + entrada direta por código com mesa escolhida na sala (2026-09-24):**
   - **Migrations `20260924000021`/`20260924000022`** (aplicadas no projeto cloud via `node scripts/apply-sql.mjs`):
     - `00021` corrige a **ambiguidade de coluna** em `get_entry_preview` (ERROR 42702 `bar_id is ambiguous`) qualificando `public.rooms.bar_id`, `public.rooms.status` e `public.mesas.bar_id` no WHERE.

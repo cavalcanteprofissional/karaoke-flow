@@ -13,9 +13,10 @@ const mocks = vi.hoisted(() => {
     push: vi.fn(),
   };
   const state: {
-    membership: TestMembership;
+    membership: TestMembership | null;
     realtimeHandler?: () => void;
     lastCancelRoomId?: string;
+    lastStateRoomCode?: string;
   } = {
     membership: { status: "pending", mesa_numero: 2 },
   };
@@ -60,6 +61,15 @@ const mocks = vi.hoisted(() => {
     state.lastCancelRoomId = roomId;
     return cancelEntryRequestActionMock();
   };
+  const getEntryRequestStateActionMock = vi.fn(
+    async (): Promise<{ state: "cancelled" | "closed" | "pending" }> => ({
+      state: "cancelled",
+    })
+  );
+  const getEntryRequestStateAction = (roomCode: string) => {
+    state.lastStateRoomCode = roomCode;
+    return getEntryRequestStateActionMock();
+  };
   const toast = { success: vi.fn(), error: vi.fn() };
 
   return {
@@ -70,6 +80,8 @@ const mocks = vi.hoisted(() => {
     supabase,
     cancelEntryRequestAction,
     cancelEntryRequestActionMock,
+    getEntryRequestStateAction,
+    getEntryRequestStateActionMock,
     toast,
   };
 });
@@ -93,6 +105,11 @@ vi.mock("@/lib/rooms/actions", () => ({
   cancelEntryRequestAction: (roomId: string) => mocks.cancelEntryRequestAction(roomId),
 }));
 
+vi.mock("@/lib/bars/actions", () => ({
+  getEntryRequestStateAction: (roomCode: string) =>
+    mocks.getEntryRequestStateAction(roomCode),
+}));
+
 import { EntryApprovalWait } from "./entry-approval-wait";
 
 const defaultProps = {
@@ -110,6 +127,9 @@ describe("EntryApprovalWait", () => {
     mocks.state.membership = { status: "pending", mesa_numero: 2 };
     mocks.state.realtimeHandler = undefined;
     mocks.state.lastCancelRoomId = undefined;
+    mocks.state.lastStateRoomCode = undefined;
+    mocks.getEntryRequestStateActionMock.mockClear();
+    mocks.getEntryRequestStateActionMock.mockResolvedValue({ state: "cancelled" });
     mocks.query.maybeSingle.mockClear();
     mocks.query.select.mockClear();
     mocks.query.eq.mockClear();
@@ -236,5 +256,33 @@ describe("EntryApprovalWait", () => {
     );
     expect(screen.getByText("Aguardando aprovação")).toBeInTheDocument();
     confirmSpy.mockRestore();
+  });
+
+  it("mostra 'pedido cancelado' quando a linha some e a sala continua ativa", async () => {
+    render(<EntryApprovalWait {...defaultProps} />);
+    await waitFor(() => expect(mocks.state.realtimeHandler).toBeDefined());
+
+    mocks.state.membership = null;
+    act(() => {
+      mocks.state.realtimeHandler?.();
+    });
+
+    await screen.findByText("Pedido cancelado");
+    expect(mocks.state.lastStateRoomCode).toBe("ABC123");
+    expect(screen.queryByText("Esta sala foi encerrada")).not.toBeInTheDocument();
+  });
+
+  it("mostra 'sala encerrada' quando o servidor confirma o encerramento", async () => {
+    mocks.getEntryRequestStateActionMock.mockResolvedValue({ state: "closed" });
+    render(<EntryApprovalWait {...defaultProps} />);
+    await waitFor(() => expect(mocks.state.realtimeHandler).toBeDefined());
+
+    mocks.state.membership = null;
+    act(() => {
+      mocks.state.realtimeHandler?.();
+    });
+
+    await screen.findByText("Esta sala foi encerrada");
+    expect(screen.queryByText("Pedido cancelado")).not.toBeInTheDocument();
   });
 });

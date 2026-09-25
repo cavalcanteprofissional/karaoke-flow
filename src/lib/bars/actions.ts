@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdmin } from "@/lib/supabase/admin";
 import { createBarSchema, type CreateBarInput } from "@/lib/bars/schema";
 import { requirePresence } from "@/lib/bars/presence";
 import { geocodeAddress, type PresenceDecision } from "@/lib/bars/geo";
@@ -175,6 +176,53 @@ export async function getEntryPreviewAction(
 export type JoinEntryResult =
   | { ok: true; membership: EntryMembership }
   | { ok: false; error: string; geoRequired?: boolean };
+
+/** Estado do pedido de entrada do próprio participante, para a tela de espera. */
+export type EntryRequestState = MemberStatus | "cancelled" | "closed" | "none";
+
+/**
+ * Consulta o estado real do pedido quando a linha de `room_members` some
+ * (cancelamento em outra aba, expulsão ou `close_room`, que apaga todos).
+ * O participante `pending` não lê `rooms` por RLS, então o status da sala vem
+ * do client de service role — somente leitura, e sem `youtube_api_key`.
+ */
+export async function getEntryRequestStateAction(
+  roomCode: string
+): Promise<{ state: EntryRequestState }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { state: "none" };
+
+  const code = roomCode.trim().toUpperCase();
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id, status")
+    .eq("code", code)
+    .maybeSingle();
+
+  if (!room) {
+    const { data: fallback } = await createAdmin()
+      .from("rooms")
+      .select("id, status")
+      .eq("code", code)
+      .maybeSingle();
+    if (!fallback || fallback.status === "closed") return { state: "closed" };
+    return { state: "cancelled" };
+  }
+  if (room.status === "closed") return { state: "closed" };
+
+  const { data: membership } = await supabase
+    .from("room_members")
+    .select("status")
+    .eq("room_id", room.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!membership) return { state: "cancelled" };
+
+  return { state: membership.status as MemberStatus };
+}
 
 /** Entra na sala do bar. `roomCode` é o código da sala resolvida na preview. */
 export async function joinEntryAction(

@@ -25,6 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getEntryRequestStateAction } from "@/lib/bars/actions";
 import { cancelEntryRequestAction } from "@/lib/rooms/actions";
 import { createClient } from "@/lib/supabase/client";
 import type { MemberStatus } from "@/types/room";
@@ -96,7 +97,13 @@ export function EntryApprovalWait({
       if (!active || error) return;
 
       if (!membership) {
-        setStatus("closed");
+        const { state } = await getEntryRequestStateAction(roomCode);
+        if (!active) return;
+        if (state === "closed") {
+          setStatus("closed");
+        } else if (state === "cancelled" || state === "none") {
+          setStatus("cancelled");
+        }
         return;
       }
 
@@ -135,7 +142,7 @@ export function EntryApprovalWait({
       window.clearInterval(poll);
       void supabase.removeChannel(channel);
     };
-  }, [finish, roomId, status]);
+  }, [finish, roomCode, roomId, status]);
 
   async function retry() {
     setRetrying(true);

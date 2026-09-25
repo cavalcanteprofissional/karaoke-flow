@@ -292,30 +292,36 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Fases 9–15 — Experiência do participante, entrada remota e monetizeção (registrado 2026-09-25)
 
-> **Planejamento apenas, nada implementado.** Elaboração completa (estado atual no código, modelo de dados, UI, testes e **12 decisões em aberto D1–D12**) em [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md). Ordem: Fase 9 → 10 → 11, e 12/13 dependem da Fase 6 (player) e 14 → 15.
+> **Planejamento apenas, nada implementado.** Elaboração completa (estado atual no código, modelo de dados, UI, testes e **decisões resolvidas (D1–D4, D11) e em aberto (D5–D10, D12–D14)**) em [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md). Ordem: Fase 9 → 10 → 11, e 12/13 dependem da Fase 6 (player) e 14 → 15.
 >
 > **Lacunas que estas fases fecham:** o gate de presença é binário e não persiste nada (`src/lib/bars/geo.ts:55`); `room_members` não tem coluna de presença/raio; a mesma regra bloqueia **entrada e pedido de música** (`queue.ts:85`, `youtube/service.ts:101`); a fila é por **sala** e `mesa_numero` não tem FK; o **player não existe** (Fase 6), então timer/minutagem dependem dele; e não existe nada de gamificação, pagamento ou pedido no bar.
 
 ### Fase 9 — Entrada fora do raio (toggle do host) + lista sinalizada
 
-- [ ] Toggle "permite entrada de quem está fora do raio" no card de raio de presença (host) — escopo sala × bar em aberto (**D2**); livre × aprovação individual (**D1**)
-- [ ] Migration: coluna de permissão + `room_members.fora_do_raio` / `distancia_m` gravados no `join_room`
+- [x] **Decidido com o PO (2026-09-25):** toggle **por sala**, e quem está fora **cai como `pending` e precisa da aprovação do dono** (D1, D2); a lista do dono mostra **distância em metros** + tag "fora do bar" + tipo de conta, com consentimento explícito (D4)
+- [ ] Toggle "permite entrada de quem está fora do raio" no card de raio de presença (host), com aviso de que a pessoa entra **sem poder pedir música**
+- [ ] **Link de convidado do dono** (além de QR e código): `rooms.link_convidado` com expiração/uso máximo (**D5**), botão "copiar link" e compartilhamento — Web Share API (cobre Instagram no mobile) + WhatsApp, Telegram, Facebook, X; sem URL web para Instagram feed/story (fallback: copiar link / `RoomQr` com o link impresso). O link **não** pula a aprovação
+- [ ] Migration: coluna de permissão + `link_convidado` + `room_members.fora_do_raio` / `distancia_m` / `via_link_convidado` gravados no `join_room`
 - [ ] `checkPresence` sai de booleano para **3 estados** (dentro / fora-permitido / fora-bloqueado) com erro `OUTSIDE_BAR_ALLOWED`
-- [ ] Card "Fora do raio" **só para o host**: dados básicos + tag "fora do bar" + distinguindo visitante sem login (anônimo) × usuário, com mesa e horário; filtros por mesa/tipo (**D4**, **D5**)
-- [ ] Garantir por RLS/teste que participante **não** lê a marcação alheia
+- [ ] Card "Fora do raio" **só para o host**: dados básicos + **distância em metros** + tag "fora do bar" + visitante sem login (anônimo) × usuário, com mesa, horário e estado (aguardando/aprovado); filtros por mesa/tipo
+- [ ] Aviso de consentimento (finalidade + retenção) antes de concluir a entrada de quem está fora — LGPD
+- [ ] Garantir por RLS/teste que participante **não** lê a marcação nem a distância alheia
 
 ### Fase 10 — Fora do raio vê a fila, mas não pede música
 
 - [ ] Permissão única `canAskSong` (host, ou dentro do raio) aplicada em `addSongToQueueAction`, na rota de busca e nos botões
-- [ ] Decidir se o **catálogo** fica navegável em somente leitura (**D3**)
+- [x] **Decidido (D3):** a **busca some** para quem está fora — ele vê só fila, player ao vivo e os agregados por mesa
 - [ ] UI: "Você entrou como visitante: pode ouvir, não pode pedir" + CTA "Quero pedir música" (pede a localização)
 - [ ] Matriz de testes por papel (host, dentro, fora, anônimo, pending) em action/rota/UI
 
 ### Fase 11 — Tela "Mesa": quem está comigo + as músicas da mesa
 
-- [ ] Leitura por mesa: `room_members` por `mesa_numero` + `queue_items` de quem pede naquela mesa (join em 2 níveis × **D9** desnormalizar `mesa_numero` na fila)
+- [x] **Decidido com o PO (2026-09-25) — visibilidade em dois níveis (D3):** nível 1 = **agregado por mesa** para todo mundo na sala (quantas pessoas e quantas músicas por mesa, sem nomes); nível 2 = **somente quem está na mesma mesa** vê foto, nome e as músicas de cada um. Quem está fora do raio (aprovado) fica no nível 1 + fila/player ao vivo
+- [ ] Nível 1: contagem de pessoas e de músicas pedidas **por mesa** (`room_members.mesa_numero` + `queue_items`), sem join de nome/avatar
+- [ ] Nível 2: `room_members` da mesa + `queue_items` de quem pede nela (join em 2 níveis × **D9** desnormalizar `queue_items.mesa_numero`)
 - [ ] Fila e player continuam **os da sala**, iguais para todas as mesas
-- [ ] Privacidade da mesa: opt-in/apelido, anônimo como "visitante", denúncia/bloqueio, tag de fora-do-raio **só no painel do host** (**D6**)
+- [ ] Privacidade: anônimo como "visitante" no detalhe da mesa, opt-in/apelido, denúncia/bloqueio (**D6**); tag de fora-do-raio e distância **só no painel do host**
+- [ ] Teste de RLS/query provando que quem está no nível 1 não consegue ler nome/avatar da mesa alheia
 
 ### Fase 12 — Perfil de karaokê e check de som/microfone
 
@@ -340,7 +346,8 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ### Fase 15 — Pagamento + pedido de comida/bebida via mesa (com o sistema do bar)
 
-- [ ] Primeiro passo: **deep-link** para o sistema que o bar já usa, botão "Pedir no bar" na tela da mesa (**D11**)
+- [x] **Decidido (D11):** as opções (deep-link × API do PDV do bar × módulo nativo) serão avaliadas **diretamente com o bar** antes de escolher — nada implementado até lá
+- [ ] Primeiro passo depois da conversa com o bar: botão "Pedir no bar" na tela da mesa apontando para o sistema que eles já usam
 - [ ] Depois: integração via API do PDV do bar, ou módulo nativo `table_orders` (implica fiscal/nota)
 - [ ] Pagamento: assinatura mensal do bar (Q6–Q9 do questionário) × pago pelo participante; provedor (**D12**)
 - [ ] Comissão sobre bebidas: hipótese de pesquisa, não compromisso

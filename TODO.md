@@ -290,6 +290,61 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] Polimento mobile: alvos de toque ≥ 44px, contraste adequado, tema escuro consistente (controller + tela)
 - [ ] Latência realtime < 2s validada entre controller e tela
 
+## Fases 9–15 — Experiência do participante, entrada remota e monetizeção (registrado 2026-09-25)
+
+> **Planejamento apenas, nada implementado.** Elaboração completa (estado atual no código, modelo de dados, UI, testes e **12 decisões em aberto D1–D12**) em [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md). Ordem: Fase 9 → 10 → 11, e 12/13 dependem da Fase 6 (player) e 14 → 15.
+>
+> **Lacunas que estas fases fecham:** o gate de presença é binário e não persiste nada (`src/lib/bars/geo.ts:55`); `room_members` não tem coluna de presença/raio; a mesma regra bloqueia **entrada e pedido de música** (`queue.ts:85`, `youtube/service.ts:101`); a fila é por **sala** e `mesa_numero` não tem FK; o **player não existe** (Fase 6), então timer/minutagem dependem dele; e não existe nada de gamificação, pagamento ou pedido no bar.
+
+### Fase 9 — Entrada fora do raio (toggle do host) + lista sinalizada
+
+- [ ] Toggle "permite entrada de quem está fora do raio" no card de raio de presença (host) — escopo sala × bar em aberto (**D2**); livre × aprovação individual (**D1**)
+- [ ] Migration: coluna de permissão + `room_members.fora_do_raio` / `distancia_m` gravados no `join_room`
+- [ ] `checkPresence` sai de booleano para **3 estados** (dentro / fora-permitido / fora-bloqueado) com erro `OUTSIDE_BAR_ALLOWED`
+- [ ] Card "Fora do raio" **só para o host**: dados básicos + tag "fora do bar" + distinguindo visitante sem login (anônimo) × usuário, com mesa e horário; filtros por mesa/tipo (**D4**, **D5**)
+- [ ] Garantir por RLS/teste que participante **não** lê a marcação alheia
+
+### Fase 10 — Fora do raio vê a fila, mas não pede música
+
+- [ ] Permissão única `canAskSong` (host, ou dentro do raio) aplicada em `addSongToQueueAction`, na rota de busca e nos botões
+- [ ] Decidir se o **catálogo** fica navegável em somente leitura (**D3**)
+- [ ] UI: "Você entrou como visitante: pode ouvir, não pode pedir" + CTA "Quero pedir música" (pede a localização)
+- [ ] Matriz de testes por papel (host, dentro, fora, anônimo, pending) em action/rota/UI
+
+### Fase 11 — Tela "Mesa": quem está comigo + as músicas da mesa
+
+- [ ] Leitura por mesa: `room_members` por `mesa_numero` + `queue_items` de quem pede naquela mesa (join em 2 níveis × **D9** desnormalizar `mesa_numero` na fila)
+- [ ] Fila e player continuam **os da sala**, iguais para todas as mesas
+- [ ] Privacidade da mesa: opt-in/apelido, anônimo como "visitante", denúncia/bloqueio, tag de fora-do-raio **só no painel do host** (**D6**)
+
+### Fase 12 — Perfil de karaokê e check de som/microfone
+
+- [ ] `profiles.karaoke_level` (1–5) + check-list de áudio ("som muito alto", "microfone muito baixo", eco, delay) com **sugestão acionável** por sintoma
+- [ ] Teste de microfone no app (nível de entrada) como diagnosis, sem gravar áudio
+- [ ] Sugerir músicas compatíveis com o nível da mesa
+
+### Fase 13 — Tempo de música, teste grátis e alarme (depende da Fase 6)
+
+- [ ] `queue_items.started_at/finished_at` (minutagem real) + contador diário por participante
+- [ ] Modal/alarme com **quantas músicas faltam** + **minutagem restante** + aviso de fim do período grátis
+- [ ] **Countdown de 30 s** "sua música é a próxima" → "é a sua agora"
+- [ ] Alarme do dia nas **2 primeiras solicitações** de cada pessoa
+- [ ] Ao estourar o limite: bloquear, sugerir plano ou última música grátis (**D7**)
+
+### Fase 14 — Recompensas: dias consecutivos + música pedida por bar
+
+- [ ] Streak de dias consecutivos + regra de quebra/congelador (**D8**)
+- [ ] Contador **acumulado de músicas por bar** (fidelidade do bar) + contador da sessão
+- [ ] Recompensa: badge, desconto no consumo do bar ou tempo extra de canto (**D10**)
+- [ ] Ranking do bar (só host × placar da mesa) — opcional
+
+### Fase 15 — Pagamento + pedido de comida/bebida via mesa (com o sistema do bar)
+
+- [ ] Primeiro passo: **deep-link** para o sistema que o bar já usa, botão "Pedir no bar" na tela da mesa (**D11**)
+- [ ] Depois: integração via API do PDV do bar, ou módulo nativo `table_orders` (implica fiscal/nota)
+- [ ] Pagamento: assinatura mensal do bar (Q6–Q9 do questionário) × pago pelo participante; provedor (**D12**)
+- [ ] Comissão sobre bebidas: hipótese de pesquisa, não compromisso
+
 ## Roadmap (fora do MVP — documentado, não implementar agora)
 
 - [ ] **Ciência de dados — segmentação sentimental dos ouvintes (PLN/letras):** camada híbrida (embeddings SBERT + léxicos/ML, circumplexo valence-arousal, letras via Genius com excertos curtos + metadados acústicos Spotify, HDBSCAN) que classifica o ouvinte — primeiro o perfil pessoal do dev (histórico YT Music real da §6), depois usuários da app com LGPD. **Nasce fora do repo e será extraída para o repo independente `karaoke-flow-data`.** Arquitetura e estado da arte: [`docs/ciencia-de-dados/segmentacao-sentimental.md`](./docs/ciencia-de-dados/segmentacao-sentimental.md) (decisões fechadas em 2026-09-22).

@@ -30,6 +30,7 @@ O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é di
 ## ✨ Funcionalidades
 
 **Já implementadas (MVP):**
+
 - **Acesso anônimo** — qualquer pessoa entra e pede música **sem criar conta**; criar bar exige login real.
 - **Domínio bar → mesas → karaokê** — o host é 1 bar com `N` mesas (etiquetas); cada bar nasce com **1 karaokê** (fila + player próprios); "adicionar salas" fica desabilitado (multi-sala é futuro).
 - **QR por bar e por mesa** — `?bar=ZEHBAR` e `?bar=ZEHBAR&mesa=3` para entrar **em 1 toque** com a mesa já selecionada; QR legado de sala (`?code=...`) continua funcionando.
@@ -46,13 +47,13 @@ O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é di
 
 ## 🧱 Stack
 
-| Camada        | Tecnologia                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------ |
+| Camada        | Tecnologia                                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
 | Front/Back    | **Next.js 16** (App Router, TypeScript), Tailwind CSS + **shadcn/ui**, Zustand, react-hook-form + zod |
-| Banco/Backend | **Supabase** (Postgres + Auth + Realtime + RLS) — free tier                                        |
-| Vídeo         | **YouTube Data API v3** (busca) + **YouTube IFrame Player API** (playback)                         |
-| QR            | `qrcode` (geração PNG) + `@zxing/browser` (leitura por câmera)                                     |
-| Testes        | Vitest + React Testing Library + jsdom + **MSW** (Playwright e2e vem na Fase 6)                    |
+| Banco/Backend | **Supabase** (Postgres + Auth + Realtime + RLS) — free tier                                           |
+| Vídeo         | **YouTube Data API v3** (busca) + **YouTube IFrame Player API** (playback)                            |
+| QR            | `qrcode` (geração PNG) + `@zxing/browser` (leitura por câmera)                                        |
+| Testes        | Vitest + React Testing Library + jsdom + **MSW** (Playwright e2e vem na Fase 6)                       |
 
 ## 🏗️ Arquitetura
 
@@ -115,26 +116,26 @@ Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start`
 
 **Scripts disponíveis:**
 
-| Script                 | O que faz                                            |
-| ---------------------- | ---------------------------------------------------- |
-| `npm run dev`          | dev server (Next 16)                                  |
-| `npm run build`        | build de produção                                     |
-| `npm run lint`         | ESLint                                                |
-| `npm run typecheck`    | `tsc --noEmit`                                        |
-| `npm test`             | Vitest (unit)                                         |
-| `npm run seed`         | seed de dev no Supabase Cloud                         |
+| Script                             | O que faz                                                                  |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `npm run dev`                      | dev server (Next 16)                                                       |
+| `npm run build`                    | build de produção                                                          |
+| `npm run lint`                     | ESLint                                                                     |
+| `npm run typecheck`                | `tsc --noEmit`                                                             |
+| `npm test`                         | Vitest (unit)                                                              |
+| `npm run seed`                     | seed de dev no Supabase Cloud                                              |
 | `node scripts/apply-sql.mjs <sql>` | aplica migration manualmente (padrão do time; veja `README` do `scripts/`) |
 
 ## 🔑 Login e acesso
 
-- **Acesso anônimo:** botão "Continuar sem login" no `/login` → pode entrar no bar e pedir música; **não** pode criar bar (login real). Habilitação: Supabase Auth → *Allow anonymous sign-ins* (espelhado em `supabase/config.toml`; o script `scripts/enable-anonymous-signins.mjs` configura via Management API).
+- **Acesso anônimo:** botão "Continuar sem login" no `/login` → pode entrar no bar e pedir música; **não** pode criar bar (login real). Habilitação: Supabase Auth → _Allow anonymous sign-ins_ (espelhado em `supabase/config.toml`; o script `scripts/enable-anonymous-signins.mjs` configura via Management API).
 - **Provedores OAuth** — configurados no projeto Supabase (credenciais no dashboard, não no `.env`); a lista exibida vive em `src/lib/auth/providers.ts`:
 
-| Provedor | Status atual |
-| -------- | ------------ |
-| **GitHub** | ✅ Ativo |
-| **Google** | ⚙️ Configurar credenciais |
-| **Spotify** | 🔒 Desabilitado — Web API exige Spotify Premium |
+| Provedor                   | Status atual                                        |
+| -------------------------- | --------------------------------------------------- |
+| **GitHub**                 | ✅ Ativo                                            |
+| **Google**                 | ⚙️ Configurar credenciais                           |
+| **Spotify**                | 🔒 Desabilitado — Web API exige Spotify Premium     |
 | **Discord / Facebook / X** | 🔒 Em breve (sem credenciais; app review para FB/X) |
 
 Enquanto não há provedor, use a seção **"Acesso de desenvolvimento"** (somente dev) com os usuários do seed: `dono@exemplo.com`, `ana@exemplo.com`, `bruno@exemplo.com`, `betania@exemplo.com` — senha `senha123`.
@@ -156,15 +157,16 @@ Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./T
 
 Plano detalhado por fases (com checklist) no [`TODO.md`](./TODO.md). Linha do tempo atual:
 
-| Fase | Status |
-| ---- | ------ |
-| Fase 0 — Fundação / 1 — Banco+RLS / 2 — Auth / 3 — Salas | ✅ Concluídas |
-| **3.5 — Bar/mesas/karaokês + acesso anônimo** | ✅ **Concluída (2026-09-23)** |
-| **Fase 4 — Busca YouTube + fila end-to-end** | ✅ **Concluída (2026-09-23)** |
-| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música | ⏳ **Próxima** |
-| Fase 6 — Player kiosk | ⏳ Planejada |
-| Fase 7 — Controle do host pelo celular | ⏳ Planejada |
-| Fase 8 — Não-funcionais, segurança, LGPD | ⏳ Planejada |
+| Fase                                                                                                                               | Status                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fase 0 — Fundação / 1 — Banco+RLS / 2 — Auth / 3 — Salas                                                                           | ✅ Concluídas                                                                                                                                               |
+| **3.5 — Bar/mesas/karaokês + acesso anônimo**                                                                                      | ✅ **Concluída (2026-09-23)**                                                                                                                               |
+| **Fase 4 — Busca YouTube + fila end-to-end**                                                                                       | ✅ **Concluída (2026-09-23)**                                                                                                                               |
+| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música                                                                     | ⏳ **Próxima**                                                                                                                                              |
+| Fase 6 — Player kiosk                                                                                                              | ⏳ Planejada                                                                                                                                                |
+| Fase 7 — Controle do host pelo celular                                                                                             | ⏳ Planejada                                                                                                                                                |
+| Fase 8 — Não-funcionais, segurança, LGPD                                                                                           | ⏳ Planejada                                                                                                                                                |
+| **Fases 9–15 — Entrada fora do raio, tela da mesa, perfil de karaokê, tempo/teste grátis, recompensas, pagamento + pedido no bar** | 📋 **Planejadas (registro 2026-09-25, sem implementação)** — detalhamento em [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md) |
 
 Pendência aberta conhecida: **diagramas Mermaid de `docs/flows/*`** já foram sanitizados e validados em mermaid v10/v11 — falta confirmar a renderização no seu renderizador/preview. Registrado no `TODO.md`.
 
@@ -182,13 +184,17 @@ Pendência aberta conhecida: **diagramas Mermaid de `docs/flows/*`** já foram s
 
 Diagramas em **Mermaid** (rendezam no GitHub, VS Code + "Mermaid Preview", ou <https://mermaid.live>):
 
-| Arquivo | Conteúdo |
-| ------- | -------- |
+| Arquivo                                                                | Conteúdo                                                                                                                                                      |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`docs/flows/fluxos-do-sistema.md`](./docs/flows/fluxos-do-sistema.md) | Fluxos técnicos end-to-end: autenticação/sessão (incl. anônimo), ciclo de vida do bar/karaokê, fila, player e a proposta de trocar música mantendo a posição. |
-| [`docs/flows/fluxos-do-usuario.md`](./docs/flows/fluxos-do-usuario.md) | Jornadas por persona: host, participante (entrada com mesa) e tela kiosk. |
-| [`docs/flows/banco-de-dados.md`](./docs/flows/banco-de-dados.md) | Modelo relacional (ERD), matriz de RLS, máquina de estados da fila e regras de `position`/status. |
+| [`docs/flows/fluxos-do-usuario.md`](./docs/flows/fluxos-do-usuario.md) | Jornadas por persona: host, participante (entrada com mesa) e tela kiosk.                                                                                     |
+| [`docs/flows/banco-de-dados.md`](./docs/flows/banco-de-dados.md)       | Modelo relacional (ERD), matriz de RLS, máquina de estados da fila e regras de `position`/status.                                                             |
 
-*Nota de manutenção:* todo diagrama reflete o **código real** (migrations, `src/proxy.ts`, helpers SSR) — sem virgula/parêntese no texto de arestas (limitação dos parsers mais antigos).
+_Nota de manutenção:_ todo diagrama reflete o **código real** (migrations, `src/proxy.ts`, helpers SSR) — sem virgula/parêntese no texto de arestas (limitação dos parsers mais antigos).
+
+### Produto (roadmap)
+
+- [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md) — **planejamento (sem código)** das Fases 9–15: entrada de gente fora do raio de presença sinalizada só para o dono, permissão "fora do raio vê mas não pede música", tela da mesa (colegas + músicas da mesa), perfil de karaokê com check de som/microfone, tempo de música com teste grátis/alarme/countdown de 30 s, recompensas (dias consecutivos + músicas por bar) e pagamento/pedido de comida via mesa contra o sistema que o bar já usa. Inclui **12 decisões em aberto (D1–D12)**.
 
 ### Ciência de dados (roadmap)
 
@@ -209,11 +215,11 @@ MIT — veja o campo `license` em `package.json`. (Produto pessoal em desenvolvi
 
 Projeto Google Cloud `karaoke-flow-509317` (YouTube Data API v3):
 
-| Uso | Tipo | Credencial | Onde fica |
-| --- | --- | --- | --- |
-| Busca de músicas (default) | API key | `YOUTUBE_API_KEY` (só dev — **não vai para produção**) | `.env.local` (não versionado) |
-| Ferramentas dev / manifesto pessoal | **Desktop app** | Client ID `555657479128-nou62soqjjneto0as5fcivck7ijlkeg9…` (público), OAuth YouTube `readonly`, redirect loopback `http://localhost` | `.env.local` (legado) + JSON gitignored |
-| OAuth por-host (Fase 4) | **Web app** | Client ID `555657479128-1qdqio5fd41o4tqbgs6t5o7l4qpbcb55…` — redirects `http://localhost:3000/auth/youtube/callback` e `http://localhost:8891/` | `.env.local` (`YOUTUBE_OAUTH_CLIENT_ID/SECRET`) + `credentials/oauth/oauth-dev-web.json` |
-| OAuth do app (fallback de busca — Fase 4) | conta dev | `YOUTUBE_APP_REFRESH_TOKEN` **coletado** 2026-09-23 com `node scripts/youtube-app-oauth.mjs` (expira em 7 d enquanto o consent screen estiver em *Testing*) | `.env.local` |
+| Uso                                       | Tipo            | Credencial                                                                                                                                                  | Onde fica                                                                                |
+| ----------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Busca de músicas (default)                | API key         | `YOUTUBE_API_KEY` (só dev — **não vai para produção**)                                                                                                      | `.env.local` (não versionado)                                                            |
+| Ferramentas dev / manifesto pessoal       | **Desktop app** | Client ID `555657479128-nou62soqjjneto0as5fcivck7ijlkeg9…` (público), OAuth YouTube `readonly`, redirect loopback `http://localhost`                        | `.env.local` (legado) + JSON gitignored                                                  |
+| OAuth por-host (Fase 4)                   | **Web app**     | Client ID `555657479128-1qdqio5fd41o4tqbgs6t5o7l4qpbcb55…` — redirects `http://localhost:3000/auth/youtube/callback` e `http://localhost:8891/`             | `.env.local` (`YOUTUBE_OAUTH_CLIENT_ID/SECRET`) + `credentials/oauth/oauth-dev-web.json` |
+| OAuth do app (fallback de busca — Fase 4) | conta dev       | `YOUTUBE_APP_REFRESH_TOKEN` **coletado** 2026-09-23 com `node scripts/youtube-app-oauth.mjs` (expira em 7 d enquanto o consent screen estiver em _Testing_) | `.env.local`                                                                             |
 
 O Client ID é **público** e pode aparecer aqui; o **Client Secret nunca** (só `.env.local` e `credentials/`, ignorados pelo git).

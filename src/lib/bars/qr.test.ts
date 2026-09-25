@@ -4,9 +4,16 @@ import { entryRoute, parseEntryToken } from "./qr";
 import { createBarSchema } from "./schema";
 
 describe("parseEntryToken", () => {
-  it("aceita código puro de 6 chars (pode ser bar ou sala)", () => {
+  it("aceita código puro (pode ser bar ou sala, 3–12 chars)", () => {
     expect(parseEntryToken("ZEHBAR")).toEqual({ roomCode: "ZEHBAR" });
     expect(parseEntryToken("  karaok ")).toEqual({ roomCode: "KARAOK" });
+    expect(parseEntryToken("KARAOKE")).toEqual({ roomCode: "KARAOKE" });
+    expect(parseEntryToken("SALADOZE")).toEqual({ roomCode: "SALADOZE" });
+  });
+
+  it("rejeita códigos puros muito curtos ou com caracteres inválidos", () => {
+    expect(parseEntryToken("AB")).toBeNull();
+    expect(parseEntryToken("KAR OO")).toBeNull();
   });
 
   it("interpreta URL com bar+mesa", () => {
@@ -85,7 +92,8 @@ describe("createBarSchema", () => {
       createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 0 }).success
     ).toBe(false);
     expect(
-      createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 1000 }).success
+      createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 1000 })
+        .success
     ).toBe(false);
     expect(
       createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 1.5 }).success
@@ -125,5 +133,50 @@ describe("createBarSchema", () => {
         endereco: "",
       }).success
     ).toBe(true);
+  });
+
+  it("aceita codigo_entrada opcional de 3–12 chars (normaliza para maiúsculas)", () => {
+    expect(
+      createBarSchema.safeParse({
+        nome: "X",
+        cidade: "Y",
+        codigo_entrada: "karaoke",
+      }).success
+    ).toBe(true);
+
+    const result = createBarSchema.safeParse({
+      nome: "X",
+      cidade: "Y",
+      codigo_entrada: "karaoke",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.codigo_entrada).toBe("KARAOKE");
+  });
+
+  it("rejeita codigo_entrada inválido", () => {
+    expect(
+      createBarSchema.safeParse({ nome: "X", cidade: "Y", codigo_entrada: "AB" }).success
+    ).toBe(false);
+    expect(
+      createBarSchema.safeParse({
+        nome: "X",
+        cidade: "Y",
+        codigo_entrada: "KARAOKE1234ZZZ",
+      }).success
+    ).toBe(false);
+    expect(
+      createBarSchema.safeParse({ nome: "X", cidade: "Y", codigo_entrada: "KAR OO" })
+        .success
+    ).toBe(false);
+  });
+
+  it("codigo_entrada vazio vira undefined", () => {
+    const result = createBarSchema.safeParse({
+      nome: "X",
+      cidade: "Y",
+      codigo_entrada: "",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.codigo_entrada).toBeUndefined();
   });
 });

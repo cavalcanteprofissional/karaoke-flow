@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createBarAction, geocodeBarAddressAction } from "@/lib/bars/actions";
 import { captureGeolocation, roundCoords, type GeoCoordinates } from "@/lib/consent/geo";
+import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
 import { cn } from "cn";
 
 export function CreateBarDialog() {
@@ -31,6 +32,7 @@ export function CreateBarDialog() {
     endereco: "",
     quantidade_mesas: "1",
     raio_permitido_metros: "150",
+    codigo_entrada: "",
   });
   const [coords, setCoords] = useState<GeoCoordinates | null>(null);
   const [locSource, setLocSource] = useState<"address" | "gps" | null>(null);
@@ -82,6 +84,7 @@ export function CreateBarDialog() {
       raio_permitido_metros: Number(form.raio_permitido_metros) || 150,
       latitude: coords ? roundCoords(coords.latitude, 5) : null,
       longitude: coords ? roundCoords(coords.longitude, 5) : null,
+      codigo_entrada: form.codigo_entrada || undefined,
     });
     setBusy(false);
     if (!result.ok) {
@@ -99,6 +102,9 @@ export function CreateBarDialog() {
   }
 
   const locResolving = locSource !== null;
+  const defaultCode = form.nome.trim()
+    ? (deriveRoomCodeFromName(form.nome) ?? "KARAOKE")
+    : "KARAOKE";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -177,6 +183,28 @@ export function CreateBarDialog() {
             />
           </div>
 
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="bar-codigo" className="text-xs">
+              Código de entrada <span className="text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input
+              id="bar-codigo"
+              value={form.codigo_entrada}
+              onChange={(e) => set("codigo_entrada", e.target.value)}
+              placeholder={defaultCode}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={12}
+              className="font-mono tracking-[0.2em] uppercase"
+            />
+            <p className="text-muted-foreground text-xs">
+              Quem digitar este código entra direto na sala, sem mesa (a mesa é escolhida
+              depois). Padrão: <span className="font-mono">{defaultCode}</span> — 3–12
+              letras ou números, sem acentos.
+            </p>
+          </div>
+
           <div className="flex flex-col gap-2">
             <Label className="text-xs">Localização do bar (GPS)</Label>
             <div className="flex flex-wrap gap-2">
@@ -231,12 +259,12 @@ export function CreateBarDialog() {
             />
           </div>
 
-          <div className="border-amber-500/40 bg-amber-500/10 flex items-start gap-2 rounded-lg border p-3 text-amber-700 dark:text-amber-300">
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">
             <MapPin className="mt-0.5 size-4 shrink-0" />
             <p className="text-xs leading-relaxed">
               A localização e o raio de presença confirmam que quem pede música está{" "}
-              <strong>fisicamente no bar</strong>, bloqueando acesso remoto à fila. Se o bar não
-              tiver localização, essa proteção fica desativada.
+              <strong>fisicamente no bar</strong>, bloqueando acesso remoto à fila. Se o
+              bar não tiver localização, essa proteção fica desativada.
             </p>
           </div>
 
@@ -245,7 +273,11 @@ export function CreateBarDialog() {
               Cancelar
             </Button>
             <Button type="submit" disabled={busy} className={cn(busy && "opacity-80")}>
-              {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              {busy ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Plus className="size-4" />
+              )}
               Criar bar
             </Button>
           </DialogFooter>

@@ -2,8 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { EnterRoomByCode } from "@/components/bars/enter-room-by-code";
 import { EntryPreview } from "@/components/bars/entry-preview";
 import { EntryTokenForm } from "@/components/bars/entry-token-form";
+import { LocationGate } from "@/components/bars/location-gate";
 import { getEntryPreviewAction } from "@/lib/bars/actions";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
@@ -21,6 +23,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
   const code = rawBar ?? rawCode;
   const normalized = code ? normalizeRoomCode(code) : "";
   const mesa = rawMesa ? Number(rawMesa) : null;
+  const isRoomEntry = !rawBar && !!rawCode;
 
   const supabase = await createClient();
   const {
@@ -28,7 +31,10 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
   } = await supabase.auth.getUser();
 
   if (normalized) {
-    const result = await getEntryPreviewAction(normalized, Number.isInteger(mesa) ? mesa : null);
+    const result = await getEntryPreviewAction(
+      normalized,
+      Number.isInteger(mesa) ? mesa : null
+    );
 
     if ("error" in result) {
       return (
@@ -43,6 +49,36 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
     }
 
     const isAnonymous = user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true;
+
+    // Código de sala puro (`?code=`/digitado): entrada DIRETA na sala, sem
+    // mesa — a mesa é escolhida depois, dentro da sala. A mutação (`join_room`)
+    // acontece via Server Action no client (`EnterRoomByCode`), nunca no render.
+    if (isRoomEntry) {
+      if (user && result.preview.host_id === user.id && !isAnonymous) {
+        redirect(`/salas/${result.preview.room_code}`);
+      }
+
+      const presence = result.presence;
+
+      return (
+        <div className="flex flex-col gap-6">
+          <SectionHeader title="Entrar na casa" href="/dashboard" linkLabel="Voltar" />
+          {result.preview.status === "closed" ? (
+            <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
+              A sala do bar está encerrada no momento.
+            </div>
+          ) : presence && !presence.ok ? (
+            <LocationGate error={presence.error} />
+          ) : (
+            <EnterRoomByCode code={normalized} preview={result.preview} />
+          )}
+          <div className="border-border rounded-xl border border-dashed p-4">
+            <p className="text-muted-foreground mb-2 text-sm">Outra casa?</p>
+            <EntryTokenForm />
+          </div>
+        </div>
+      );
+    }
 
     if (user && result.preview.host_id === user.id && !isAnonymous) {
       redirect(`/salas/${result.preview.room_code}`);

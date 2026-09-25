@@ -133,11 +133,11 @@ async function main() {
       host_id: dono,
       code: "ZEHBAR",
       nome: "Karaokê do Zé",
-      cidade: "São Paulo",
-      endereco: "Rua das Flores, 123",
+      cidade: "Fortaleza",
+      endereco: "R. Cap. Olavo, 1111 - Aerolândia",
       quantidade_mesas: 12,
-      latitude: -23.550_66,
-      longitude: -46.633_38,
+      latitude: -3.7719634,
+      longitude: -38.5146187,
       raio_permitido_metros: 150,
     },
     {
@@ -152,7 +152,9 @@ async function main() {
     },
   ]);
   if (barsErr) throw new Error("bars: " + barsErr.message);
-  console.log("bares criados: Karaokê do Zé (ZEHBAR, 12 mesas, dono), Bar da Esquina (BARSEG, 6 mesas, Betânia)");
+  console.log(
+    "bares criados: Karaokê do Zé (ZEHBAR, 12 mesas, dono), Bar da Esquina (BARSEG, 6 mesas, Betânia)"
+  );
 
   // ---- Mesas (etiquetas; rótulos opcionais) ----
   const mesas1 = Array.from({ length: 12 }, (_, i) => ({
@@ -174,7 +176,7 @@ async function main() {
     {
       id: ROOM1,
       bar_id: BAR1,
-      code: "KARAOK",
+      code: "KARAOKE",
       host_id: dono,
       entry_mode: "open",
       queue_approval_mode: "manual",
@@ -193,7 +195,9 @@ async function main() {
     },
   ]);
   if (roomsErr) throw new Error("rooms: " + roomsErr.message);
-  console.log("salas criadas: KARAOK (open/manual/confirm, bar ZEHBAR), BAR2FO (approval/auto, bar BARSEG)");
+  console.log(
+    "salas criadas: KARAOKE (open/manual/confirm, bar ZEHBAR), BAR2FO (approval/auto, bar BARSEG)"
+  );
 
   // ---- Membros (participante obrigatoriamente registra a mesa) ----
   const { error: membersErr } = await admin.from("room_members").insert([
@@ -202,7 +206,9 @@ async function main() {
     { room_id: ROOM2, user_id: ana, status: "pending", mesa_numero: 2 },
   ]);
   if (membersErr) throw new Error("room_members: " + membersErr.message);
-  console.log("membros criados: ana (mesa 3)/bruno (mesa 7) aprovados em KARAOK; ana pending (mesa 2) em BAR2FO");
+  console.log(
+    "membros criados: ana (mesa 3)/bruno (mesa 7) aprovados em KARAOKE; ana pending (mesa 2) em BAR2FO"
+  );
 
   // ---- Fila (só na sala do Karaokê do Zé) ----
   const { error: queueErr } = await admin.from("queue_items").insert([
@@ -224,7 +230,7 @@ async function main() {
     },
   ]);
   if (queueErr) throw new Error("queue_items: " + queueErr.message);
-  console.log("fila criada na KARAOK: 2 itens (approved + pending)");
+  console.log("fila criada na KARAOKE: 2 itens (approved + pending)");
 
   console.log(
     "\nSeed concluído. Login dev: dono@exemplo.com | betania@exemplo.com | ana@exemplo.com | bruno@exemplo.com (senha123)"

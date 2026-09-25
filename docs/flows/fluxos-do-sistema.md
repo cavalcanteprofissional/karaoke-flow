@@ -106,18 +106,23 @@ Fase 3.5: **1 host = 1 bar** (`bars.host_id` único), que por padrão tem **1 ka
 
 Requisito presença (2026-09-23): o cadastro também registra a **localização física** (geocode Nominatim com fallback GPS do dispositivo) e o **raio de presença** (`raio_permitido_metros`, default 150 m) — base do gate de presença (§2.2 e §2.2.1).
 
+**Código da sala configurável** (2026-09-24, migration `20260924000022`): `rooms.code` passa a aceitar **3–12 alfanuméricos maiúsculos** (sem acentos/espaços). No create: o host pode informar `codigo_entrada` (opcional); **default = nome do bar todo junto em maiúsculas** (`driveRoomCodeFromName`: `Karaokê do Zé` → `KARAOKEDOZE`, truncado em 12; se o resultado ficar com <3 chars → `KARAOKE` + sufixo iterativo `KARAOKE1`, `KARAOKE2`…). Helpers RPC `unique_room_code`/`default_room_code`/`room_code_available` checam colisão com `rooms.code` **e** `bars.code` (a entrada resolve o bar primeiro). O host pode trocar o código depois: `updateRoomCodeAction` (RoomSettings) valida padrão + disponibilidade, atualiza `rooms.code` (RLS host-only) e redireciona a página para o novo código.
+
 ```mermaid
 flowchart TD
-    A["Dashboard → 'Criar meu bar' (Dialog)"] --> B["RPC create_bar(nome, cidade, endereco, quantidade_mesas, rotulos, latitude, longitude, raio) — (backend, security definer)"]
-    B --> C["bar + mesas 1..N + room única criados em transação (backend)"]
-    C --> D["Exige login real (anônimo → erro 'crie uma conta')"]
-    D --> E["redirect → /salas/[code]"]
-    E --> F["Mostra QR do bar + QR de cada mesa (entrada 1 toque)"]
+    A["Dashboard → 'Criar meu bar' (Dialog)"] --> B["RPC create_bar(nome, cidade, endereco, quantidade_mesas, rotulos, latitude, longitude, raio, p_codigo) — (backend, security definer)"]
+    B --> C["Código da sala = p_codigo ?: derive(nome) ?: 'KARAOKE' + sufixo (transação)"]
+    C --> D["bar + mesas 1..N + room única criados em transação (backend)"]
+    D --> E["Exige login real (anônimo → erro 'crie uma conta')"]
+    E --> F["redirect → /salas/[code]"]
+    F --> G["Mostra QR do bar + QR de cada mesa (entrada 1 toque)"]
 ```
 
 ### 2.2 Entrar no bar (código/QR) — preview unificada + RPC `join_room` com mesa
 
 A RPC `get_room_preview` **foi substituída** pela `get_entry_preview(p_code, p_mesa)` (migration `20260923000013`): `p_code` aceita **código de bar** **ou** código de room (QR legado de sala); o karaokê é a **única sala ativa do bar**.
+
+**Mesa escolhida dentro da sala na entrada por código** (2026-09-24): QR de bar/mesa (`?bar=…[&mesa=N]`) mantém o fluxo abaixo — mesa vai no `join_room`. Já o **código puro de sala** (`/entrar?code=KARAOKE` ou digitado) entra **direto na sala sem mesa** (`join_room(code)` com `p_mesa` nulo) e o participante é **obrigado a escolher a mesa dentro da sala** (`pick_mesa`, migration `20260924000022` — valida mesa em 1..`quantidade_mesas`, só para membro `approved` de sala `active`); enquanto `pending` vê o aviso de aguardando aprovação.
 
 **Gate de presença física** (requisito 2026-09-23): antes de `join_room`, o servidor lê o cookie `kf-geo` (geo do participante coletada sob consentimento §2.5) e compara com as coordenadas do bar (haversine ≤ `raio_permitido_metros`). **Participante fora do raio/sem geo → bloqueado** (banner + CTA "Permitir localização"); **host isento**; sem geo o participante mantém only-view (não entra).
 
@@ -125,7 +130,20 @@ A RPC `get_room_preview` **foi substituída** pela `get_entry_preview(p_code, p_
 flowchart TD
     A["Participante digita code / escaneia QR de bar ou de mesa"] --> V["RPC get_entry_preview(p_code, p_mesa) — (backend, security definer)"]
     V --> W["Resolve bar → karaokê único ativo → preview<br/>(bar_nome, host, entry_mode, status, quantidade_mesas, coords)"]
-    W --> X{Bar tem mesa pré-selecionada?}
+    W --> R{"Entrada por QR de bar/mesa?"}
+    R -->|não| ROOM["RPC join_room(p_code) sem mesa — (backend)"]
+    ROOM --> DG0{É o host?}
+    DG0 -->|sim| HOST["redirect → /salas/[code]"]
+    DG0 -->|não| DG1{Sala ativa?}
+    DG1 -->|não| Z["erro: sala não encontrada/inativa"]
+    DG1 -->|sim| ROOM2{entry_mode?}
+    ROOM2 -->|approval| PEND["pending · mesa_numero null — vê 'aguardando aprovação' na sala"]
+    ROOM2 -->|open| APPR["approved · mesa_numero null"]
+    APPR --> MESA_DENTRO["Sala pede a mesa (MesaPicker → RPC pick_mesa, migration 00022)"]
+    PEND --> HOST2["Host aprova → approved · mesa null"]
+    HOST2 --> MESA_DENTRO
+    MESA_DENTRO --> H["Participante vê a fila ('Bar · Mesa N')"]
+    R -->|sim| X{Bar tem mesa pré-selecionada?}
     X -->|sim| X1["Mesa pré-selecionada (QR / ?mesa=N): valida p_mesa (1..quantidade_mesas e existe em mesas)"]
     X -->|não| X2["UI pede a mesa (grid 1..N); default 1 quando mesa única"]
     X1 --> X3["Confirmar entrada"]
@@ -134,7 +152,7 @@ flowchart TD
     P -->|não| P1["bloqueado: banner geo + permitir localização (host isento)"]
     P -->|sim| B["RPC join_room(p_code=room_code, p_mesa) — (backend, security definer)"]
     B --> C{Sala ativa?}
-    C -->|não| Z["erro: sala não encontrada/inativa"]
+    C -->|não| Z
     C -->|sim| D{É o host?}
     D -->|sim| Y["erro: você já é o dono desta sala"]
     D -->|não| E{Mesa válida?}
@@ -142,26 +160,31 @@ flowchart TD
     E -->|sim| E2{entry_mode = open?}
     E2 -->|sim| F["status = approved · mesa_numero gravado (backend)"]
     E2 -->|não| G["status = pending · mesa_numero gravado (backend)"]
-    F --> H["Participante vê a fila ('Bar · Mesa N')"]
+    F --> H
     G --> I["Notifica host (Realtime room:{id})"]
     I --> J{Host aprova?}
     J -->|sim| H
     J -->|não| K["status = rejected - pode reentrar depois (backend)"]
 ```
 
-Regra de reentrada (migration `20260921000004`): `rejected` pode reentrar (RPC atualiza), mas `approved`/`pending` existentes **não** são rebaixados. O `mesa_numero` é atualizado no reentrar (`coalesce(excluded.mesa_numero, ...)`).
+Regra de reentrada (migration `20260921000004`): `rejected` pode reentrar (RPC atualiza), mas `approved`/`pending` existentes **não** são rebaixados. O `mesa_numero` é atualizado no reentrar (`coalesce(excluded.mesa_numero, ...)`) ou via `pick_mesa`.
 
-### 2.3 Fechar/sair
+### 2.3 Fechar/sair/reabrir
 
 ```mermaid
 flowchart TD
     A["Host: Fechar sala (botão, confirm modal)"] --> B["RPC close_room(room_id) — (backend, security definer)"]
-    B --> B1{É o host? (is_host)}
+    B --> B1{É o host?}
     B1 -->|não| B2["erro: só o dono pode encerrar a sala"]
     B1 -->|sim| C["rooms.status = closed"]
     C --> D["queue_items pendentes/approved/playing → cancelled (fila cancelada e interrompida)"]
     C --> E["DELETE room_members (todos expulsos)"]
     D --> F["Realtime → fila some da tela; participantes veem 'sala encerrada'"]
+    F --> R["Host: Reabrir (botão) → RPC reopen_room (security definer, host-only)"]
+    R --> R1{É o host?}
+    R1 -->|não| R2["erro: só o dono pode reabrir a sala"]
+    R1 -->|sim| R3["rooms.status = active"]
+    R3 --> R4["Participantes voltam a entrar (get_entry_preview resolve o karaokê; itens cancelled não voltam)"]
     A2["Participante: Sair"] --> G["DELETE room_members (self) (backend)"]
 ```
 
@@ -225,7 +248,8 @@ sequenceDiagram
         R-->>S: 200 { results, cached: true }
     else cache miss
         R->>R: credencial: chave do bar → OAuth host → OAuth app → dev
-        R->>YT: search.list (safeSearch=strict, videoEmbeddable) + videos.list (duração)<br/>OAuth (app/host) via `Authorization: Bearer`; API key via `?key=`
+        R->>YT: search.list safeSearch=strict + videoEmbeddable + videos.list durações
+        R->>YT: OAuth Bearer ou fallback API key
         YT-->>R: itens
         R->>DB: song_cache.upsert (TTL 7d)
         R-->>S: 200 { results, cached: false, source }
@@ -338,6 +362,8 @@ flowchart TD
 ```
 
 > **Reordenar (host) é operação distinta**: reescreve `position` de vários itens (pendências de Fase 5); a troca nunca muda a ordem.
+
+> **Formas de reordenar (Fase 5, decidido 26/09):** mover ⬆/⬇ por item **e** drag-and-drop (ambos); `position` reescrito de forma atômica no backend, sem constraint única em `(room_id, position)` hoje — validar concorrência na implementação.
 
 **Payload da RPC (sugestão):** `p_item_id uuid`, `p_youtube_video_id text`, `p_title text`, `p_thumbnail_url text`, `p_duration_seconds integer`. Retorna o item atualizado ou levanta exceção com mensagem legível.
 

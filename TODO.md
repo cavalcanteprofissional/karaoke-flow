@@ -15,9 +15,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 **Próximas etapas (plano fechado em 2026-09-21, atualizado em 2026-09-23):**
 
 1. ~~Tela 1 — Onboarding + consentimento LGPD + base i18n~~ (**entregue em 2026-09-21** — ver sub-bloco da Fase 2).
-2. ~~**Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5)~~ (**entregue em 2026-09-23** — Blocos A–F concluídos: migrations 00010–00014 aplicadas no projeto Cloud via `apply-sql.mjs`, anonymous sign-ins, reseed (Bar 1/Bar 2), lib+actions+16 testes de `qr.ts`, UI Bloc E, docs Bloc F; lint/typecheck/build e 45 testes verdes. **Decisões de modelo fechadas com o PO** — ver bloco da Fase 3.5 abaixo). *Pendências residuais registradas ao final da Fase 3.5.*
+2. ~~**Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5)~~ (**entregue em 2026-09-23** — Blocos A–F concluídos: migrations 00010–00014 aplicadas no projeto Cloud via `apply-sql.mjs`, anonymous sign-ins, reseed (Bar 1/Bar 2), lib+actions+16 testes de `qr.ts`, UI Bloc E, docs Bloc F; lint/typecheck/build e 45 testes verdes. **Decisões de modelo fechadas com o PO** — ver bloco da Fase 3.5 abaixo). _Pendências residuais registradas ao final da Fase 3.5._
 3. ~~**Busca + fila end-to-end** (Fase 4)~~ (**entregue em 2026-09-23** — Blocos A–H concluídos + hardening pós-entrega I; ver seção Fase 4 abaixo).
-4. ~~**Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"**~~ (**entregue em 2026-09-22**): Google Takeout "YouTube and YouTube Music" (2 pedidos, 1 recebido) recebido; `ler-takeout.mjs` (fora do repo, `Temp\opencode\yt-music`) ajustado p/ nomes pt-BR + strip ` - Topic` e rodado → 8.216 eventos de escuta (2025→2026, sem Shorts/vídeo, 2.842 faixas); §6 do [`MANIFEST.md`](./MANIFEST.md) escrita com o retrato real (Florence + The Machine dominante, AURORA, década 2020); nota de instrução do autor e cartão do ouvido removidos, nota de rodapé aponta a etapa de ciência de dados; fonte no §8 e nota da spec §16/§17 atualizadas. Zip do Takeout isolado em `.local-data/takeout/` (gitignored, nunca versionado). *Pendência residual anotada:* análise cruzada (histórico × curtidas) fica para o futuro repo `karaoke-flow-data` (ciência de dados — ver `docs/ciencia-de-dados/segmentacao-sentimental.md`).
+4. ~~**Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"**~~ (**entregue em 2026-09-22**): Google Takeout "YouTube and YouTube Music" (2 pedidos, 1 recebido) recebido; `ler-takeout.mjs` (fora do repo, `Temp\opencode\yt-music`) ajustado p/ nomes pt-BR + strip ` - Topic` e rodado → 8.216 eventos de escuta (2025→2026, sem Shorts/vídeo, 2.842 faixas); §6 do [`MANIFEST.md`](./MANIFEST.md) escrita com o retrato real (Florence + The Machine dominante, AURORA, década 2020); nota de instrução do autor e cartão do ouvido removidos, nota de rodapé aponta a etapa de ciência de dados; fonte no §8 e nota da spec §16/§17 atualizadas. Zip do Takeout isolado em `.local-data/takeout/` (gitignored, nunca versionado). _Pendência residual anotada:_ análise cruzada (histórico × curtidas) fica para o futuro repo `karaoke-flow-data` (ciência de dados — ver `docs/ciencia-de-dados/segmentacao-sentimental.md`).
 
 > A ampliação da **bateria de testes** acompanha as fases (ver seção "Plano de testes por fase" abaixo).
 
@@ -140,7 +140,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 - [ ] **Docs/flows (`docs/flows/*.md`):** diagramas **Mermaid** sanitizados e validados com `mermaid.parse` **v10.9.8 + v11.17.2** (26/26 OK) — arestas **sem vírgula/parêntese** (`-->|label|` só palavras simples), `?` apenas no **fim** de nó `{…}`, ERD sem relacionamento encadeado, sem backticks/newline cru em labels. **Ainda falta:** conferir a renderização no renderizador/preview usado (limpar cache do editor — o erro antigo citado usava o texto pré-correção) e varrer os demais `.md` do repo com o mesmo critério de sintaxe.
 - [ ] **Migrations aplicadas via `apply-sql.mjs`** não registradas em `schema_migrations` (sem `SUPABASE_DB_PASSWORD`) — anotar reaplicação/criação local quando o acesso via CLI for resolvido.
-- [x] **`YOUTUBE_APP_REFRESH_TOKEN`** coletado em 2026-09-23 via `scripts/youtube-app-oauth.mjs` (conta dev) e gravado no `.env.local` — fallback do app da Fase 4 ativo (expira em 7 dias enquanto o consent screen estiver em *Testing*).
+- [x] **`YOUTUBE_APP_REFRESH_TOKEN`** coletado em 2026-09-23 via `scripts/youtube-app-oauth.mjs` (conta dev) e gravado no `.env.local` — fallback do app da Fase 4 ativo (expira em 7 dias enquanto o consent screen estiver em _Testing_).
 - [ ] **Deploy Vercel** permanece adiado para o fim do MVP (decisão registrada no CHANGELOG).
 
 - [ ] Migration `bars` (1:1 com `profiles` de host): `host_id` unique, `code` 6 chars, `nome`, `cidade`, `endereco`, `quantidade_mesas` (0–999), `karaokes_simultaneos` (default 1), `criado_em`
@@ -183,7 +183,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] **E. OAuth por-host:** rotas `/auth/youtube/authorize` (state nonce → cookie `kf-yt-oauth` httpOnly; `access_type=offline&prompt=consent`) e `/auth/youtube/callback` (exchange → upsert em `youtube_oauth_tokens`), `scripts/youtube-app-oauth.mjs` (coleta do `YOUTUBE_APP_REFRESH_TOKEN`), **cadeia com OAuth do host** (`getHostAccessToken` via `admin`), Bloco "Conexão YouTube do host" no `RoomSettings` (chave manual própria + Conectar com Google) + `updateYoutubeKeyAction`.
 - [x] **F. MSW:** devDep instalado; **16 testes** de rota `route.test.ts` (401, 404, PENDING, sucesso+chave do bar, **chave fora do payload**, cache miss→hit sem bater no YouTube, cota friendly 502, erro genérico 502, NO_CREDENTIAL, 429+Retry-After, OUTSIDE_BAR, dentro do raio, GEO_UNAVAILABLE, host isento).
 - [x] **G. Docs:** spec §4/§6/§12/§13, `docs/flows` (busca no fluxo da sala), CHANGELOG, README (se for o caso) atualizados; lint/typecheck/build e **146 testes** verdes.
-- [x] **H. Pendências externas (resolvidas em 2026-09-23):** **client Web** criado no Google Cloud (`karaoke-flow-web`, redirects `http://localhost:3000/auth/youtube/callback` + `http://localhost:8891/`; `YOUTUBE_OAUTH_CLIENT_ID/SECRET` atualizados + JSON em `credentials/oauth/oauth-dev-web.json`); **`YOUTUBE_APP_REFRESH_TOKEN` coletado** com `scripts/youtube-app-oauth.mjs` e gravado no `.env.local` (conta dev autorizada; expira em 7 dias enquanto o consent screen estiver em *Testing*); **`queue_items` publicada** na `supabase_realtime` (migration `20260923000017` — aplicada; antes só `room_members` estava).
+- [x] **H. Pendências externas (resolvidas em 2026-09-23):** **client Web** criado no Google Cloud (`karaoke-flow-web`, redirects `http://localhost:3000/auth/youtube/callback` + `http://localhost:8891/`; `YOUTUBE_OAUTH_CLIENT_ID/SECRET` atualizados + JSON em `credentials/oauth/oauth-dev-web.json`); **`YOUTUBE_APP_REFRESH_TOKEN` coletado** com `scripts/youtube-app-oauth.mjs` e gravado no `.env.local` (conta dev autorizada; expira em 7 dias enquanto o consent screen estiver em _Testing_); **`queue_items` publicada** na `supabase_realtime` (migration `20260923000017` — aplicada; antes só `room_members` estava).
 - [x] **I. Hardening pós-entrega (2026-09-23):** **state do OAuth não era gravado** (duplo-encode → `state-mismatch` silencioso; removido extra `encodeURIComponent` + cookie `secure` condicional + helpers movidos p/ `src/app/auth/youtube/oauth.ts` — 4 testes de roundtrip); **busca 502 com OAuth** corrigida (`Authorization: Bearer` para app/host, `?key=` para room/dev — +2 testes MSW); **UI de conexão** no RoomSettings ("conectado · desde …" + "Remover conexão" com **revoke na Google**); **dono auto-aprovado** (migration `20260923000018`); **encerrar sala = RPC `close_room`** (migration `20260923000019`: status `cancelled` novo + expulsa membros; página mostra "sala encerrada"); docs/CHANGELOG/testes atualizados → **152 testes** verdes.
 
 - [x] Rota de servidor `/api/youtube/search` — credencial injetada apenas no backend, **nunca no client**
@@ -206,10 +206,18 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ### Validação manual (E2E dev) — pendente de rodar (24/09)
 
-> Rode tudo em `npm run dev -- --webpack`, login dev `dono@exemplo.com`/`senha123`, sala `KARAOK` (bar `ZEHBAR`). Google OAuth client Web `karaoke-flow-web` ✓ (redirects `http://localhost:3000/auth/youtube/callback` + `http://localhost:8891/`). Consent screen ainda em **Testing** → refresh tokens expiram em ~7 dias (migrar para **Production** após validar).
+> Rode tudo em `npm run dev -- --webpack`, login dev `dono@exemplo.com`/`senha123`, sala `KARAOKE` (bar `ZEHBAR`). Google OAuth client Web `karaoke-flow-web` ✓ (redirects `http://localhost:3000/auth/youtube/callback` + `http://localhost:8891/`). Consent screen ainda em **Testing** → refresh tokens expiram em ~7 dias (migrar para **Production** após validar).
+>
+> **Bloqueios resolvidos (25/09) — prontos para rodar:**
+>
+> 1. **Presença física:** coords do Bar 1 (`ZEHBAR`) setadas para a casa do testador — **R. Cap. Olavo, 1111 - Aerolândia, Fortaleza–CE** (`lat -3.7719634`, `lon -38.5146187`, `cidade='Fortaleza'`) via service-role PATCH e persistidas em `scripts/seed.mjs` (reseed não reverte). `BARSEG`/Bar 2 segue sem coords (GEO_UNAVAILABLE).
+> 2. **Runtime `/entrar`:** o fluxo de código puro derrubava o render no Next 16 ("revalidatePath … during render") porque `enterRoomByCodeAction` mutava **durante o render**. Corrigido: `/entrar` usa leitura (`getEntryPreviewAction`) no render e a entrada roda no client (`EnterRoomByCode`) via Server Action no mount — entrada automática mantida, aprovação do host intacta.
+>
+> **Revalidar** os itens de Fase 3.6 abaixo (notas também no `TESTING.md` §3.2/§3.6).
 
+- [ ] **Fase 3.6 — código de sala configurável + entrada por código:** digitar `KARAOKE` no `/entrar` (anônimo ou ana/bruno) → entra **direto na sala sem mesa** → `MesaPicker` obrigatório dentro da sala → "Bar · Mesa N"; host troca o código no `RoomSettings` (colisão bloqueada; página redireciona para o novo código); QR de bar/mesa (`?bar=ZEHBAR&mesa=3`) mantém mesa pré-selecionada; criar novo bar com `codigo_entrada` customizado e com default derivado do nome.
 - [ ] **OAuth por-host conecta e grava de verdade:** "Conectar com o Google" no `RoomSettings` → volta para o callback → bloco mostra **"conectado à conta Google · desde …"**; conferir 1 linha nova em `youtube_oauth_tokens` (Management API).
-- [ ] **Busca com OAuth (sem 502):** `/salas/KARAOK/buscar` retorna resultados com o token do host (Bearer) — nada de "Não foi possível buscar no YouTube agora".
+- [ ] **Busca com OAuth (sem 502):** `/salas/KARAOKE/buscar` retorna resultados com o token do host (Bearer) — nada de "Não foi possível buscar no YouTube agora".
 - [ ] **Dono auto-aprovado:** com a sala em `queueApprovalMode=manual`, o dono pede uma música → status **`approved`** de primeira (trigger `queue_items_initial_status`).
 - [ ] **Busca/adicionar de participante:** entrar com mesa + geo (ex. `ana@exemplo.com`) → busca ok e adiciona música respeitando o modo da sala (geo gate: celular precisa permitir localização).
 - [ ] **Encerrar sala (só o dono):** botão "Encerrar sala" → confirm → sala `closed`, itens não tocados viram **`cancelled`**, **todos os `room_members` são deletados** (expulsos); quem era membro vê a tela "Esta sala foi encerrada"; tentativa de encerrar como não-host deve falhar (UI escondida + backend recusa).
@@ -220,16 +228,27 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 > A adição à fila (com `position` por advisory lock e status inicial por modo de aprovação) já é entregue na Fase 4; esta fase fecha o ecossistema da fila.
 
+> **Escopo registrado (26/09) — implementação começa em 27/09 (blocos A–F):**
+>
+> 1. **Bloqueio de UI de aprovação:** o backend já suporta aprovar/rejeitar/remover (RLS `queue_items_update_host`/`delete_host` + triggers de status), mas **não existe UI nem action** — `QueueList` é read-only. Entra nesta fase: ações `setQueueItemStatusAction`/`removeQueueItemAction` (padrão `.select()` de validação RLS) + painel do host espelhando `PendingEntries`.
+> 2. **Bloco A — host aprovar/rejeitar/remover** músicas (painel com Realtime por sala).
+> 3. **Bloco B — modal `requireSongConfirmation`** (Dialog com thumbnail/título/duração antes do `addSongToQueueAction`; config já persistida no RoomSettings).
+> 4. **Bloco C — reordenar (host): mover ⬆/⬇ por item E drag-and-drop (AMBOS decididos)** + remover; reescreve `position` no backend.
+> 5. **Bloco D — trocar a própria música** mantendo posição/status: RPC `replace_queue_song` (`security definer`, regras D1–D3 em `docs/flows/fluxos-do-sistema.md` §5) + action + botão em itens `pending`/`approved` do autor/host.
+> 6. **Bloco E — feedback visual:** mostrar "quem pediu" (join `added_by` × `profiles_public`) e distinguir `pendente de aprovação` vs `na fila` vs `tocando agora`.
+> 7. **Bloco F — testes + docs:** unit/UI das actions e RPC; TESTING §3.5; TODO/CHANGELOG.
+> 8. **Canal `room:{id}` (broadcast) fica para Fase 6/7** (player/controller); nesta fase a fila segue no `postgres_changes` por sala (`queue-{roomId}`, já isolado por `room_id=eq`).
+
 - [ ] Estados da fila e transições: `pending → approved → playing → played`; `rejected`, `skipped`; `cancelled` (terminal — dono encerra a sala, já entregue na Fase 4)
 - [ ] `queueApprovalMode = auto`: entra direto na fila
-- [ ] `queueApprovalMode = manual`: entra como `pending` até host aprovar
-- [ ] `requireSongConfirmation = true`: modal de confirmação (Dialog) com thumbnail/título/duração antes de enviar à fila; só persiste após "Confirmar"
-- [ ] Realtime da fila via canal `room:{id}` (especificamente por sala, nunca canal global)
-- [ ] Painel de aprovação de fila (drawer, ações aprovar/rejeitar sem sair da tela principal)
-- [ ] Reordenar e remover itens (host)
-- [ ] **Trocar a própria música mantendo a posição na fila** (RPC `replace_queue_song` — dashboard caso A; regras fechadas com o PO em `docs/flows/fluxos-do-sistema.md` §5/§5.2: quem troca = autor+host; status preservado; estados `pending`+`approved`)
-- [ ] Feedback visual claro por estado: `pendente de aprovação` vs `na fila` vs `tocando agora`
-- [ ] Indicador "quem está cantando agora" e "próximo da fila" sempre visíveis, mesmo rolando
+- [ ] `queueApprovalMode = manual`: entra como `pending` até host aprovar (**painel de aprovação no Bloco A**)
+- [ ] `requireSongConfirmation = true`: modal de confirmação (Dialog) com thumbnail/título/duração antes de enviar à fila; só persiste após "Confirmar" (Bloco B)
+- [ ] Realtime da fila via canal `room:{id}` (especificamente por sala, nunca canal global) — **deferido p/ Fase 6/7**; nesta fase continua `postgres_changes` por sala
+- [ ] Painel de aprovação de fila (drawer, ações aprovar/rejeitar sem sair da tela principal) — Bloco A
+- [ ] Reordenar e remover itens (host) — mover ⬆/⬇ **e drag-and-drop (ambos)** — Bloco C
+- [ ] **Trocar a própria música mantendo a posição na fila** (RPC `replace_queue_song` — dashboard caso A; regras fechadas com o PO em `docs/flows/fluxos-do-sistema.md` §5/§5.2: quem troca = autor+host; status preservado; estados `pending`+`approved`) — Bloco D
+- [ ] Feedback visual claro por estado: `pendente de aprovação` vs `na fila` vs `tocando agora` (+ "quem pediu") — Bloco E
+- [ ] Indicador "quem está cantando agora" e "próximo da fila" sempre visíveis, mesmo rolando — depende de playback (Fase 6/7)
 
 ## Fase 6 — Player device (tela `/player/[codigo]`)
 

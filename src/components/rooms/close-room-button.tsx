@@ -2,24 +2,25 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Power } from "lucide-react";
+import { Power, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { closeRoomAction } from "@/lib/rooms/actions";
+import { closeRoomAction, reopenRoomAction } from "@/lib/rooms/actions";
 
 type CloseRoomButtonProps = {
   roomId: string;
-  disabled?: boolean;
+  /** true quando a sala já está encerrada → o botão vira "Reabrir sala". */
+  closed?: boolean;
 };
 
-export function CloseRoomButton({ roomId, disabled }: CloseRoomButtonProps) {
+export function CloseRoomButton({ roomId, closed }: CloseRoomButtonProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function handleClose() {
     const confirmed = window.confirm(
-      "Encerrar a sala? A fila será cancelada e interrompida, e todos os participantes serão expulsos. Só você (dono) pode reabrir."
+      "Encerrar o karaokê? A fila será cancelada e interrompida, e todos os participantes serão expulsos. Você poderá reabrir depois."
     );
     if (!confirmed) return;
 
@@ -27,20 +28,36 @@ export function CloseRoomButton({ roomId, disabled }: CloseRoomButtonProps) {
     const result = await closeRoomAction(roomId);
     setBusy(false);
     if (!result.ok) {
-      toast.error(result.error ?? "Não foi possível encerrar a sala.");
+      toast.error(result.error ?? "Não foi possível encerrar o karaokê.");
       return;
     }
-    toast.success("Sala encerrada.");
+    toast.success("Karaokê encerrado.");
     router.refresh();
   }
 
+  async function handleReopen() {
+    setBusy(true);
+    const result = await reopenRoomAction(roomId);
+    setBusy(false);
+    if (!result.ok) {
+      toast.error(result.error ?? "Não foi possível reabrir o karaokê.");
+      return;
+    }
+    toast.success("Karaokê reaberto — a galera já pode entrar de novo.");
+    router.refresh();
+  }
+
+  if (closed) {
+    return (
+      <Button type="button" variant="secondary" onClick={handleReopen} disabled={busy}>
+        <RotateCcw className="size-4" />
+        Reabrir sala
+      </Button>
+    );
+  }
+
   return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={handleClose}
-      disabled={disabled || busy}
-    >
+    <Button type="button" variant="outline" onClick={handleClose} disabled={busy}>
       <Power className="size-4" />
       Encerrar sala
     </Button>

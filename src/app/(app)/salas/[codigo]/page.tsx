@@ -1,7 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DoorOpen, Lock, Power, QrCode, Store, Table2, User } from "lucide-react";
+import {
+  DoorOpen,
+  Hourglass,
+  Lock,
+  Power,
+  QrCode,
+  Store,
+  Table2,
+  User,
+} from "lucide-react";
 
+import { MesaPicker } from "@/components/rooms/mesa-picker";
 import { PendingEntries } from "@/components/rooms/pending-entries";
 import type { PendingEntry } from "@/components/rooms/pending-entries";
 import { QueueList } from "@/components/rooms/queue-list";
@@ -10,6 +20,7 @@ import { RoomQr } from "@/components/rooms/room-qr";
 import { RoomSettings } from "@/components/rooms/room-settings";
 import { CloseRoomButton } from "@/components/rooms/close-room-button";
 import { LeaveRoomButton } from "@/components/rooms/leave-room-button";
+import { MesaQrDialog } from "@/components/rooms/mesa-qr-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -18,7 +29,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { barJoinUrl, mesaJoinUrl } from "@/lib/bars/qr";
+import { barJoinUrl } from "@/lib/bars/qr";
 import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
@@ -108,16 +119,20 @@ export default async function RoomPage({ params }: RoomPageProps) {
     bar = barData;
   }
 
-  let myMesa: number | null = null;
+  let myMembership:
+    { status?: string | null; mesa_numero?: number | null } | null | undefined;
   if (!isHost) {
     const { data: membership } = await supabase
       .from("room_members")
-      .select("mesa_numero")
+      .select("status, mesa_numero")
       .eq("room_id", room.id)
       .eq("user_id", user.id)
       .maybeSingle();
-    myMesa = membership?.mesa_numero ?? null;
+    myMembership = membership;
   }
+  const myMesa = myMembership?.mesa_numero ?? null;
+  const isPendingMember = myMembership?.status === "pending";
+  const needsMesa = (myMembership?.status ?? null) === "approved" && myMesa == null;
 
   let pendingInitial: PendingEntry[] = [];
   if (isHost) {
@@ -146,7 +161,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
 
   const { data: queueRows } = await supabase
     .from("queue_items")
-    .select("id, title, status, position, duration_seconds, thumbnail_url, added_by_user_id")
+    .select(
+      "id, title, status, position, duration_seconds, thumbnail_url, added_by_user_id"
+    )
     .eq("room_id", room.id)
     .in("status", ["pending", "approved", "playing"])
     .order("position", { ascending: true })
@@ -169,7 +186,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h1 className="font-mono text-2xl font-bold tracking-[0.2em]">{room.code}</h1>
+              <h1 className="font-mono text-2xl font-bold tracking-[0.2em]">
+                {room.code}
+              </h1>
               {closed && (
                 <Badge variant="destructive">
                   <Power className="size-3" />
@@ -237,8 +256,8 @@ export default async function RoomPage({ params }: RoomPageProps) {
               Cartaz e QR das mesas
             </CardTitle>
             <CardDescription>
-              QR do bar para quem ainda vai escolher a mesa; QR de cada mesa para a
-              galera entrar direto na sala.
+              QR do bar para quem ainda vai escolher a mesa; QR de cada mesa para a galera
+              entrar direto na sala.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -250,22 +269,12 @@ export default async function RoomPage({ params }: RoomPageProps) {
               />
             </div>
             {bar.quantidade_mesas > 1 && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {Array.from({ length: bar.quantidade_mesas }, (_, i) => i + 1).map((n) => (
-                  <div
-                    key={n}
-                    className="border-border flex flex-col items-center gap-1 rounded-xl border p-2"
-                  >
-                    <span className="text-muted-foreground font-mono text-xs font-semibold">
-                      Mesa {n}
-                    </span>
-                    <RoomQr
-                      value={mesaJoinUrl(bar.code, n)}
-                      alt={`QR da mesa ${n} do bar ${bar.nome}`}
-                      fileName={`qr-mesa-${n}-${bar.code}.png`}
-                    />
-                  </div>
-                ))}
+              <div className="flex justify-center">
+                <MesaQrDialog
+                  barCode={bar.code}
+                  barNome={bar.nome}
+                  quantidadeMesas={bar.quantidade_mesas}
+                />
               </div>
             )}
           </CardContent>
@@ -288,15 +297,36 @@ export default async function RoomPage({ params }: RoomPageProps) {
 
       {isHost && <PendingEntries roomId={room.id} initial={pendingInitial} />}
 
-      <QueueList
-        roomId={room.id}
-        roomCode={code}
-        initial={queueInitial}
-        isHost={isHost}
-      />
+      {!isHost && isPendingMember && (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-6 text-center">
+          <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
+            <Hourglass className="size-6" />
+          </span>
+          <div>
+            <p className="font-medium">Pedido de entrada enviado!</p>
+            <p className="text-muted-foreground text-sm">
+              O dono vai aprovar sua entrada{myMesa ? ` na mesa ${myMesa}` : ""}. Assim
+              que aprovar, você consegue pedir músicas.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isHost && needsMesa && bar && (
+        <MesaPicker roomId={room.id} quantidadeMesas={bar.quantidade_mesas} />
+      )}
+
+      {(isHost ? true : !isPendingMember && !needsMesa) && (
+        <QueueList
+          roomId={room.id}
+          roomCode={code}
+          initial={queueInitial}
+          isHost={isHost}
+        />
+      )}
 
       {isHost ? (
-        <CloseRoomButton roomId={room.id} disabled={closed} />
+        <CloseRoomButton roomId={room.id} closed={closed} />
       ) : (
         <LeaveRoomButton roomId={room.id} />
       )}

@@ -1,4 +1,8 @@
-const CODE_PATTERN = /^[A-Z0-9]{6}$/;
+/**
+ * Código de entrada: bar (QR) mantém 6 chars gerados; sala é configurável
+ * (3–12 alfanuméricos). Um mesmo padrão cobre os dois.
+ */
+const CODE_PATTERN = /^[A-Z0-9]{3,12}$/;
 
 /** Resultado do parse de um token de entrada (texto digitado ou QR). */
 export type EntryToken = {
@@ -13,7 +17,7 @@ function isCode(value: string): value is string {
 
 /**
  * Interpreta o que o usuário trouxe para entrar:
- *  - texto puro de 6 chars  → código (pode ser bar OU sala; a RPC resolve);
+ *  - texto puro de 3–12 chars → código (pode ser bar OU sala; a RPC resolve);
  *  - URL `/entrar`          → lê `bar`, `mesa` e `code`;
  *  - qualquer outra URL     → ignora.
  */
@@ -68,7 +72,10 @@ export function entryRoute(token: EntryToken): string {
 
 /** URL do QR do bar (leva à preview do bar para escolher a mesa). */
 export function barJoinUrl(barCode: string): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
+    /\/$/,
+    ""
+  );
   return `${base}/entrar?bar=${barCode}`;
 }
 
@@ -84,6 +91,9 @@ export function extractEntryToken(text: string): string | null {
 
 /** URL do QR de uma mesa (entrada direta na sala com a mesa pré-selecionada). */
 export function mesaJoinUrl(barCode: string, mesa: number): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
+    /\/$/,
+    ""
+  );
   return `${base}/entrar?bar=${barCode}&mesa=${mesa}`;
 }

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createBarSchema, type CreateBarInput } from "@/lib/bars/schema";
 import { requirePresence } from "@/lib/bars/presence";
 import { geocodeAddress, type PresenceDecision } from "@/lib/bars/geo";
+import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
 import type { EntryBarPreview } from "@/types/bar";
 import type { MemberStatus } from "@/types/room";
 
@@ -26,12 +27,12 @@ function friendlyError(message: string, fallback: string): string {
   if (/mesa inválida|mesa não existe/i.test(message))
     return "Mesa inválida para este bar.";
   if (/escolha uma mesa/i.test(message)) return "Escolha uma mesa para entrar.";
-  if (/crie uma conta/i.test(message))
-    return "Crie uma conta para criar o seu bar.";
+  if (/crie uma conta/i.test(message)) return "Crie uma conta para criar o seu bar.";
   if (/localização incompleta|latitude inválida|longitude inválida/i.test(message))
     return "Localização do bar inválida.";
   if (/raio de presença inválido/i.test(message))
     return "Raio de presença inválido (50–1000 m).";
+  if (/bar sem sala ativa/i.test(message)) return "Esta casa está encerrada no momento.";
   return message;
 }
 
@@ -68,18 +69,25 @@ export async function createBarAction(raw: unknown): Promise<CreateBarResult> {
       p_latitude: input.latitude ?? null,
       p_longitude: input.longitude ?? null,
       p_raio_permitido_metros: input.raio_permitido_metros,
+      p_codigo: input.codigo_entrada ?? deriveRoomCodeFromName(input.nome),
     })
     .single()) as { data: CreateBarRpcRow | null; error: { message: string } | null };
 
   if (error) {
-    return { ok: false, error: friendlyError(error.message, "Não foi possível criar o bar.") };
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível criar o bar."),
+    };
   }
   if (!data) {
     return { ok: false, error: "Não foi possível criar o bar." };
   }
 
   revalidatePath("/dashboard");
-  return { ok: true, bar: { id: data.bar_id, code: data.bar_code, room_code: data.room_code } };
+  return {
+    ok: true,
+    bar: { id: data.bar_id, code: data.bar_code, room_code: data.room_code },
+  };
 }
 
 export type EntryPreviewResult =
@@ -109,7 +117,8 @@ export async function getEntryPreviewAction(
   }
   const first = data[0] as EntryBarPreview;
 
-  const isAnonymous = (user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true) === true;
+  const isAnonymous =
+    (user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true) === true;
   const isHost = !!user && !isAnonymous && first.host_id === user.id;
 
   let presence: PresenceDecision | undefined;
@@ -144,14 +153,18 @@ export async function joinEntryAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Faça login para entrar." };
 
-  const isAnonymous = (user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true) === true;
+  const isAnonymous =
+    (user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true) === true;
 
   const { data: previewRows, error: previewError } = (await supabase.rpc(
     "get_entry_preview",
     { p_code: roomCode, p_mesa: mesa }
   )) as { data: unknown; error: { message: string } | null };
   if (previewError || !Array.isArray(previewRows) || previewRows.length === 0) {
-    return { ok: false, error: friendlyError(previewError?.message ?? "", "Sala não encontrada.") };
+    return {
+      ok: false,
+      error: friendlyError(previewError?.message ?? "", "Sala não encontrada."),
+    };
   }
   const preview = previewRows[0] as EntryBarPreview;
 
@@ -182,8 +195,7 @@ export async function joinEntryAction(
 }
 
 export type GeocodeResult =
-  | { ok: true; latitude: number; longitude: number }
-  | { ok: false; error: string };
+  { ok: true; latitude: number; longitude: number } | { ok: false; error: string };
 
 /** Geocode gratuito do endereço do bar (Nominatim/OSM, server-side). */
 export async function geocodeBarAddressAction(
@@ -194,8 +206,74 @@ export async function geocodeBarAddressAction(
   if (!coords) {
     return {
       ok: false,
-      error: "Não encontramos o endereço. Tente o botão \"usar minha localização atual\".",
+      error: 'Não encontramos o endereço. Tente o botão "usar minha localização atual".',
     };
   }
   return { ok: true, latitude: coords.latitude, longitude: coords.longitude };
+}
+
+export type EnterRoomByCodeResult =
+  { ok: true; redirect: string } | { ok: false; error: string; geoRequired?: boolean };
+
+/**
+ * Entrada DIRETA por código de sala (digitado ou QR legado `?code=`): pula a
+ * preview e a escolha de mesa — o cliente entra na sala SEM mesa e a mesa é
+ * escolhida depois dentro da sala (mesa só vem por QR de bar/mesa). Host que
+ * digita o próprio código é redirecionado à sala.
+ */
+export async function enterRoomByCodeAction(
+  code: string
+): Promise<EnterRoomByCodeResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Faça login para entrar." };
+
+  const isAnonymous =
+    (user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true) === true;
+
+  const { data: rows, error } = (await supabase.rpc("get_entry_preview", {
+    p_code: code,
+    p_mesa: null,
+  })) as { data: unknown; error: { message: string } | null };
+  if (error || !Array.isArray(rows) || rows.length === 0) {
+    return {
+      ok: false,
+      error: friendlyError(error?.message ?? "", "Sala não encontrada."),
+    };
+  }
+  const preview = rows[0] as EntryBarPreview;
+
+  if (preview.host_id === user.id && !isAnonymous) {
+    return { ok: true, redirect: `/salas/${preview.room_code}` };
+  }
+
+  const presence = requirePresence({
+    isHost: false,
+    bar: {
+      latitude: preview.bar_latitude,
+      longitude: preview.bar_longitude,
+      raioPermitidoMetros: preview.bar_raio_permitido_metros,
+    },
+    store: await cookies(),
+  });
+  if (!presence.ok) {
+    return { ok: false, error: presence.error, geoRequired: presence.geoRequired };
+  }
+
+  const { error: joinError } = (await supabase.rpc("join_room", {
+    p_code: preview.room_code,
+    p_mesa: null,
+  })) as { data: unknown; error: { message: string } | null };
+  if (joinError) {
+    return {
+      ok: false,
+      error: friendlyError(joinError.message, "Não foi possível entrar."),
+    };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/entrar");
+  return { ok: true, redirect: `/salas/${preview.room_code}` };
 }

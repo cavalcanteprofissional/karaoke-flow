@@ -1,5 +1,15 @@
 import Link from "next/link";
-import { DoorOpen, Laugh, MapPin, Plus, QrCode, Table2, UserRound, Store } from "lucide-react";
+import {
+  DoorOpen,
+  Laugh,
+  MapPin,
+  Plus,
+  Power,
+  QrCode,
+  Table2,
+  UserRound,
+  Store,
+} from "lucide-react";
 
 import { CreateBarDialog } from "@/components/bars/create-bar-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +52,10 @@ export default async function DashboardPage() {
     .select("*")
     .eq("host_id", user!.id)
     .order("created_at", { ascending: false });
+
+  const activeHostedCount = (hostedRooms ?? []).filter(
+    (r) => r.status === "active"
+  ).length;
 
   const { data: memberships } = await supabase
     .from("room_members")
@@ -123,7 +137,7 @@ export default async function DashboardPage() {
               <div className="flex flex-col gap-0.5">
                 <span className="flex items-center gap-2">
                   <span className="text-lg font-semibold">{myBar.nome}</span>
-                  <span className="border-border bg-secondary/40 font-mono rounded-md border px-2 py-0.5 text-xs tracking-[0.2em]">
+                  <span className="border-border bg-secondary/40 rounded-md border px-2 py-0.5 font-mono text-xs tracking-[0.2em]">
                     {myBar.code}
                   </span>
                 </span>
@@ -140,10 +154,18 @@ export default async function DashboardPage() {
                 </p>
               </div>
               <div className="flex flex-col items-end gap-1">
-                <Badge variant="secondary" className="text-xs">
-                  <QrCode className="size-3" />
-                  {hostedRooms?.length ?? 0} karaokê ativo
-                </Badge>
+                {activeHostedCount === 0 && (hostedRooms?.length ?? 0) > 0 ? (
+                  <Badge variant="destructive" className="text-xs">
+                    <Power className="size-3" />
+                    encerrado — reabra pelo karaokê
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">
+                    <QrCode className="size-3" />
+                    {activeHostedCount} karaokê{" "}
+                    {activeHostedCount > 1 ? "ativos" : "ativo"}
+                  </Badge>
+                )}
               </div>
             </div>
           </Link>
@@ -177,7 +199,7 @@ export default async function DashboardPage() {
                   <div className="flex flex-col gap-0.5">
                     <span className="flex items-center gap-2">
                       <span className="font-medium">{bar.nome}</span>
-                      <span className="border-border bg-secondary/40 font-mono rounded-md border px-2 py-0.5 text-xs tracking-[0.2em]">
+                      <span className="border-border bg-secondary/40 rounded-md border px-2 py-0.5 font-mono text-xs tracking-[0.2em]">
                         {bar.code}
                       </span>
                     </span>

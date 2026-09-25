@@ -1,6 +1,6 @@
 # Banco de dados
 
-Modelo relacional, matriz de RLS e regras de integridade do MVP (reflete `supabase/migrations/2026092100*.sql`).
+Modelo relacional, matriz de RLS e regras de integridade do MVP (reflete `supabase/migrations/*.sql` aplicadas no projeto cloud `kskoipyzqcacccepcqpc`).
 
 ---
 
@@ -19,7 +19,7 @@ erDiagram
     rooms ||--o{ queue_items : "contém"
     rooms {
         uuid id PK
-        text code UK "6 chars, sem ambíguos"
+        text code UK "3-12 chars, custom (default: nome do bar)"
         text qr_code_url "legado (QR agora é do bar/mesa)"
         uuid bar_id FK "bars.id (karaokê do bar)"
         uuid host_id FK "auth.users.id"
@@ -36,17 +36,20 @@ erDiagram
         uuid user_id PK,FK "auth.users.id"
         member_status status "pending|approved|rejected"
         timestamptz joined_at
-        integer mesa_numero "etiqueta da mesa do participante"
+        integer mesa_numero "nullable: QR de bar/mesa grava; entrada por código entra sem mesa (mesa depois via pick_mesa)"
     }
 
     bars {
         uuid id PK
         uuid host_id UK,FK "auth.users.id (1 host = 1 bar)"
-        text code UK "6 chars, sem ambíguos"
+        text code UK "6 chars, sem ambíguos (QR do bar)"
         text nome
         text cidade
         text endereco
         integer quantidade_mesas "default 1 (1..999)"
+        float latitude "nullable (geo gate)"
+        float longitude "nullable (geo gate)"
+        integer raio_permitido_metros "default 150 (50..1000)"
         timestamptz criado_em
     }
 
@@ -102,7 +105,9 @@ erDiagram
 
 > `consents` (migration `20260921000009`, spec §2.5/§13): registro de aceite LGPD/GDPR por usuário — RLS restrito ao próprio usuário (`consents_select_own`).
 
-> `bars`/`mesas` (migrations `20260923000010`/`20260923000011`): o bar é o perfil-personificação do host (1:1 `host_id` único); mesas são etiquetas do bar (playlist = a da sala/karaokê). `rooms.bar_id` e `room_members.mesa_numero` são adicionados pela migration `20260923000012`.
+> `bars`/`mesas` (migrations `20260923000010`/`20260923000011`): o bar é o perfil-personificação do host (1:1 `host_id` único); mesas são etiquetas do bar (playlist = a da sala/karaokê). `rooms.bar_id` e `room_members.mesa_numero` são adicionados pela migration `20260923000012`; coords + raio de presença por `20260923000015`.
+>
+> **Código da sala configurável (migration `20260924000022`):** `rooms.code` aceita **3–12 alfanuméricos maiúsculos** (constraint), padrão por bar `KARAOKE`/`BAR2FO`; helpers RPC `unique_room_code`/`default_room_code`/`room_code_available` (checam colisão com `rooms.code` e `bars.code`); `create_bar` ganha `p_codigo` (default = nome do bar normalizado, fallback `KARAOKE`+sufixo); `join_room` tem `p_mesa` **opcional** (entrada por código entra sem mesa) e a nova RPC **`pick_mesa`** grava a mesa depois (só membro `approved` de sala `active`). A migration `20260924000021` corrige a ambiguidade `bar_id` no `get_entry_preview`. Seed: `KARAOK` → **`KARAOKE`**.
 
 ---
 
@@ -137,16 +142,16 @@ flowchart LR
 
 ## 3. Matriz de RLS
 
-| Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                  | DELETE                         |
-| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | ----------------------- | ------------------------------ |
-| `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                    | host                           |
-| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                       | —                              |
-| `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                    | host                           |
-| `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar) | self **ou** host               |
-| `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only**           | host only                      |
-| `profiles`     | via view `profiles_public` (id/name/avatar_url, sem email)             | trigger `handle_new_user` (ninguém insere direto)    | próprio profile         | —                              |
-| `consents`     | só o próprio usuário                                                     | próprio usuário (ou service role)                    | próprio usuário (ou service role) | —                          |
-| `song_cache`   | sem política                                                            | sem política                                         | sem política            | sem política (só service role) |
+| Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                            | DELETE                         |
+| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------- | ------------------------------ |
+| `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                              | host                           |
+| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                                 | —                              |
+| `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                              | host                           |
+| `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar)           | self **ou** host               |
+| `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only**                     | host only                      |
+| `profiles`     | via view `profiles_public` (id/name/avatar_url, sem email)              | trigger `handle_new_user` (ninguém insere direto)    | próprio profile                   | —                              |
+| `consents`     | só o próprio usuário                                                    | próprio usuário (ou service role)                    | próprio usuário (ou service role) | —                              |
+| `song_cache`   | sem política                                                            | sem política                                         | sem política                      | sem política (só service role) |
 
 > **Anônimo (`is_anonymous`)**: lê `bars`/`mesas` (precisa ver código/QR e escolher mesa) — mas a RPC `create_bar` recusa sessão anônima; o anfitrião começa com sessão real.
 
@@ -218,7 +223,7 @@ flowchart TD
     A["node scripts/seed.mjs"] --> B["Auth Admin API: 4 usuários (IDs fixos)"]
     B --> C["trigger handle_new_user cria profiles"]
     C --> D["INSERT 2 bares + mesas + rooms + members + queue (idempotente)"]
-    D --> E["Bar1 ZEHBAR (12 mesas) / Bar2 BARSEG (6 mesas) / salas KARAOK·BAR2FO"]
+    D --> E["Bar1 ZEHBAR (12 mesas) / Bar2 BARSEG (6 mesas) / salas KARAOKE·BAR2FO"]
     E --> F["Login dev: dono/ana/bruno/betania @exemplo.com · senha123"]
 ```
 

@@ -37,7 +37,7 @@ export function EntryTokenForm() {
     <div className="flex flex-col gap-4">
       <form onSubmit={handleSubmit} className="flex flex-col gap-2">
         <Label htmlFor="entry-token" className="text-muted-foreground text-xs">
-          Código do bar ou da casa (6 caracteres)
+          Código do bar ou da casa (3–12 caracteres)
         </Label>
         <div className="flex gap-2">
           <Input
@@ -46,8 +46,8 @@ export function EntryTokenForm() {
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
-            maxLength={6}
-            placeholder="EX: ZEHBAR"
+            maxLength={12}
+            placeholder="EX: KARAOKE"
             value={value}
             onChange={(event) => setValue(normalizeRoomCode(event.target.value))}
             className="font-mono text-lg tracking-[0.3em] uppercase"

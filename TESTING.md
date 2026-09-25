@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-23):** suite com **152 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — e o **roundtrip authorize→callback** com 4 provas do estado). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-24):** suite com **159 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — e o **roundtrip authorize→callback** com 4 provas do estado). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 
 ---
 
@@ -87,15 +87,24 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] "Continuar sem login" inicia sessão anônima e cai em `/entrar`.
 - [ ] Anônimo escaneia QR do bar → preview com **escolha da mesa** → entra e vê a fila ("Bar · Mesa N").
 - [ ] QR de mesa (`?bar=ZEHBAR&mesa=3`) entra já com a mesa selecionada.
+- [ ] **Código de sala puro (`/entrar?code=KARAOKE` ou digitado) entra DIRETO na sala, sem mesa** — a mesa é escolhida **dentro da sala**, obrigatória para membro `approved` ainda sem mesa (`/salas/[codigo]` mostra o painel de escolha da mesa — badge "KARAOKE · ZEHBAR · N mesas"); se ainda `pending`, vê o aviso de espera da aprovação.
+- [ ] **Código da sala é configurável pelo host (3–12 alfanuméricos)** no RoomSettings ("Código de entrada"): valida contra sala/bar (colisão bloqueada) e redireciona a página para o novo código.
+- [ ] **Código default do bar = nome do bar normalizado** (`Karaokê do Zé` → `KARAOKEDOZE`, truncado em 12; fellback `KARAOKE` + sufixo `KARAOKE1`, `KARAOKE2`…) — aplicado ao criar bar e exibido como dica no formulário.
 - [ ] Código legado de sala (`/entrar?code=ROOM`) continua entrando no karaokê de um bar.
 - [ ] Criar bar (conta real) pede nome/cidade/endereço/quantidade de mesas; gera bar + mesas + karaokê único.
 - [ ] **Anônimo não consegue criar bar** (botão oculto; chamada RPC rejeitada).
 - [ ] Dashboard anônimo não aparece ao logado real; proxy desvia anônimo de `/`/`/login`/`/dashboard` → `/entrar`.
 - [ ] Dashboard mostra "Meu bar" (código + mesas + badge de karaokê) e "Bares que frequento · N".
 - [ ] Botão "Adicionar sala" aparece desabilitado (multi-sala fora do MVP).
-- [ ] Página do karaokê mostra contexto "Bar · Mesa N"; host vê QR do bar + QRs das mesas.
+- [ ] Página do karaokê mostra contexto "Bar · Mesa N"; host vê QR do bar + **botão "QR das mesas (N)"** abrindo modal com 1 QR por mesa centralizado (sem distorção) + download.
+- [ ] `join_room` sem mesa (entrada por código) grava membro sem `mesa_numero`; `pick_mesa` valida a mesa (1..`quantidade_mesas`) e só funciona para membro `approved` de sala `active`.
 - [ ] `join_room` com mesa: bar de 1 mesa usa a única; dano de mesa repetida/fora do range dá erro claro.
-- [ ] `npm test` (Vitest) passa — inclui `src/lib/bars/qr.test.ts` (16 testes de parse/extração/rotas de QR).
+- [ ] `npm test` (Vitest) passa — inclui `src/lib/bars/qr.test.ts` (21 testes: parse/extração/rotas de QR + `codigo_entrada` no schema) e `src/lib/rooms/utils.test.ts` (`deriveRoomCodeFromName`, padrão 3–12).
+- [ ] **Fase 3.6 — entrada por código destravada no manual:** testador consegue entrar digitar `KARAOKE` no `/entrar` → cai direto na sala → escolhe a mesa (obrigatória, `MesaPicker`) → vê "Bar · Mesa N".
+
+> **Pendência registrada (2026-09-24) — ✅ resolvida em 25/09 (runtime):** o fluxo de entrada por código **derrubava o render** com o erro do Next 16 "Route /entrar used revalidatePath /dashboard during render which is unsupported" — a antiga `enterRoomByCodeAction` rodava a mutação (`join_room` + `revalidatePath`) **durante o render**. **Resolução:** `/entrar` usa só leitura (`getEntryPreviewAction`) no render e a entrada passa por **`EnterRoomByCode`** (client), que chama `enterRoomByCodeAction` no mount via Server Action — entrada continua automática. Revalidar os itens manuais abaixo (a pendência de **presença física** ao lado também já estava resolvida).
+
+> **Pendência registrada (2026-09-24) — ✅ resolvida em 25/09:** o testador foi **barrado pelo gate de presença física** ao validar a entrada (`kf-geo` × coords do bar ± `raio_permitido_metros` — Bar 1 `ZEHBAR` com coords do seed em SP). **Resolução:** coordenadas do Bar 1 (`ZEHBAR`) setadas para a localização real do testador — **R. Cap. Olavo, 1111 - Aerolândia, Fortaleza–CE** (`-3.7719634, -38.5146187`, `cidade='Fortaleza'`, `endereco` idêntico) via service-role PATCH e persistidas também em `scripts/seed.mjs` (reseed não reverte). `BARSEG`/Bar 2 continua **sem coords** (GEO_UNAVAILABLE) — por escolha, testes do Bar 2 ficam p/ depois ou exige coords próprias. **Revalidar** os itens manuais abaixo.
 
 ### 3.3 Salas — criar / entrar (Fase 3)
 
@@ -105,6 +114,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Entrar via scan de QR → nome da sala aparece → confirma → entra.
 - [ ] `entryMode=approval`: pedido de entrada fica `pending`; host aprova/rejeita pelo painel.
 - [ ] Sair da sala remove membro; **host encerra a sala**: a fila é **cancelada** (`cancelled`) e **todos são expulsos**; participantes veem tela de "sala encerrada"; não-host não consegue encerrar.
+- [ ] **Reabrir sala**: host reabre sala encerrada pelo botão "Reabrir sala" (`reopen_room`); status volta ao `active`, participantes podem entrar de novo pelo código/QR; itens cancelados não são ressuscitados.
 - [ ] Toggles persistidos recarregam corretos ao reentrar na sala.
 
 ### 3.4 Busca YouTube (Fase 4)

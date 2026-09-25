@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { KeyRound, Link2, LoaderCircle, PlugZap, Video } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,7 +16,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { updateRoomSettingsAction, updateYoutubeKeyAction, youtubeDisconnectAction } from "@/lib/rooms/actions";
+import {
+  updateRoomCodeAction,
+  updateRoomSettingsAction,
+  updateYoutubeKeyAction,
+  youtubeDisconnectAction,
+} from "@/lib/rooms/actions";
 import type { RoomEntryMode, RoomQueueApprovalMode } from "@/types/room";
 
 type RoomSettingsProps = {
@@ -31,13 +37,34 @@ type RoomSettingsProps = {
   youtubeConnectedAt: string | null;
 };
 
-export function RoomSettings({ roomId, roomCode, initial, youtubeConnectedAt }: RoomSettingsProps) {
+export function RoomSettings({
+  roomId,
+  roomCode,
+  initial,
+  youtubeConnectedAt,
+}: RoomSettingsProps) {
+  const router = useRouter();
   const [settings, setSettings] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [youtubeKey, setYoutubeKey] = useState(initial.youtube_api_key ?? "");
   const [youtubeBusy, setYoutubeBusy] = useState(false);
   const [ytConnBusy, setYtConnBusy] = useState(false);
+  const [roomCodeInput, setRoomCodeInput] = useState(roomCode);
+  const [codeBusy, setCodeBusy] = useState(false);
   const optimistic = useRef(settings);
+
+  async function saveRoomCode() {
+    setCodeBusy(true);
+    const result = await updateRoomCodeAction(roomId, roomCodeInput);
+    setCodeBusy(false);
+    if (!result.ok) {
+      toast.error(result.error ?? "Não foi possível trocar o código.");
+      return;
+    }
+    toast.success(`Código atualizado! Novo link: /salas/${result.newCode}`);
+    router.push(`/salas/${result.newCode}`);
+    router.refresh();
+  }
 
   async function commit(next: typeof optimistic.current) {
     optimistic.current = next;
@@ -124,27 +151,30 @@ export function RoomSettings({ roomId, roomCode, initial, youtubeConnectedAt }: 
               id="toggle-entry"
               checked={settings.entry_mode === "open"}
               onCheckedChange={(checked) =>
-                commit({ ...optimistic.current, entry_mode: checked ? "open" : "approval" })
+                commit({
+                  ...optimistic.current,
+                  entry_mode: checked ? "open" : "approval",
+                })
               }
             />
           </div>
 
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-0.5">
-              <Label htmlFor="toggle-queue">Música sem aprovação</Label>
+              <Label htmlFor="toggle-queue">Música com aprovação</Label>
               <p className="text-muted-foreground text-xs">
-                {settings.queue_approval_mode === "auto"
-                  ? "A música já entra direto na fila."
-                  : "Cada música fica pendente até você aprovar."}
+                {settings.queue_approval_mode === "manual"
+                  ? "Cada música fica pendente até você aprovar."
+                  : "A música já entra direto na fila."}
               </p>
             </div>
             <Switch
               id="toggle-queue"
-              checked={settings.queue_approval_mode === "auto"}
+              checked={settings.queue_approval_mode === "manual"}
               onCheckedChange={(checked) =>
                 commit({
                   ...optimistic.current,
-                  queue_approval_mode: checked ? "auto" : "manual",
+                  queue_approval_mode: checked ? "manual" : "auto",
                 })
               }
             />
@@ -171,13 +201,59 @@ export function RoomSettings({ roomId, roomCode, initial, youtubeConnectedAt }: 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
+            <KeyRound className="text-muted-foreground size-4" />
+            Código de entrada
+          </CardTitle>
+          <CardDescription>
+            Quem digita este código na entrada vai direto para a sala — a mesa é escolhida
+            depois, dentro do karaokê. Trocar o código muda o link{" "}
+            <span className="font-mono">/salas/…</span> e o QR que você compartilha.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Input
+              id="room-code"
+              value={roomCodeInput}
+              onChange={(event) => setRoomCodeInput(event.target.value.toUpperCase())}
+              maxLength={12}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              className="font-mono tracking-[0.2em] uppercase"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={saveRoomCode}
+              disabled={codeBusy || roomCodeInput.trim().toUpperCase() === roomCode}
+            >
+              {codeBusy ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <KeyRound className="size-4" />
+              )}
+              Salvar
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            3–12 letras ou números, sem acentos ou espaços. Padrão: o nome do bar em
+            maiúsculas (ex.: <span className="font-mono">KARAOKEDOZE</span>) ou{" "}
+            <span className="font-mono">KARAOKE</span> quando não há nome.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
             <Video className="text-muted-foreground size-4" />
             Busca de música (YouTube)
           </CardTitle>
           <CardDescription>
             A busca esgota a cota do dia por usuário. Evite usar a cota do projeto:
-            conecte a sua conta Google e a cota sair do seu projeto (recomendado)
-            ou cadastre uma chave de API.
+            conecte a sua conta Google e a cota sair do seu projeto (recomendado) ou
+            cadastre uma chave de API.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -188,14 +264,18 @@ export function RoomSettings({ roomId, roomCode, initial, youtubeConnectedAt }: 
                 id="yt-key"
                 type="password"
                 value={youtubeKey}
-                placeholder={initial.youtube_api_key ? "••••••••" : "Cole a sua YouTube API key"}
+                placeholder={
+                  initial.youtube_api_key ? "••••••••" : "Cole a sua YouTube API key"
+                }
                 onChange={(event) => setYoutubeKey(event.target.value)}
               />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={saveYoutubeKey}
-                disabled={youtubeBusy || youtubeKey.trim() === (initial.youtube_api_key ?? "")}
+                disabled={
+                  youtubeBusy || youtubeKey.trim() === (initial.youtube_api_key ?? "")
+                }
               >
                 {youtubeBusy ? (
                   <LoaderCircle className="size-4 animate-spin" />

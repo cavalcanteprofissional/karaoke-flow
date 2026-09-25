@@ -36,8 +36,8 @@ Após o login, o fluxo de sessão/dashboard é comum aos dois perfis (ver [`flux
 
 ```mermaid
 flowchart TD
-    A["/dashboard"] --> B["'Criar meu bar' (Dialog): nome, cidade, endereço,<br/>quantidade de mesas"]
-    B --> C["Bar criado: código 6 chars + QR do bar + QR das mesas"]
+    A["/dashboard"] --> B["'Criar meu bar' (Dialog): nome, cidade, endereço,<br/>quantidade de mesas (+ código de entrada opcional)"]
+    B --> C["Bar criado: código 3–12 chars — default do nome do bar<br/>(ex.: 'Karaokê do Zé' → KARAOKEDOZE) + QR do bar + QR das mesas"]
     C --> D["Configura: modo de entrada (open/aprovação),<br/>fila (auto/manual), confirmação de música"]
     D --> D1["Configura busca: 'Conexão YouTube do host'<br/>(conectar Google / colar chave de API)"]
     D1 --> E["Tela do host: fila + painéis de aprovação"]
@@ -52,20 +52,30 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Escaneia QR do bar (escolhe mesa)<br/>QR da mesa (mesa já vem) / digita code"] --> P["get_entry_preview: preview do bar + karaokê único ativo"]
+    A["QR do bar (escolhe mesa)<br/>QR da mesa (mesa já vem) / digita code"] --> R{"Entrada por código?"}
+    R -->|sim| R1["join_room sem mesa - entra DIRETO na sala (código do karaokê)"]
+    R -->|não| P["get_entry_preview: preview do bar + karaokê único ativo"]
     P --> M{"Mesa definida?"}
     M -->|não| M1["Escolhe a mesa (grid 1..N)"]
-    M -->|sim| M1
-    M1 --> G0{"Presente no bar? (geo × raio)"}
-    G0 -->|não| G1["bloqueado: 'Permitir localização' (host isento)"]
-    G0 -->|sim| B["join_room(room_code, mesa) (RPC)"]
-    B --> C{Sala em modo open?}
-    C -->|sim| D["Entra direto — vê a fila e busca ('Bar · Mesa N')"]
+    M -->|sim| MM["Mesa já vem no QR (?mesa=N)"]
+    M1 --> GB{"Presente no bar? (geo × raio)"}
+    MM --> GB
+    GB -->|não| G1["bloqueado: 'Permitir localização' (host isento)"]
+    GB -->|sim| B["join_room(room_code, mesa) (RPC)"]
+    R1 --> G0{"Presente no bar? (geo × raio)"}
+    G0 -->|não| G1
+    G0 -->|sim| C{Sala em modo open?}
+    C -->|sim| D0["approved · sem mesa → sala PEDE A MESA<br/>(MesaPicker → RPC pick_mesa) → 'Bar · Mesa N'"]
     C -->|não| E["Pedido pendente — 'aguardando aprovação do host'"]
+    B --> C2{Sala em modo open?}
+    C2 -->|sim| D["Entra direto — vê a fila e busca ('Bar · Mesa N')"]
+    C2 -->|não| E2["Pedido pendente — 'aguardando aprovação do host'"]
     E --> F{Host aprova?}
-    F -->|sim| D
+    F -->|sim| D0
     F -->|não| G["Aviso: entrada recusada (pode tentar de novo)"]
-    D --> H["Busca música (YouTube — /salas/[codigo]/buscar)"]
+    E2 --> F
+    D0 --> H["Busca música (YouTube — /salas/[codigo]/buscar)"]
+    D --> H
     H --> H0{"Ainda presente no bar?<br/>addSongToQueueAction revalida geo"}
     H0 -->|não| G1
     H0 -->|sim| I{Sala pede confirmação?}
@@ -78,6 +88,8 @@ flowchart TD
     M2 --> O["Participante acompanha a fila ao vivo (Realtime)"]
     N --> O
 ```
+
+> **Entrada por código puro (2026-09-24):** digitar o código do karaokê (ex.: `KARAOKE`, 3–12 caracteres, código do bar → vira o código de entrada) entra **direto na sala sem mesa** — a mesa é escolhida **dentro da sala** (`MesaPicker` → RPC `pick_mesa`) assim que o participante está `approved`. O QR de bar/mesa continua pré-selecionando a mesa no `join_room`. O host pode trocar o código da sala pelo RoomSettings (`updateRoomCodeAction`).
 
 > **Requisito presença física (2026-09-23):** o gate de geo (`kf-geo` × coordenadas do bar ± raio, validado no servidor) é obrigatório para **entrar** e para **adicionar música** (revalidado em `addSongToQueueAction`) — impede participação remota. Ver `fluxos-do-sistema.md` §2.2 e §3.1.
 >

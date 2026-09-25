@@ -20,19 +20,24 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { enterRoomByCodeAction } from "@/lib/bars/actions";
 import type { EntryBarPreview } from "@/types/bar";
+import type { EntryMembership } from "@/types/room";
 
 type EnterRoomByCodeProps = {
   code: string;
   preview: EntryBarPreview;
+  membership?: EntryMembership;
 };
+
+type EnterStatus = "idle" | "joining" | "error" | "pending" | "rejected" | "approved";
 
 /** Entrada DIRETA por código de sala: no mount, chama a Server Action de
  * entrada (queda do anti-pattern de mutação durante o render) e redireciona. */
-export function EnterRoomByCode({ code, preview }: EnterRoomByCodeProps) {
+export function EnterRoomByCode({ code, preview, membership }: EnterRoomByCodeProps) {
   const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "joining" | "error">("idle");
+  const [status, setStatus] = useState<EnterStatus>(membership?.status ?? "idle");
   const [errorMsg, setErrorMsg] = useState("");
   const firedRef = useRef(false);
 
@@ -40,8 +45,7 @@ export function EnterRoomByCode({ code, preview }: EnterRoomByCodeProps) {
     setStatus("joining");
     const result = await enterRoomByCodeAction(code);
     if (result.ok) {
-      router.push(result.redirect);
-      router.refresh();
+      setStatus(result.membership.status);
       return;
     }
     if (result.geoRequired) {
@@ -53,10 +57,24 @@ export function EnterRoomByCode({ code, preview }: EnterRoomByCodeProps) {
   }, [code, router]);
 
   useEffect(() => {
+    if (membership) return;
     if (firedRef.current) return;
     firedRef.current = true;
     void enter();
-  }, [enter]);
+  }, [enter, membership]);
+
+  if (status === "pending" || status === "rejected" || status === "approved") {
+    return (
+      <EntryApprovalWait
+        roomId={preview.room_id}
+        roomCode={preview.room_code}
+        barName={preview.bar_nome}
+        mesa={membership?.mesa_numero ?? null}
+        initialStatus={status}
+        onRetry={enter}
+      />
+    );
+  }
 
   const joining = status === "joining" || status === "idle";
 

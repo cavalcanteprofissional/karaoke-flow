@@ -70,7 +70,11 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
           ) : presence && !presence.ok ? (
             <LocationGate error={presence.error} />
           ) : (
-            <EnterRoomByCode code={normalized} preview={result.preview} />
+            <EnterRoomByCode
+              code={normalized}
+              preview={result.preview}
+              membership={result.membership}
+            />
           )}
           <div className="border-border rounded-xl border border-dashed p-4">
             <p className="text-muted-foreground mb-2 text-sm">Outra casa?</p>
@@ -95,6 +99,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
           <EntryPreview
             preview={result.preview}
             requestedMesa={result.mesa ?? null}
+            membership={result.membership}
             presence={result.presence}
           />
         )}

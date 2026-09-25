@@ -9,7 +9,7 @@ import { requirePresence } from "@/lib/bars/presence";
 import { geocodeAddress, type PresenceDecision } from "@/lib/bars/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
 import type { EntryBarPreview } from "@/types/bar";
-import type { MemberStatus } from "@/types/room";
+import type { EntryMembership, MemberStatus } from "@/types/room";
 
 type CreateBarRpcRow = {
   bar_id: string;
@@ -34,6 +34,18 @@ function friendlyError(message: string, fallback: string): string {
     return "Raio de presença inválido (50–1000 m).";
   if (/bar sem sala ativa/i.test(message)) return "Esta casa está encerrada no momento.";
   return message;
+}
+
+function readMembership(value: unknown): EntryMembership | null {
+  const membership = (Array.isArray(value) ? value[0] : value) as {
+    status?: MemberStatus;
+    mesa_numero?: number | null;
+  } | null;
+  if (!membership?.status) return null;
+  return {
+    status: membership.status,
+    mesa_numero: membership.mesa_numero ?? null,
+  };
 }
 
 export type CreateBarResult =
@@ -91,7 +103,12 @@ export async function createBarAction(raw: unknown): Promise<CreateBarResult> {
 }
 
 export type EntryPreviewResult =
-  | { preview: EntryBarPreview; mesa?: number; presence?: PresenceDecision }
+  | {
+      preview: EntryBarPreview;
+      mesa?: number;
+      membership?: EntryMembership;
+      presence?: PresenceDecision;
+    }
   | { error: string };
 
 /**
@@ -135,11 +152,28 @@ export async function getEntryPreviewAction(
     });
   }
 
-  return { preview: first, mesa: first.mesa_numero ?? undefined, presence };
+  let membership: EntryMembership | undefined;
+  if (user) {
+    const { data: membershipRow } = await supabase
+      .from("room_members")
+      .select("status, mesa_numero")
+      .eq("room_id", first.room_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const currentMembership = readMembership(membershipRow);
+    if (currentMembership) membership = currentMembership;
+  }
+
+  return {
+    preview: first,
+    mesa: first.mesa_numero ?? membership?.mesa_numero ?? undefined,
+    membership,
+    presence,
+  };
 }
 
 export type JoinEntryResult =
-  | { ok: true; membership: { status: MemberStatus } }
+  | { ok: true; membership: EntryMembership }
   | { ok: false; error: string; geoRequired?: boolean };
 
 /** Entra na sala do bar. `roomCode` é o código da sala resolvida na preview. */
@@ -188,10 +222,13 @@ export async function joinEntryAction(
   if (error) {
     return { ok: false, error: friendlyError(error.message, "Não foi possível entrar.") };
   }
-  const membership = (Array.isArray(data) ? data[0] : data) as { status?: MemberStatus };
+  const membership = readMembership(data) ?? {
+    status: preview.entry_mode === "open" ? ("approved" as const) : ("pending" as const),
+    mesa_numero: mesa,
+  };
   revalidatePath("/dashboard");
   revalidatePath("/entrar");
-  return { ok: true, membership: { status: membership?.status ?? "pending" } };
+  return { ok: true, membership };
 }
 
 export type GeocodeResult =
@@ -213,7 +250,8 @@ export async function geocodeBarAddressAction(
 }
 
 export type EnterRoomByCodeResult =
-  { ok: true; redirect: string } | { ok: false; error: string; geoRequired?: boolean };
+  | { ok: true; membership: EntryMembership; redirect: string }
+  | { ok: false; error: string; geoRequired?: boolean };
 
 /**
  * Entrada DIRETA por código de sala (digitado ou QR legado `?code=`): pula a
@@ -246,7 +284,11 @@ export async function enterRoomByCodeAction(
   const preview = rows[0] as EntryBarPreview;
 
   if (preview.host_id === user.id && !isAnonymous) {
-    return { ok: true, redirect: `/salas/${preview.room_code}` };
+    return {
+      ok: true,
+      membership: { status: "approved", mesa_numero: null },
+      redirect: `/salas/${preview.room_code}`,
+    };
   }
 
   const presence = requirePresence({
@@ -262,7 +304,7 @@ export async function enterRoomByCodeAction(
     return { ok: false, error: presence.error, geoRequired: presence.geoRequired };
   }
 
-  const { error: joinError } = (await supabase.rpc("join_room", {
+  const { data: joinData, error: joinError } = (await supabase.rpc("join_room", {
     p_code: preview.room_code,
     p_mesa: null,
   })) as { data: unknown; error: { message: string } | null };
@@ -275,5 +317,12 @@ export async function enterRoomByCodeAction(
 
   revalidatePath("/dashboard");
   revalidatePath("/entrar");
-  return { ok: true, redirect: `/salas/${preview.room_code}` };
+  return {
+    ok: true,
+    membership: readMembership(joinData) ?? {
+      status: preview.entry_mode === "open" ? "approved" : "pending",
+      mesa_numero: null,
+    },
+    redirect: `/salas/${preview.room_code}`,
+  };
 }

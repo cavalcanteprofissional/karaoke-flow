@@ -113,6 +113,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Entrar via código digitado → entra direto com `entryMode=open`.
 - [ ] Entrar via scan de QR → nome da sala aparece → confirma → entra.
 - [ ] `entryMode=approval`: pedido de entrada fica `pending`; host aprova/rejeita pelo painel.
+- [ ] **Tela de espera da aprovação (2026-09-25):** participante `pending` vê o card "Aguardando aprovação" (bar, código, mesa) **sem precisar recarregar** — ao aprovar no painel do host, a tela muda para "Entrada aprovada!" e ** cai sozinho na sala**; ao rejeitar, aparece "Tentar novamente" (novo pedido vai de `rejected` → `pending`); se o host **encerrar a sala**, vira "Esta sala foi encerrada". Vale nos 3 caminhos: QR de bar/mesa, `/entrar?code=` e link direto `/salas/<código>`.
 - [ ] Sair da sala remove membro; **host encerra a sala**: a fila é **cancelada** (`cancelled`) e **todos são expulsos**; participantes veem tela de "sala encerrada"; não-host não consegue encerrar.
 - [ ] **Reabrir sala**: host reabre sala encerrada pelo botão "Reabrir sala" (`reopen_room`); status volta ao `active`, participantes podem entrar de novo pelo código/QR; itens cancelados não são ressuscitados.
 - [ ] Toggles persistidos recarregam corretos ao reentrar na sala.

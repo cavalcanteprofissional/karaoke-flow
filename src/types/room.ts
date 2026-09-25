@@ -30,6 +30,8 @@ export type RoomMember = {
   mesa_numero: number | null;
 };
 
+export type EntryMembership = Pick<RoomMember, "status" | "mesa_numero">;
+
 /** Retorno da RPC `get_room_preview` (lista com 1 item). */
 export type RoomPreview = {
   room_id: string;

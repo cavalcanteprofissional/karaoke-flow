@@ -2,15 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  DoorOpen,
-  Hourglass,
-  LoaderCircle,
-  LogIn,
-  ShieldCheck,
-  Table2,
-  User,
-} from "lucide-react";
+import { DoorOpen, LoaderCircle, LogIn, ShieldCheck, Table2, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,25 +15,35 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { LocationGate } from "@/components/bars/location-gate";
+import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { MesaGrid } from "@/components/rooms/mesa-grid";
 import { joinEntryAction } from "@/lib/bars/actions";
 import type { PresenceDecision } from "@/lib/bars/geo";
 import type { EntryBarPreview } from "@/types/bar";
+import type { EntryMembership } from "@/types/room";
 
 type EntryPreviewProps = {
   preview: EntryBarPreview;
   requestedMesa?: number | null;
+  membership?: EntryMembership;
   presence?: PresenceDecision;
 };
 
 export function EntryPreview({
   preview,
   requestedMesa = null,
+  membership,
   presence,
 }: EntryPreviewProps) {
   const router = useRouter();
-  const [mesa, setMesa] = useState<number>(requestedMesa ? clampMesa(requestedMesa) : 1);
-  const [state, setState] = useState<"idle" | "joining" | "pending">("idle");
+  const initialMesa = membership?.mesa_numero ?? requestedMesa ?? 1;
+  const [mesa, setMesa] = useState<number>(clampMesa(initialMesa));
+  const [currentMembership, setCurrentMembership] = useState<EntryMembership | undefined>(
+    membership
+  );
+  const [state, setState] = useState<
+    "idle" | "joining" | "pending" | "rejected" | "approved"
+  >(membership?.status ?? "idle");
 
   function clampMesa(n: number) {
     return Math.min(Math.max(1, Math.round(n)), preview.quantidade_mesas);
@@ -61,36 +63,22 @@ export function EntryPreview({
       toast.error(result.error);
       return;
     }
-    if (result.membership.status === "approved") {
-      router.push(`/salas/${preview.room_code}`);
-      router.refresh();
-      return;
-    }
-    setState("pending");
+    setCurrentMembership(result.membership);
+    setState(result.membership.status);
   }
 
-  if (state === "pending") {
+  if (state === "pending" || state === "rejected" || state === "approved") {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-6 text-center">
-        <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-          <Hourglass className="size-6" />
-        </span>
-        <div>
-          <p className="font-medium">Pedido de entrada enviado!</p>
-          <p className="text-muted-foreground text-sm">
-            {preview.bar_nome} vai aprovar sua entrada na mesa {mesa}. Assim que aprovar,
-            você consegue pedir músicas.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/dashboard")}
-        >
-          Voltar ao início
-        </Button>
-      </div>
+      <EntryApprovalWait
+        roomId={preview.room_id}
+        roomCode={preview.room_code}
+        barName={preview.bar_nome}
+        mesa={currentMembership?.mesa_numero ?? mesa}
+        initialStatus={state}
+        onRetry={async () => {
+          await handleJoin();
+        }}
+      />
     );
   }
 

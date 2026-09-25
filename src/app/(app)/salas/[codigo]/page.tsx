@@ -1,16 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  DoorOpen,
-  Hourglass,
-  Lock,
-  Power,
-  QrCode,
-  Store,
-  Table2,
-  User,
-} from "lucide-react";
+import { DoorOpen, Lock, Power, QrCode, Store, Table2, User } from "lucide-react";
 
+import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { MesaPicker } from "@/components/rooms/mesa-picker";
 import { PendingEntries } from "@/components/rooms/pending-entries";
 import type { PendingEntry } from "@/components/rooms/pending-entries";
@@ -30,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { barJoinUrl } from "@/lib/bars/qr";
+import { getEntryPreviewAction } from "@/lib/bars/actions";
 import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
@@ -38,6 +31,28 @@ import type { Bar } from "@/types/bar";
 type RoomPageProps = {
   params: Promise<{ codigo: string }>;
 };
+
+function RoomClosedNotice() {
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
+      <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
+        <Power className="size-6" />
+      </span>
+      <div className="flex flex-col gap-1">
+        <p className="font-medium">Esta sala foi encerrada</p>
+        <p className="text-muted-foreground text-sm">
+          O dono encerrou o karaokê: a fila foi cancelada e a sala ficou indisponível.
+        </p>
+      </div>
+      <Link
+        href="/dashboard"
+        className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-semibold"
+      >
+        Voltar ao início
+      </Link>
+    </div>
+  );
+}
 
 export default async function RoomPage({ params }: RoomPageProps) {
   const { codigo } = await params;
@@ -56,6 +71,23 @@ export default async function RoomPage({ params }: RoomPageProps) {
     .maybeSingle();
 
   if (!room) {
+    const entryResult = await getEntryPreviewAction(code);
+    if (!("error" in entryResult) && entryResult.membership) {
+      return (
+        <EntryApprovalWait
+          roomId={entryResult.preview.room_id}
+          roomCode={entryResult.preview.room_code}
+          barName={entryResult.preview.bar_nome}
+          mesa={entryResult.membership.mesa_numero}
+          initialStatus={entryResult.membership.status}
+          destination={null}
+        />
+      );
+    }
+    if ("error" in entryResult && /encerrada/i.test(entryResult.error)) {
+      return <RoomClosedNotice />;
+    }
+
     return (
       <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
         <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
@@ -81,25 +113,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
   const closed = room.status === "closed";
 
   if (closed && !isHost) {
-    return (
-      <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
-        <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-          <Power className="size-6" />
-        </span>
-        <div className="flex flex-col gap-1">
-          <p className="font-medium">Esta sala foi encerrada</p>
-          <p className="text-muted-foreground text-sm">
-            O dono encerrou o karaokê: a fila foi cancelada e a sala ficou indisponível.
-          </p>
-        </div>
-        <Link
-          href="/dashboard"
-          className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-semibold"
-        >
-          Voltar ao início
-        </Link>
-      </div>
-    );
+    return <RoomClosedNotice />;
   }
 
   const { data: hostProfile } = await supabase
@@ -298,18 +312,13 @@ export default async function RoomPage({ params }: RoomPageProps) {
       {isHost && <PendingEntries roomId={room.id} initial={pendingInitial} />}
 
       {!isHost && isPendingMember && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-6 text-center">
-          <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-            <Hourglass className="size-6" />
-          </span>
-          <div>
-            <p className="font-medium">Pedido de entrada enviado!</p>
-            <p className="text-muted-foreground text-sm">
-              O dono vai aprovar sua entrada{myMesa ? ` na mesa ${myMesa}` : ""}. Assim
-              que aprovar, você consegue pedir músicas.
-            </p>
-          </div>
-        </div>
+        <EntryApprovalWait
+          roomId={room.id}
+          roomCode={room.code}
+          barName={bar?.nome ?? hostName}
+          mesa={myMesa}
+          destination={null}
+        />
       )}
 
       {!isHost && needsMesa && bar && (

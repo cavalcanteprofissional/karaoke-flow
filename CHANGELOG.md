@@ -10,6 +10,16 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ### Adicionado
 
+- **Tela de espera da aprovação de entrada com avanço automático (2026-09-25):**
+  - Novo componente compartilhado **`EntryApprovalWait`** (`src/components/bars/entry-approval-wait.tsx`) usado nos três pontos de entrada — `/entrar` por QR de bar/mesa (`EntryPreview`), `/entrar` por código (`EnterRoomByCode`) e `/salas/[codigo]` (`RoomPage`):
+    - **pendente:** card com badge "Aguardando aprovação", nome do bar, código da sala, mesa e aviso de que a tela abre o karaokê sozinha;
+    - **aprovado:** "Entrada aprovada!" + `router.replace('/salas/<código>')` + `router.refresh()` (na rota da sala, só `refresh`, que já está na URL certa);
+    - **rejeitado:** "Tentar novamente" (reenvia o pedido — `join_room` volta `rejected` → `pending`) e "Voltar ao início";
+    - **sala encerrada:** `close_room` apaga `room_members`, então a linha some → card "Esta sala foi encerrada".
+  - **Atualização em tempo real:** subscription em `room_members` filtrada por `room_id` (RLS já libera a própria linha, e a tabela está no `supabase_realtime`) + **poll de 8 s** como rede de segurança; o canal é removido no unmount.
+  - **`getEntryPreviewAction` agora devolve a membership do participante** (`status` + `mesa_numero`, novo tipo `EntryMembership`) e **`/entrar` não pede entrada de novo** para quem já tem `pending`/`rejected` na sala — o `EntryApprovalWait` assume a partir do status real, inclusive em `/salas` quando o participante chega pelo link direto (o unread de `rooms` por RLS escondia a sala). A página da sala também distingue "sala encerrada" de "link inválido" no fallback sem RLS.
+  - **Testes:** `src/components/bars/entry-approval-wait.test.tsx` (4 testes: estado de espera, redirect automático na aprovação, retry na rejeição, limpeza do canal) — **`npm test` (163) passa**, junto com `npm run typecheck`, `npm run lint` e `npm run build`.
+
 - **Código da sala configurável + entrada direta por código com mesa escolhida na sala (2026-09-24):**
   - **Migrations `20260924000021`/`20260924000022`** (aplicadas no projeto cloud via `node scripts/apply-sql.mjs`):
     - `00021` corrige a **ambiguidade de coluna** em `get_entry_preview` (ERROR 42702 `bar_id is ambiguous`) qualificando `public.rooms.bar_id`, `public.rooms.status` e `public.mesas.bar_id` no WHERE.

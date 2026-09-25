@@ -306,6 +306,18 @@ export default async function RoomPage({ params }: RoomPageProps) {
             youtube_api_key: room.youtube_api_key ?? null,
           }}
           youtubeConnectedAt={youtubeConnectedAt}
+          bar={
+            bar
+              ? {
+                  nome: bar.nome,
+                  endereco: bar.endereco,
+                  cidade: bar.cidade,
+                  latitude: bar.latitude,
+                  longitude: bar.longitude,
+                  raio_permitido_metros: bar.raio_permitido_metros,
+                }
+              : null
+          }
         />
       )}
 

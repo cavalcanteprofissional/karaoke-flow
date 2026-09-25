@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { PresenceGateInfo } from "@/components/rooms/presence-gate-info";
 import {
   updateRoomCodeAction,
   updateRoomSettingsAction,
@@ -35,6 +36,15 @@ type RoomSettingsProps = {
   };
   /** updated_at de youtube_oauth_tokens quando o host conectou a conta Google. */
   youtubeConnectedAt: string | null;
+  /** Bar da sala — só o host vê as configurações; alimenta o aviso/mapa do raio. */
+  bar: {
+    nome: string;
+    endereco: string | null;
+    cidade: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    raio_permitido_metros: number;
+  } | null;
 };
 
 export function RoomSettings({
@@ -42,6 +52,7 @@ export function RoomSettings({
   roomCode,
   initial,
   youtubeConnectedAt,
+  bar,
 }: RoomSettingsProps) {
   const router = useRouter();
   const [settings, setSettings] = useState(initial);
@@ -143,8 +154,8 @@ export function RoomSettings({
               <Label htmlFor="toggle-entry">Entrada livre</Label>
               <p className="text-muted-foreground text-xs">
                 {settings.entry_mode === "open"
-                  ? "Qualquer um com o QR entra direto."
-                  : "Cada entrada precisa da sua aprovação."}
+                  ? "Qualquer um com o QR entra direto — mas só passa quem estiver dentro do raio de presença."
+                  : "Cada entrada precisa da sua aprovação — e de estar dentro do raio de presença."}
               </p>
             </div>
             <Switch
@@ -197,6 +208,18 @@ export function RoomSettings({
           </div>
         </CardContent>
       </Card>
+
+      {bar && (
+        <PresenceGateInfo
+          barName={bar.nome}
+          address={bar.endereco}
+          city={bar.cidade}
+          latitude={bar.latitude}
+          longitude={bar.longitude}
+          radiusMeters={bar.raio_permitido_metros}
+          entryModeApproval={settings.entry_mode === "approval"}
+        />
+      )}
 
       <Card>
         <CardHeader>

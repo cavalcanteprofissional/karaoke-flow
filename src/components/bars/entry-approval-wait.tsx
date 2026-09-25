@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Ban,
   Check,
   Hourglass,
   LoaderCircle,
@@ -13,6 +14,7 @@ import {
   Table2,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,10 +25,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { cancelEntryRequestAction } from "@/lib/rooms/actions";
 import { createClient } from "@/lib/supabase/client";
 import type { MemberStatus } from "@/types/room";
 
-type WaitStatus = MemberStatus | "closed";
+type WaitStatus = MemberStatus | "closed" | "cancelled";
 
 type EntryApprovalWaitProps = {
   roomId: string;
@@ -35,6 +38,8 @@ type EntryApprovalWaitProps = {
   mesa?: number | null;
   initialStatus?: MemberStatus;
   destination?: string | null;
+  /** Para onde voltar depois de cancelar (default: entrada pelo código da sala). */
+  cancelHref?: string;
   onRetry?: () => void | Promise<void>;
 };
 
@@ -45,12 +50,15 @@ export function EntryApprovalWait({
   mesa = null,
   initialStatus = "pending",
   destination,
+  cancelHref,
   onRetry,
 }: EntryApprovalWaitProps) {
+  const backToEntry = cancelHref ?? `/entrar?code=${roomCode}`;
   const router = useRouter();
   const [status, setStatus] = useState<WaitStatus>(initialStatus);
   const [currentMesa, setCurrentMesa] = useState<number | null>(mesa);
   const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const redirected = useRef(false);
 
   const finish = useCallback(() => {
@@ -146,6 +154,27 @@ export function EntryApprovalWait({
     router.push("/dashboard");
   }
 
+  /** Cancela o pedido: apaga a linha `pending` e volta ao preview do bar/sala,
+   * de onde já é possível enviar um novo pedido. */
+  async function cancel() {
+    const confirmed = window.confirm(
+      "Cancelar seu pedido de entrada? O dono do karaokê deixa de ver o seu pedido."
+    );
+    if (!confirmed) return;
+
+    setCancelling(true);
+    const result = await cancelEntryRequestAction(roomId);
+    setCancelling(false);
+    if (!result.ok) {
+      toast.error(result.error ?? "Não foi possível cancelar o pedido.");
+      return;
+    }
+    toast.success("Pedido cancelado.");
+    setStatus("cancelled");
+    router.replace(backToEntry);
+    router.refresh();
+  }
+
   if (status === "approved") {
     return (
       <Card className="border-emerald-500/30 bg-emerald-500/5" aria-live="polite">
@@ -192,6 +221,39 @@ export function EntryApprovalWait({
               <RotateCcw className="size-4" />
             )}
             Tentar novamente
+          </Button>
+          <Button type="button" variant="ghost" onClick={goHome}>
+            Voltar ao início
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (status === "cancelled") {
+    return (
+      <Card className="border-dashed" aria-live="polite">
+        <CardHeader className="items-center text-center">
+          <span className="bg-secondary text-secondary-foreground flex size-14 items-center justify-center rounded-full">
+            <Ban className="size-7" />
+          </span>
+          <CardTitle>Pedido cancelado</CardTitle>
+          <CardDescription>
+            Você cancelou o pedido de entrada em {barName}. Dá para enviar um novo pedido
+            quando quiser.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center gap-2">
+          <Button
+            type="button"
+            className="w-full"
+            onClick={() => {
+              router.replace(backToEntry);
+              router.refresh();
+            }}
+          >
+            <RotateCcw className="size-4" />
+            Enviar novo pedido
           </Button>
           <Button type="button" variant="ghost" onClick={goHome}>
             Voltar ao início
@@ -260,9 +322,25 @@ export function EntryApprovalWait({
           <span className="size-2 animate-pulse rounded-full bg-amber-500" />
           Estamos acompanhando a aprovação do host…
         </p>
-        <Button type="button" variant="ghost" onClick={goHome}>
-          Voltar ao início
-        </Button>
+        <div className="flex w-full flex-col items-center gap-1">
+          <Button type="button" variant="ghost" className="w-full" onClick={goHome}>
+            Voltar ao início
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-muted-foreground hover:text-destructive w-full"
+            onClick={() => void cancel()}
+            disabled={cancelling}
+          >
+            {cancelling ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <Ban className="size-4" />
+            )}
+            Cancelar pedido
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

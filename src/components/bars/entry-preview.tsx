@@ -18,6 +18,7 @@ import { LocationGate } from "@/components/bars/location-gate";
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { MesaGrid } from "@/components/rooms/mesa-grid";
 import { joinEntryAction } from "@/lib/bars/actions";
+import { entryRoute } from "@/lib/bars/qr";
 import type { PresenceDecision } from "@/lib/bars/geo";
 import type { EntryBarPreview } from "@/types/bar";
 import type { EntryMembership } from "@/types/room";
@@ -75,6 +76,7 @@ export function EntryPreview({
         barName={preview.bar_nome}
         mesa={currentMembership?.mesa_numero ?? mesa}
         initialStatus={state}
+        cancelHref={entryRoute({ bar: preview.bar_code, mesa })}
         onRetry={async () => {
           await handleJoin();
         }}

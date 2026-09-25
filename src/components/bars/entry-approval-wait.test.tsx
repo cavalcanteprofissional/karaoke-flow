@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   const state: {
     membership: TestMembership;
     realtimeHandler?: () => void;
+    lastCancelRoomId?: string;
   } = {
     membership: { status: "pending", mesa_numero: 2 },
   };
@@ -52,15 +53,44 @@ const mocks = vi.hoisted(() => {
     removeChannel: vi.fn(),
   };
 
-  return { router, state, query, channel, supabase };
+  const cancelEntryRequestActionMock = vi.fn(
+    async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true })
+  );
+  const cancelEntryRequestAction = (roomId: string) => {
+    state.lastCancelRoomId = roomId;
+    return cancelEntryRequestActionMock();
+  };
+  const toast = { success: vi.fn(), error: vi.fn() };
+
+  return {
+    router,
+    state,
+    query,
+    channel,
+    supabase,
+    cancelEntryRequestAction,
+    cancelEntryRequestActionMock,
+    toast,
+  };
 });
 
 vi.mock("next/navigation", () => ({
   useRouter: () => mocks.router,
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...args: unknown[]) => mocks.toast.success(...args),
+    error: (...args: unknown[]) => mocks.toast.error(...args),
+  },
+}));
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => mocks.supabase,
+}));
+
+vi.mock("@/lib/rooms/actions", () => ({
+  cancelEntryRequestAction: (roomId: string) => mocks.cancelEntryRequestAction(roomId),
 }));
 
 import { EntryApprovalWait } from "./entry-approval-wait";
@@ -79,12 +109,17 @@ describe("EntryApprovalWait", () => {
     mocks.router.push.mockClear();
     mocks.state.membership = { status: "pending", mesa_numero: 2 };
     mocks.state.realtimeHandler = undefined;
+    mocks.state.lastCancelRoomId = undefined;
     mocks.query.maybeSingle.mockClear();
     mocks.query.select.mockClear();
     mocks.query.eq.mockClear();
     mocks.supabase.from.mockClear();
     mocks.supabase.channel.mockClear();
     mocks.supabase.removeChannel.mockClear();
+    mocks.cancelEntryRequestActionMock.mockClear();
+    mocks.cancelEntryRequestActionMock.mockResolvedValue({ ok: true });
+    mocks.toast.success.mockClear();
+    mocks.toast.error.mockClear();
   });
 
   afterEach(() => {
@@ -139,5 +174,67 @@ describe("EntryApprovalWait", () => {
 
     unmount();
     expect(mocks.supabase.removeChannel).toHaveBeenCalled();
+  });
+
+  it("cancela o pedido e volta para a entrada depois de confirmar", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<EntryApprovalWait {...defaultProps} />);
+    await waitFor(() => expect(mocks.query.maybeSingle).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar pedido" }));
+
+    await waitFor(() => {
+      expect(mocks.state.lastCancelRoomId).toBe("room-1");
+      expect(mocks.router.replace).toHaveBeenCalledWith("/entrar?code=ABC123");
+      expect(mocks.router.refresh).toHaveBeenCalled();
+    });
+    confirmSpy.mockRestore();
+  });
+
+  it("não cancela nada quando o participante desiste da confirmação", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<EntryApprovalWait {...defaultProps} />);
+    await waitFor(() => expect(mocks.query.maybeSingle).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar pedido" }));
+
+    await waitFor(() => expect(mocks.router.replace).not.toHaveBeenCalled());
+    expect(mocks.cancelEntryRequestActionMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("usa a rota de cancelamento informada (QR do bar com mesa)", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <EntryApprovalWait {...defaultProps} cancelHref="/entrar?bar=BARSEG&mesa=2" />
+    );
+    await waitFor(() => expect(mocks.query.maybeSingle).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar pedido" }));
+
+    await waitFor(() =>
+      expect(mocks.router.replace).toHaveBeenCalledWith("/entrar?bar=BARSEG&mesa=2")
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("avisa quando o cancelamento falha", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mocks.cancelEntryRequestActionMock.mockResolvedValue({
+      ok: false,
+      error: "Você não tem nenhum pedido aguardando aprovação.",
+    });
+    render(<EntryApprovalWait {...defaultProps} />);
+    await waitFor(() => expect(mocks.query.maybeSingle).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar pedido" }));
+
+    await waitFor(() => expect(mocks.cancelEntryRequestActionMock).toHaveBeenCalled());
+    expect(mocks.router.replace).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      "Você não tem nenhum pedido aguardando aprovação."
+    );
+    expect(screen.getByText("Aguardando aprovação")).toBeInTheDocument();
+    confirmSpy.mockRestore();
   });
 });

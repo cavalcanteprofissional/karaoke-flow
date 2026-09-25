@@ -142,6 +142,33 @@ export async function updateYoutubeKeyAction(
   return { ok: true };
 }
 
+/** Cancela o próprio pedido de entrada enquanto ele está `pending` (RLS já
+ * permite auto-delete). Quem já está `approved` usa `leaveRoomAction`. */
+export async function cancelEntryRequestAction(
+  roomId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("room_members")
+    .delete()
+    .eq("room_id", roomId)
+    .eq("status", "pending")
+    .select("user_id");
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível cancelar o pedido."),
+    };
+  }
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Você não tem nenhum pedido aguardando aprovação." };
+  }
+  revalidatePath("/entrar");
+  revalidatePath("/salas/[codigo]", "page");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function leaveRoomAction(
   roomId: string
 ): Promise<{ ok: boolean; error?: string }> {

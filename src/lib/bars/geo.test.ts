@@ -192,7 +192,7 @@ describe("geocodeAddress", () => {
 });
 
 describe("createBarSchema — localização e raio", () => {
-  it("aceita bar sem coords (localização opcional) com raio default 150", () => {
+  it("aceita bar sem coords (localização opcional) com raio default 500", () => {
     const base = {
       nome: "Karaokê do Zé",
       cidade: "São Paulo",
@@ -204,7 +204,7 @@ describe("createBarSchema — localização e raio", () => {
     if (parsed.success) {
       expect(parsed.data.latitude).toBeNull();
       expect(parsed.data.longitude).toBeNull();
-      expect(parsed.data.raio_permitido_metros).toBe(150);
+      expect(parsed.data.raio_permitido_metros).toBe(500);
     }
   });
 

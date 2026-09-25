@@ -47,7 +47,7 @@ export const createBarSchema = z
       .int("O raio deve ser inteiro.")
       .min(50, "O raio mínimo é 50 m.")
       .max(1000, "O raio máximo é 1000 m.")
-      .default(150),
+      .default(500),
     /** Código de entrada opcional: vazio → default pelo nome do bar (KARAOKE). */
     codigo_entrada: z.preprocess(
       (value) =>

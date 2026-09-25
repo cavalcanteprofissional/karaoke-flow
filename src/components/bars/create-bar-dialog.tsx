@@ -31,7 +31,7 @@ export function CreateBarDialog() {
     cidade: "",
     endereco: "",
     quantidade_mesas: "1",
-    raio_permitido_metros: "150",
+    raio_permitido_metros: "500",
     codigo_entrada: "",
   });
   const [coords, setCoords] = useState<GeoCoordinates | null>(null);
@@ -81,7 +81,7 @@ export function CreateBarDialog() {
       cidade: form.cidade,
       endereco: form.endereco,
       quantidade_mesas: form.quantidade_mesas,
-      raio_permitido_metros: Number(form.raio_permitido_metros) || 150,
+      raio_permitido_metros: Number(form.raio_permitido_metros) || 500,
       latitude: coords ? roundCoords(coords.latitude, 5) : null,
       longitude: coords ? roundCoords(coords.longitude, 5) : null,
       codigo_entrada: form.codigo_entrada || undefined,

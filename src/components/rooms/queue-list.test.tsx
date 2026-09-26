@@ -276,3 +276,135 @@ describe("QueueList — feedback por estado (Bloco E)", () => {
     await waitFor(() => expect(screen.getByText("na fila")).toBeInTheDocument());
   });
 });
+
+describe("QueueList — reordenação da fila (Bloco C)", () => {
+  const A = "aaaaaaaa-0000-0000-0000-000000000001";
+  const B = "bbbbbbbb-0000-0000-0000-000000000002";
+  const C = "cccccccc-0000-0000-0000-000000000003";
+
+  function queue() {
+    return [
+      item({ id: A, title: "A", status: "playing", position: 1, added_by_user_id: "user-2" }),
+      item({ id: B, title: "B", status: "approved", position: 2, added_by_user_id: "user-2" }),
+      item({ id: C, title: "C", status: "approved", position: 3, added_by_user_id: "user-2" }),
+    ];
+  }
+
+  beforeEach(() => {
+    mocks.state.items = queue();
+    mocks.state.names = [{ id: "user-2", name: "Ana" }];
+  });
+
+  it("manda a fila inteira: tocando fixo, aprovadas na nova ordem e pendentes no fim", async () => {
+    renderList();
+    const down = await screen.findByRole("button", { name: "Descer B" });
+    fireEvent.click(down);
+
+    await waitFor(() => expect(mocks.reorderQueueAction).toHaveBeenCalledTimes(1));
+    // "tocando" não é reordenável: fica no topo e não entra no payload de ordem.
+    expect(mocks.reorderQueueAction).toHaveBeenCalledWith(ROOM_ID, [A, C, B]);
+  });
+
+  it("desabilita a primeira seta para cima e a última para baixo", async () => {
+    renderList();
+    expect(await screen.findByRole("button", { name: "Subir B" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Descer C" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Descer B" })).toBeEnabled();
+  });
+
+  it("não toca no banco quando a seta está na borda", async () => {
+    renderList();
+    fireEvent.click(await screen.findByRole("button", { name: "Descer C" }));
+    expect(mocks.reorderQueueAction).not.toHaveBeenCalled();
+  });
+
+  it("reconcilia a fila real quando o banco recusa a nova ordem", async () => {
+    mocks.reorderQueueAction.mockResolvedValue({
+      ok: false,
+      error: "A fila mudou enquanto você reordenava — tentando de novo.",
+      code: "STALE_QUEUE",
+    });
+    renderList();
+    fireEvent.click(await screen.findByRole("button", { name: "Descer B" }));
+
+    await waitFor(() =>
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("A fila mudou enquanto você reordenava")
+      )
+    );
+    // volta para a ordem do banco (refetch), sem estado otimista preso.
+    await waitFor(() => {
+      const titles = screen.getAllByText(/^[ABC]$/).map((el) => el.textContent);
+      expect(titles).toEqual(["A", "B", "C"]);
+    });
+  });
+
+  it("não oferece reordenação para o participante", async () => {
+    renderList({ isHost: false });
+    expect(await screen.findByText("A")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Subir|Descer) / })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Reordenar / })).toBeNull();
+  });
+
+  it("mantém o item em reprodução fora das setas", async () => {
+    renderList();
+    expect(await screen.findByRole("button", { name: "Remover A" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Subir|Descer|Reordenar) A$/ })).toBeNull();
+  });
+
+  it("oferece handle de arrasto com nome acessível", async () => {
+    renderList();
+    expect(await screen.findByRole("button", { name: "Reordenar B" })).toBeInTheDocument();
+  });
+});
+
+describe("QueueList — trocar música (Bloco D)", () => {
+  const A = "aaaaaaaa-0000-0000-0000-000000000001";
+  const B = "bbbbbbbb-0000-0000-0000-000000000002";
+
+  beforeEach(() => {
+    mocks.state.items = [
+      item({ id: A, title: "A", status: "approved", position: 1, added_by_user_id: "user-2" }),
+      item({ id: B, title: "B", status: "pending", position: 2, added_by_user_id: "user-9" }),
+    ];
+    mocks.state.names = [{ id: "user-2", name: "Ana" }];
+  });
+
+  it("o autor recebe o link de troca apontando para o item", async () => {
+    renderList({ isHost: false, currentUserId: "user-2" });
+    const link = await screen.findByRole("link", { name: "Trocar A" });
+    expect(link).toHaveAttribute("href", `/salas/${ROOM_CODE}/buscar?trocar=${A}`);
+  });
+
+  it("quem não pediu a música não vê o link de troca, mas pode tirar o próprio pedido", async () => {
+    mocks.state.items = [
+      item({ id: A, title: "A", status: "approved", position: 1, added_by_user_id: "user-2" }),
+      item({ id: B, title: "B", status: "pending", position: 2, added_by_user_id: "user-5" }),
+    ];
+    renderList({ isHost: false, currentUserId: "user-5" });
+    expect(await screen.findByText("A")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Trocar A" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Trocar B" })).toHaveAttribute(
+      "href",
+      `/salas/${ROOM_CODE}/buscar?trocar=${B}`
+    );
+    expect(screen.getByRole("button", { name: /Tirar da fila/ })).toBeInTheDocument();
+  });
+
+  it("o host troca qualquer música, até a de outra pessoa", async () => {
+    renderList({ isHost: true, currentUserId: HOST_ID });
+    expect(await screen.findByRole("link", { name: "Trocar A" })).toHaveAttribute(
+      "href",
+      `/salas/${ROOM_CODE}/buscar?trocar=${A}`
+    );
+  });
+
+  it("não oferece troca para o que já está tocando", async () => {
+    mocks.state.items = [
+      item({ id: A, title: "A", status: "playing", position: 1, added_by_user_id: "user-2" }),
+    ];
+    renderList({ isHost: false, currentUserId: "user-2" });
+    expect(await screen.findByText("A")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Trocar A" })).toBeNull();
+  });
+});

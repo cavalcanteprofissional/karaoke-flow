@@ -142,16 +142,16 @@ flowchart LR
 
 ## 3. Matriz de RLS
 
-| Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                            | DELETE                         |
-| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------- | ------------------------------ |
-| `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                              | host                           |
-| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                                 | —                              |
-| `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                              | host                           |
-| `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar)           | self **ou** host               |
-| `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only**                     | host only                      |
-| `profiles`     | via view `profiles_public` (id/name/avatar_url, sem email)              | trigger `handle_new_user` (ninguém insere direto)    | próprio profile                   | —                              |
-| `consents`     | só o próprio usuário                                                    | próprio usuário (ou service role)                    | próprio usuário (ou service role) | —                              |
-| `song_cache`   | sem política                                                            | sem política                                         | sem política                      | sem política (só service role) |
+| Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                                                           | DELETE                         |
+| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------ |
+| `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                                                             | host                           |
+| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                                                                | —                              |
+| `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                                                             | host                           |
+| `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar)                                          | self **ou** host               |
+| `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only** (a troca de música é via RPC `replace_queue_song`) | host only                      |
+| `profiles`     | via view `profiles_public` (id/name/avatar_url, sem email)              | trigger `handle_new_user` (ninguém insere direto)    | próprio profile                                                  | —                              |
+| `consents`     | só o próprio usuário                                                    | próprio usuário (ou service role)                    | próprio usuário (ou service role)                                | —                              |
+| `song_cache`   | sem política                                                            | sem política                                         | sem política                                                     | sem política (só service role) |
 
 > **Anônimo (`is_anonymous`)**: lê `bars`/`mesas` (precisa ver código/QR e escolher mesa) — mas a RPC `create_bar` recusa sessão anônima; o anfitrião começa com sessão real.
 
@@ -160,6 +160,8 @@ flowchart LR
 - **Host actions nunca relaxam na UI**: aprovar/reordenar/deletar fila e aprovar/rejeitar entrada são host-only no banco.
 - **Status inicial da fila é derivado** (`queue_items_initial_status`): o client não escolhe; remove auto-aprovação por INSERT. Exceção: pedidos do **dono** entram `approved` sempre (não espera a própria aprovação).
 - **Encerrar sala = RPC `close_room` (`security definer`)** (migration `20260923000019`): checa `is_host`, marca `rooms.status='closed'`, cancela a fila toda (`cancelled`, status terminal novo) e **expulsa todos** (`DELETE room_members`). Atômico — o client não ajusta essas peças separadamente.
+- **Reordenar a fila = RPC `reorder_queue` (`security definer`)** (migration `20260926000025`): o UPDATE de `position` do host é feito dentro da função, sob advisory lock com a **mesma chave de `next_queue_position`**, e só com a **fila visível inteira** (`playing`+`approved`+`pending`) — sem unique em `(room_id, position)`, uma lista parcial criaria posições repetidas. Rewrite único com `row_number()` 1..N (realtime sem tempestade de eventos).
+- **Trocar a música = RPC `replace_queue_song` (`security definer`)** (migration `20260926000026`): o **autor do item ou o host** reescreve só vídeo/título/thumb/duração; `position` e `status` ficam intactos (D2) e o item precisa estar `pending`/`approved` (D3). Existe porque a policy de UPDATE é host-only — o client não ganha UPDATE direto.
 - **Aprovação de entrada** só via RPC `join_room` (`security definer`) — INSERT direto sempre vira `pending`.
 - **Preview / entrada e criação de bar são RPCs `security definer`** (`get_entry_preview`, `join_room`, `create_bar`) — o leitor não-membro não acessa `rooms`/`bars` por SELECT.
 - **Multi-tenancy**: toda tabela de domínio tem `room_id`/`bar_id`; nada de assumir bar/sala única.
@@ -190,9 +192,18 @@ stateDiagram-v2
 
 ---
 
-## 5. Fluxo de DB da operação "trocar música" (Proposta — Fase 5)
+## 5. Fluxo de DB das operações de fila do host (Fase 5, Blocos C/D — implementado)
 
-Na proposta em discussão (atualização in place via RPC `replace_queue_song` — ver [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §5), **position não muda** e o `updated_at` é tocado pelo trigger. Diagrama:
+Duas RPCs `security definer` complementam a RLS de `queue_items` (que é host-only no UPDATE) sem relaxar nenhuma policy. Detalhe de decisão em [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §3.4 e §5.
+
+| RPC                                                                                               | Quem              | O que reescreve                                                           | O que **não** muda             | Erro                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reorder_queue(p_room_id, p_item_ids)`                                                            | host              | `position` de **toda** a fila visível, em um UPDATE (`row_number()` 1..N) | `status`                       | `false` (não host) · exceção "fila desatualizada" (lista parcial/divergente) · "itens duplicados" · "sala encerrada"                          |
+| `replace_queue_song(p_item_id, p_youtube_video_id, p_title, p_thumbnail_url, p_duration_seconds)` | autor **ou** host | `youtube_video_id`, `title`, `thumbnail_url`, `duration_seconds`          | **`position` e `status`** (D2) | `false` (item inexistente / não autorizado) · exceção "esta música já saiu da fila" (D3) · "vídeo/título/duração inválido" · "sala encerrada" |
+
+### 5.1 Trocar música (`replace_queue_song`)
+
+Atualização in place: **position não muda** e o `updated_at` é tocado pelo trigger. Diagrama:
 
 ```mermaid
 sequenceDiagram
@@ -200,7 +211,7 @@ sequenceDiagram
     participant C as Client (authorizado)
     participant R as RPC replace_queue_song (security definer)
     participant DB as queue_items
-    participant RT as Realtime room:{id}
+    participant RT as Realtime queue:{roomId}
 
     C->>R: item_id + novo vídeo (yt_id, title, thumb, duração)
     R->>DB: SELECT room/status/autor (validações)
@@ -209,10 +220,34 @@ sequenceDiagram
     R->>DB: UPDATE youtube_video_id, title, thumbnail_url, duration_seconds
     DB-->>R: item atualizado
     R->>DB: trigger updated_at = now()
-    R-->>C: item atualizado (position intacta)
+    R-->>C: true (position e status intactos)
     DB-->>RT: broadcast de mudança (single UPDATE)
     RT-->>C: fila na UI reflete (sem reload)
 ```
+
+### 5.2 Reordenar (`reorder_queue`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client (host)
+    participant R as RPC reorder_queue (security definer)
+    participant DB as queue_items
+    participant RT as Realtime queue:{roomId}
+
+    C->>R: p_room_id + p_item_ids (fila visível inteira, na ordem nova)
+    R->>DB: valida is_host, sala active, sem duplicados/vazia
+    R->>DB: COUNT visíveis = cardinality(p_item_ids)? todos ids da sala?
+    DB-->>R: contagem
+    R->>R: pg_advisory_xact_lock(mesma chave de next_queue_position)
+    R->>DB: UPDATE único: position = row_number() OVER (ordem recebida)
+    DB-->>R: N linhas
+    R-->>C: true
+    DB-->>RT: broadcast (evento único)
+    RT-->>C: fila dos dois lados reflete
+```
+
+> O lock é **transacional** (`pg_advisory_xact_lock`) e usa a chave de `next_queue_position`, então um `INSERT` concorrente não consegue arrancar uma posição no meio do reorden. Não há unique em `(room_id, position)`: a garantia de contiguidade vem do contrato "a lista é a fila inteira" + validação no banco, não de constraint.
 
 ---
 

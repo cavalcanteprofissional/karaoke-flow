@@ -261,3 +261,97 @@ export function queueStatusView(status: string): QueueStatusView {
       return { label: status, variant: "outline", isPlaying: false };
   }
 }
+
+/**
+ * Reordenação da fila (Fase 5, Bloco C). A RPC `reorder_queue` reescreve
+ * `position` de 1..N na ordem recebida e **exige a fila visível inteira**
+ * (pending + approved + playing) — mandar uma lista parcial criaria posições
+ * repetidas, já que não há unique em `(room_id, position)`. Essas funções
+ * puras montam essa ordem e calculam o movimento de ⬆/⬇.
+ */
+export const reorderSchema = z
+  .array(z.string().uuid("Item inválido."))
+  .min(1, "A fila está vazia.")
+  .max(200, "Fila grande demais para reordenar.")
+  .refine((ids) => new Set(ids).size === ids.length, "Itens duplicados.");
+
+export type QueueOrderGroups = {
+  playing: string[];
+  pending: string[];
+  approved: string[];
+};
+
+/**
+ * Ordem canônica enviada ao banco: tocando primeiro, depois a fila na ordem
+ * escolhida pelo host, e por último os pedidos pendentes (que continuam
+ * bloqueados na aprovação e não são reordenáveis).
+ */
+export function composeQueueOrder(groups: QueueOrderGroups): string[] {
+  return [...groups.playing, ...groups.approved, ...groups.pending];
+}
+
+/** Move um item uma casa na fila. Fora da borda, devolve a ordem original. */
+export function moveQueueItem(
+  order: readonly string[],
+  id: string,
+  direction: "up" | "down"
+) {
+  const index = order.indexOf(id);
+  if (index === -1) return [...order];
+  const target = direction === "up" ? index - 1 : index + 1;
+  if (target < 0 || target >= order.length) return [...order];
+  const next = [...order];
+  const [moved] = next.splice(index, 1);
+  next.splice(target, 0, moved);
+  return next;
+}
+
+export type QueueReplaceContext = {
+  isHost: boolean;
+  currentUserId: string;
+  item: QueueItemSummary | null;
+};
+
+export type QueueReplaceResult =
+  | { ok: true; itemId: string; video: QueueSongVideo }
+  | { ok: false; error: string; code: string };
+
+/** Regra pura da troca de música (D1–D3) antes de chamar a RPC. */
+export function buildQueueSongReplacement(
+  ctx: QueueReplaceContext & { input: unknown }
+): QueueReplaceResult {
+  const parsed = queueSongSchema
+    .pick({ video: true })
+    .safeParse({ video: (ctx.input as { video?: unknown } | null)?.video });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Música inválida.",
+      code: "VALIDATION",
+    };
+  }
+  if (!ctx.item) {
+    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
+  }
+  const id = queueItemIdSchema.safeParse(ctx.item.id);
+  if (!id.success) {
+    return { ok: false, error: "Música inválida.", code: "VALIDATION" };
+  }
+  // D1: o autor troca a própria música; o host troca qualquer uma.
+  if (ctx.item.added_by_user_id !== ctx.currentUserId && !ctx.isHost) {
+    return {
+      ok: false,
+      error: "Você só pode trocar a música que você mesmo pediu.",
+      code: "FORBIDDEN",
+    };
+  }
+  // D3: só o que ainda não tocou (o banco repete esta checagem).
+  if (!["pending", "approved"].includes(ctx.item.status)) {
+    return {
+      ok: false,
+      error: "Esta música já saiu da fila.",
+      code: "INVALID_TRANSITION",
+    };
+  }
+  return { ok: true, itemId: id.data, video: parsed.data.video };
+}

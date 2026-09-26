@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, Music4 } from "lucide-react";
+import { LoaderCircle, Music4, Repeat2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,13 @@ type SongConfirmDialogProps = {
   /** Música aguardando confirmação; `null` mantém o dialog fechado. */
   video: YouTubeVideo | null;
   busy?: boolean;
+  /**
+   * Bloco D: no modo troca o texto muda e o botão promete o que a RPC faz —
+   * manter a posição e a aprovação (D2).
+   */
+  mode?: "add" | "replace";
+  /** Música que está sendo trocada, para o texto do dialogo. */
+  replaceItemTitle?: string | null;
   onConfirm: (video: YouTubeVideo) => void;
   onCancel: () => void;
 };
@@ -31,21 +38,43 @@ type SongConfirmDialogProps = {
 export function SongConfirmDialog({
   video,
   busy = false,
+  mode = "add",
+  replaceItemTitle,
   onConfirm,
   onCancel,
 }: SongConfirmDialogProps) {
   const duration = video ? formatDurationSeconds(video.durationSeconds) : null;
+  const isReplace = mode === "replace";
 
   return (
     <Dialog open={video !== null} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Music4 className="size-4" />
-            Adicionar esta música?
+            {isReplace ? <Repeat2 className="size-4" /> : <Music4 className="size-4" />}
+            {isReplace ? "Trocar a música da fila?" : "Adicionar esta música?"}
           </DialogTitle>
           <DialogDescription>
-            Confira antes: a música vai entrar na fila da sala e todo mundo vê.
+            {isReplace ? (
+              <>
+                {replaceItemTitle ? (
+                  <>
+                    <span className="text-foreground font-medium">
+                      {replaceItemTitle}
+                    </span>{" "}
+                    será substituída por esta. A posição na fila e a{" "}
+                    {`aprovação são mantidas — a troca não volta para a fila de aprovação.`}
+                  </>
+                ) : (
+                  <>
+                    A música escolhida substituirá a atual. A posição na fila e a
+                    aprovação são mantidas.
+                  </>
+                )}
+              </>
+            ) : (
+              "Confira antes: a música vai entrar na fila da sala e todo mundo vê."
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -80,7 +109,7 @@ export function SongConfirmDialog({
             disabled={busy || !video}
           >
             {busy && <LoaderCircle className="size-4 animate-spin" />}
-            Confirmar
+            {isReplace ? "Trocar" : "Confirmar"}
           </Button>
         </DialogFooter>
       </DialogContent>

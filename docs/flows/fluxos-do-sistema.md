@@ -290,7 +290,7 @@ sequenceDiagram
 
 ### 3.2 Aprovação (host) — entregue em 2026-09-26 (Fase 5, Bloco A)
 
-O `QueueList` ganhou um bloco **"Aguardando sua aprovação (N)"** no topo, acima da fila: o host aprova, rejeita e remove sem sair da tela, e a fila não é duplicada (as pendentes aparecem **uma vez só**, nesse bloco). Quem não é o host não vê o bloco nem os botões, mas continua vendo os pedidos pendentes na lista com o badge "aguardando aprovação". **Remover** é do mesmo Bloco A; **reordenar** é o Bloco C (RPC `reorder_queue`, ainda não entregue).
+O `QueueList` ganhou um bloco **"Aguardando sua aprovação (N)"** no topo, acima da fila: o host aprova, rejeita e remove sem sair da tela, e a fila não é duplicada (as pendentes aparecem **uma vez só**, nesse bloco). Quem não é o host não vê o bloco nem os botões, mas continua vendo os pedidos pendentes na lista com o badge "aguardando aprovação". **Remover** é do mesmo Bloco A; **reordenar** é o Bloco C, entregue em 2026-09-26 (ver §3.4).
 
 As duas server actions (`setQueueItemStatusAction`/`removeQueueItemAction`) escrevem pelo **client do usuário** — a autorização é a RLS existente (`queue_items_update_host`/`queue_items_delete_host`, host-only), sem RPC nova e sem relaxar policy. O `.select()` posterior (em `update` e em `delete`) é a prova de que a policy deixou passar: retorno vazio vira erro "Só o dono da sala pode…", não sucesso silencioso. A regra pura (`buildQueueModeration`/`buildQueueRemoval`, em `src/lib/rooms/queue.ts`) roda antes, dando a mensagem imediata e recusando `playing`/terminais — o item que está tocando só sai pela ação de pular (Fase 6/7).
 
@@ -305,6 +305,28 @@ flowchart TD
     F -->|não| F1["'Só o dono da sala pode…' + toast + refetch da fila"]
     F -->|sim| G["revalidatePath + refetch (otimista antes)"]
     G --> H["Realtime queue-{roomId} → fila dos dois lados reflete"]
+```
+
+### 3.4 Reordenação da fila (host) — entregue em 2026-09-26 (Fase 5, Bloco C)
+
+O host reorder as **aprovadas** por dois caminhos, ambos gravando **uma única chamada**: as setas ⬆/⬇ (acessíveis por teclado, desabilitadas na borda) e o **drag-and-drop** com `@dnd-kit` (handle `⠿`, `PointerSensor` com `distance: 8` para não roubar o scroll do celular + `KeyboardSensor`). A lista é atualizada de forma otimista (`draftOrder`) e reconciliada com um `fetchItems()` no fim; em falha o toast explica e a ordem real do banco volta.
+
+**Contrato da RPC `reorder_queue(p_room_id, p_item_ids)`:** o client manda a fila visível **inteira** (`playing` + `approved` + `pending`) já na ordem desejada. Isso é deliberado — `queue_items` **não tem unique em `(room_id, position)`**, então aceitar uma lista parcial criaria posições repetidas. A função valida: autenticado, `is_host`, sala `active`, sem `null`/duplicados/vazia, contagem igual à de itens visíveis e todo id pertencente à sala. Só então pega o **advisory lock com a mesma chave de `next_queue_position`** (um insert concorrente não consegue arrancar uma posição no meio do reorden) e reescreve `position = row_number()` de 1..N com um único `UPDATE ... FROM` — o realtime vê um evento só, e `pending` vai sempre para o fim porque ainda não entrou na ordem do host.
+
+> Por que RPC e não N updates do client: cada UPDATE dispararia `touch_updated_at` → N refetches; e a policy `queue_items_update_host` é host-only **sem `WITH CHECK`**, ou seja, um update solto do client poderia até trocar o `room_id` do item. Autorizar dentro da função segue o padrão de `close_room`/`reopen_room`.
+
+```mermaid
+flowchart TD
+    A["Host: ⬆/⬇ ou arrastar uma aprovada"] --> B["composeQueueOrder: [tocando, aprovadas, pendentes]"]
+    B --> C["reorderQueueAction (regra pura + RPC)"]
+    C --> D{"reorder_queue"}
+    D --> E{"is_host e sala active?"}
+    E -->|não| E1["false → 'Só o dono da sala pode…'"]
+    E -->|sim| F{"lista = fila visível, sem duplicados?"}
+    F -->|não| F1["exceção 'fila desatualizada' → STALE_QUEUE + refetch"]
+    F -->|sim| G["advisory lock (chave de next_queue_position)"]
+    G --> H["UPDATE único: position = row_number() 1..N"]
+    H --> I["Realtime queue-{roomId} → fila dos dois lados"]
 ```
 
 ### 3.3 Reprodução e transições
@@ -358,15 +380,15 @@ sequenceDiagram
 
 ---
 
-## 5. Proposta — Trocar a própria música mantendo a posição na fila
+## 5. Trocar a música da fila mantendo a posição — entregue em 2026-09-26 (Fase 5, Bloco D)
 
-> Registrado no `TODO.md` (Fase 5). Decisões de fluxo **em aberto** (ver questões ao final).
+> As opções abaixo são o histórico da decisão; a implementação é a **Opção A**, com as regras D1–D3 já fechadas com o PO (§5.2).
 
 ### Contexto
 
 Cada item da fila é uma linha de `queue_items` com `position` atribuído no banco. **Reordenar** (host, Fase 5) apenas reescreve `position`. **Trocar a música** é substituir o conteúdo de um item **sem mover a posição** — ex.: pedi "Aleatório" mas coloquei a versão errada, ou mudei de ideia antes de tocar.
 
-### 5.1 Opções de implementação
+### 5.1 Opções de implementação (histórico)
 
 | Opção                                                  | O que é                                                                                 | Prós                                                                                        | Contras                                                                                                | Veredito                   |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------- |
@@ -382,29 +404,31 @@ Cada item da fila é uma linha de `queue_items` com `position` atribuído no ban
 
 ```mermaid
 flowchart TD
-    A["Item em 'meus pedidos' (ainda não tocou)"] --> B["'Trocar música'"]
-    B --> C["Abre a mesma busca da Fase 4"]
-    C --> D["Escolhe novo vídeo"]
-    D --> E{Sala pede confirmação?}
-    C -->|sim| D2["Modal confirmação do vídeo novo"]
-    D2 --> E
-    C -->|não| E
-    E["RPC replace_queue_song(item_id, yt_video, title, thumb, duration) — (backend)"]
+    A["Item na fila: botão 'Trocar' (autor ou host, só pending/approved)"] --> B["Abre /buscar?trocar=item_id (mesmo flow da Fase 4)"]
+    B --> C{"Confirmação"}
+    C --> D["Modal SEMPRE aberto no modo troca"]
+    D --> E["replaceQueueSongAction → RPC replace_queue_song (backend)"]
+    E --> F{Validações no banco}
     F --> F1["item existe e room está active"]
     F --> F2["added_by = auth.uid() OU is_host(room)"]
     F --> F3["status ∈ {pending, approved}"]
     F --> F4["youtube_video_id não vazio"]
     F -->|ok| G["UPDATE das colunas de conteúdo (position e status intocados)"]
     G --> H["updated_at atualizado (trigger)"]
-    G --> I["Realtime room:{id} → fila reflete (single UPDATE)"]
+    G --> I["Realtime queue-{roomId} → fila reflete (single UPDATE)"]
     F -->|qualquer falha| K["Erro retornado ao client (sem mudança)"]
+    K --> L["toast + reconciliação pela refetch da fila"]
 ```
 
 > **Reordenar (host) é operação distinta**: reescreve `position` de vários itens (pendências de Fase 5); a troca nunca muda a ordem.
 
-> **Formas de reordenar (Fase 5, decidido 26/09):** mover ⬆/⬇ por item **e** drag-and-drop (ambos); `position` reescrito de forma atômica no backend, sem constraint única em `(room_id, position)` hoje — validar concorrência na implementação.
+> **Formas de reordenar (entregue no Bloco C):** mover ⬆/⬇ por item **e** drag-and-drop (ambos); `position` reescrito de forma atômica na RPC `reorder_queue`, com advisory lock na chave de `next_queue_position` — a concorrência com insert é tratada no banco, não no client (§3.4).
 
-**Payload da RPC (sugestão):** `p_item_id uuid`, `p_youtube_video_id text`, `p_title text`, `p_thumbnail_url text`, `p_duration_seconds integer`. Retorna o item atualizado ou levanta exceção com mensagem legível.
+**Payload da RPC (entregue):** `p_item_id uuid`, `p_youtube_video_id text`, `p_title text`, `p_thumbnail_url text`, `p_duration_seconds integer`. Retorna `true` em sucesso, `false` quando o item não existe ou o usuário não é autor/host, e **levanta exceção com mensagem legível** para o resto (não autenticado, sala encerrada, música já saiu da fila, vídeo/título/duração inválidos). A action `replaceQueueSongAction` traduz `fila`/mensagens do banco para texto de toast e revalida a sala e a página de busca.
+
+**Onde a regra mora:** o contrato D1–D3 é validado **no banco** (fonte da verdade) e **repetido na regra pura** `buildQueueSongReplacement` (`src/lib/rooms/queue.ts`) para dar erro imediato sem round-trip. A page `/buscar` também valida o item no servidor: quem não puder trocar cai no fluxo normal de "pedir música", em vez de numa tela morta.
+
+**RLS impactada:** hoje `queue_items` só aceita UPDATE de host (`queue_items_update_host`). A RPC `security definer` roda como superuser/definer e impõe as checagens acima explicitamente — **o client não ganha UPDATE direto** (nada de relaxar a policy).
 
 ### 5.2 Questões de fluxo — resolvidas com o PO ✅
 
@@ -414,8 +438,9 @@ flowchart TD
 | D2  | Modo manual: música aprovada que é trocada | **Mantém aprovada** (não volta ao fim nem à aprovação).                                        |
 | D3  | Estados permitidos para trocar             | **`pending` e `approved`** (ainda não tocou). Extras: host adiciona **sem limite** de músicas. |
 
-### 5.3 Impacto na UI (proposta, vide `fluxos-do-usuario.md`)
+### 5.3 Impacto na UI (entregue, vide `fluxos-do-usuario.md`)
 
-- Botão "Trocar" em **meus pedidos** (itens ainda não tocados).
-- O mesmo componente de busca/confirmação da Fase 4 é reutilizado.
-- Feedback otimista + rollback em falha; interceptar no toast de erro da RPC.
+- Botão "Trocar" (ícone ↻) nos itens **pendentes e aprovados** que o usuário pediu — e em qualquer item quando ele é o host (D1).
+- O mesmo `SongSearch` + `SongConfirmDialog` da Fase 4 é reutilizado em `/salas/[codigo]/buscar?trocar=<itemId>`; no modo troca o botão do resultado vira ↻ e a **confirmação é sempre exigida**, mesmo com `rooms.require_song_confirmation` desligado (a ação sobrescreve o pedido de outra pessoa).
+- O diálogo no modo troca promete o que a RPC faz: "a posição na fila e a aprovação são mantidas" (D2).
+- Sem update otimista aqui (o conteúdo muda, não a ordem): toast de sucesso com o título novo e a refetch reconcilia pelo realtime.

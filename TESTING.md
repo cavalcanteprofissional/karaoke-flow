@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-26):** suite com **234 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — o **roundtrip authorize→callback** com 4 provas do estado, e a **entrada com aprovação**: `src/components/bars/entry-approval-wait.test.tsx` (11) + `src/components/bars/pending-entry-requests.test.tsx` (5) e `src/components/rooms/presence-gate-info.test.tsx` (14) e a **fila** (regras de aprovação em `src/lib/rooms/queue.test.ts` +18, `queue-list.test.tsx` 12 e `song-confirm-dialog.test.tsx` 7)). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-26):** suite com **266 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — o **roundtrip authorize→callback** com 4 provas do estado, e a **entrada com aprovação**: `src/components/bars/entry-approval-wait.test.tsx` (11) + `src/components/bars/pending-entry-requests.test.tsx` (5) e `src/components/rooms/presence-gate-info.test.tsx` (14) e a **fila** (regras de aprovação/reordenação/troca em `src/lib/rooms/queue.test.ts` +50, `queue-list.test.tsx` 23, `song-search.test.tsx` 6 e `song-confirm-dialog.test.tsx` 9)). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -153,7 +153,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Concorrência: dois usuários adicionam ao mesmo tempo → posições distintas na fila (sem corrida).
 - [ ] Estados visuais: `pendente` vs `na fila` vs `tocando` legíveis.
 - [ ] Reordenação e remoção apenas pelo host (validação no backend, não só UI).
-- [ ] **`npm test` (Vitest) passa** — inclui `src/lib/rooms/queue.test.ts` (+18 unit das regras de aprovação: decisão inválida, item ausente, não-host, `playing`/terminais), `src/components/rooms/queue-list.test.tsx` (12) e `src/components/rooms/song-confirm-dialog.test.tsx` (7) — **234 testes** no total.
+- [ ] **`npm test` (Vitest) passa** — inclui `src/lib/rooms/queue.test.ts` (+50 unit: aprovação, `composeQueueOrder`, `moveQueueItem`, `reorderSchema`, `buildQueueSongReplacement`), `src/components/rooms/queue-list.test.tsx` (23), `src/components/rooms/song-search.test.tsx` (6) e `src/components/rooms/song-confirm-dialog.test.tsx` (9) — **266 testes** no total.
 
 **Fase 5, Bloco A/E — aprovação e estados (2026-09-26, manual):**
 
@@ -170,6 +170,26 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] `requireSongConfirmation=false`: adiciona direto, sem modal.
 - [ ] Ligar o toggle em Configurações muda o comportamento **na hora** (recarrega a página de busca ou reabre) — antes o flag não era lido em lugar nenhum.
 - [ ] Música já adicionada mantém o botão desabilitado mesmo depois de passar pelo modal.
+
+**Fase 5, Bloco C — reordenar a fila (2026-09-26, manual):**
+
+- [ ] Host com 3+ aprovadas: **⬆/⬇** movem uma casa e a ordem persiste (recarregar a página mantém). A primeira não sobe e a última não desce.
+- [ ] **Arrastar pelo punho ⠿** reordena igual às setas — e **rolar a página/lista com o dedo** na lista não dispara arrasto (`PointerSensor` com `distance: 8`).
+- [ ] **Teclado:** o handle é focável, Espaço pega, setas movem, Espaço solta (o fallback ⬆/⬇ continua disponível para quem não usa drag).
+- [ ] O item **"tocando agora"** fica fixo no topo e **não** tem setas nem handle; as **pendentes** ficam no bloco de aprovação e não são reordenáveis.
+- [ ] Participante não vê setas, handle nem punho em nenhum item.
+- [ ] **Fila desatualizada:** com duas abas do host, arrastar numa delas enquanto a outra aprova uma música → a que tentou mostra o aviso "A fila mudou enquanto você reordenava" e volta à ordem real (sem posições repetidas nem `NULL`).
+- [ ] **RLS (a prova real, não automatizada):** com a sessão de um participante, `reorderQueueAction` precisa falhar ("Só o dono da sala pode reorder a fila"); o mesmo para o host de **outra** sala. Com a sessão do **autor de um item** (não host) chamando `replaceQueueSongAction` de item alheio, precisa falhar também.
+- [ ] **Concorrência com insert:** com o player/participante adicionando enquanto o host reordena, nenhuma posição fica duplicada (o advisory lock cobre os dois lados).
+
+**Fase 5, Bloco D — trocar a música da fila (2026-09-26, manual):**
+
+- [ ] Botão **↻** aparece nos itens `pending`/`approved` que **eu** pedi — e em qualquer item quando eu sou o **host** (D1). Não aparece no que está tocando nem nos terminais (D3).
+- [ ] Ao trocar em `/salas/[codigo]/buscar?trocar=<item>`: o texto diz que **posição e aprovação são mantidas**, a confirmação **aparece sempre** (mesmo com `requireSongConfirmation=false`) e "Cancelar" não grava nada.
+- [ ] **D2:** trocar uma música já `approved` em sala `manual` **mantém** `approved` (não volta para o bloco de aprovação) e **mantém a posição** (não vai para o fim).
+- [ ] A fila dos dois lados reflete o título/thumbnail novos pelo realtime, e o item **não** muda de `id` nem de `position` (nada de "tocando agora" quebrado).
+- [ ] Item que já saiu da fila enquanto a pessoa buscava (ex.: o host pulou) → aviso "Esta música já saiu da fila" e **nada** muda.
+- [ ] Quem chega em `?trocar=` de item alheio (participante) ou de item já tocando cai no fluxo normal de **pedir música**, sem tela morta.
 
 ### 3.6 Player device (Fase 6)
 

@@ -106,17 +106,18 @@ flowchart TD
 
 > **Busca (Fase 4):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida só no servidor (chave do bar → OAuth do host → OAuth do app → dev); cota esgotada vira mensagem amigável; 429 por excesso de buscas.
 
-### 3.3 Participante — trocar a própria música mantendo a posição (Proposta, Fase 5)
+### 3.3 Participante — trocar a música da fila mantendo a posição — entregue em 2026-09-26 (Fase 5, Bloco D)
+
+O botão **↻ Trocar** aparece nos itens **pendentes e aprovados que você pediu** (o host vê em qualquer item, D1). Ele abre a **mesma tela de busca** em `/salas/[código]/buscar?trocar=<item>` — com um aviso "**Evidências** · a posição e a aprovação são mantidas" e um link para voltar à fila. Ao escolher o vídeo novo, a **confirmação aparece sempre** (mesmo com "Pedir confirmação do vídeo" desligado, porque aqui a ação troca o pedido de outra pessoa) e o botão diz **Trocar**: "a posição na fila e a aprovação são mantidas — a troca não volta para a fila de aprovação". Cancelar não grava nada. Se a música já saiu da fila enquanto o participante buscava, um aviso explica e nada muda.
 
 ```mermaid
 flowchart TD
-    A["Item em 'meus pedidos' (ainda não tocou)"] --> B["'Trocar música'"]
-    B --> C["Abre a mesma busca da Fase 4"]
+    A["Item meu, ainda não tocou (ou qualquer item, se host)"] --> B["Botão ↻ Trocar"]
+    B --> C["Abre a mesma busca da Fase 4 (?trocar=item)"]
     C --> D["Escolhe novo vídeo"]
-    D --> E{Sala pede confirmação?}
-    E -->|sim| F["Modal confirmação do novo vídeo"]
-    E -->|não| G["Troca aplicada"]
-    F --> G
+    D --> F["Modal de confirmação — sempre no modo troca"]
+    F -->|Cancelar| F1["Nada muda"]
+    F -->|Trocar| G["Troca aplicada"]
     G --> H["Item mantém a POSIÇÃO na fila (não volta ao fim)"]
     G --> I["Status preservado: approved segue approved<br/>(mesmo em sala manual)"]
     H --> J["Fila atualiza ao vivo na tela (Realtime)"]
@@ -140,7 +141,9 @@ flowchart TD
     F --> H
 ```
 
-**Aprovação de músicas entregue em 2026-09-26 (Fase 5, Blocos A/B/E):** o bloco **"Aguardando sua aprovação (N)"** fica no topo do card da fila, dentro da própria sala — os pedidos chegam por realtime e o host **Aprova**, **Rejeita** ou **Remove** ali mesmo (reordenar chega no Bloco C). Cada linha mostra `4:05 · pedido por Ana` (o próprio pedido diz "pedido por **você**") e um badge de estado: _aguardando aprovação_, _na fila_ ou _tocando agora_ — este último com destaque. As ações são otimistas (a lista muda na hora) e, se o banco recusar, um aviso explica e a lista volta ao estado real.
+**Aprovação de músicas entregue em 2026-09-26 (Fase 5, Blocos A/B/E):** o bloco **"Aguardando sua aprovação (N)"** fica no topo do card da fila, dentro da própria sala — os pedidos chegam por realtime e o host **Aprova**, **Rejeita** ou **Remove** ali mesmo. Cada linha mostra `4:05 · pedido por Ana` (o próprio pedido diz "pedido por **você**") e um badge de estado: _aguardando aprovação_, _na fila_ ou _tocando agora_ — este último com destaque. As ações são otimistas (a lista muda na hora) e, se o banco recusar, um aviso explica e a lista volta ao estado real.
+
+**Reordenar entregue em 2026-09-26 (Fase 5, Bloco C):** o item **tocando agora** fica fixo no topo, em destaque, e as **aprovadas** são reordenáveis de duas formas — as setas **⬆/⬇** (que desabilitam na borda da lista) ou **arrastando pelo punho ⠿**. O participante não vê nenhum desses controles. A fila muda na hora e, se alguém pedir/aprovar algo no meio do arrasto, o banco detecta a fila desatualizada e a lista volta à ordem real com um aviso — sem estado quebrado.
 
 **Confirmação antes de adicionar:** com **"Pedir confirmação do vídeo"** ligado nas configurações, o participante vê um modal com **thumbnail, título e duração** ao tocar em "Adicionar à fila" — "Cancelar" não adiciona nada, "Confirmar" é o único caminho que envia. Com o toggle desligado, a música vai direto.
 

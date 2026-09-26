@@ -6,8 +6,14 @@ import { cookies } from "next/headers";
 import { readUserGeoFromCookies } from "@/lib/bars/presence";
 import { createClient } from "@/lib/supabase/server";
 import type { BarLocation } from "@/lib/bars/geo";
-import { buildQueueModeration, buildQueueRemoval, buildQueueSongItem } from "./queue";
-import type { QueueSongInput } from "./queue";
+import {
+  buildQueueModeration,
+  buildQueueRemoval,
+  buildQueueSongItem,
+  buildQueueSongReplacement,
+  reorderSchema,
+} from "./queue";
+import type { QueueSongInput, QueueSongVideo } from "./queue";
 
 function friendlyError(message: string, fallback: string): string {
   if (/row-level security|permission denied|policy/i.test(message)) return fallback;
@@ -255,4 +261,150 @@ export async function removeQueueItemAction(
   revalidatePath(`/salas/${room.code}`);
   revalidatePath(`/salas/${room.code}/buscar`);
   return { ok: true, itemId: data[0].id };
+}
+
+/**
+ * Reordena a fila do host (Fase 5, Bloco C) em UMA chamada atômica: a RPC
+ * `reorder_queue` reescreve `position` de 1..N na ordem recebida, sob advisory
+ * lock (mesma chave de `next_queue_position`) e exigindo a fila visível inteira.
+ * Sem isso, o client teria que fazer N updates — cada um disparando
+ * `touch_updated_at` → N refetches do realtime — e abriria janela para
+ * posições repetidas (não há unique em `(room_id, position)`).
+ */
+export async function reorderQueueAction(
+  roomId: string,
+  itemIds: string[]
+): Promise<{ ok: true; itemIds: string[] } | { ok: false; error: string; code: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      error: "Faça login para reorder a fila.",
+      code: "UNAUTHENTICATED",
+    };
+  }
+
+  const parsed = reorderSchema.safeParse(itemIds);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Ordem inválida.",
+      code: "VALIDATION",
+    };
+  }
+
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("code")
+    .eq("id", roomId)
+    .maybeSingle();
+  if (!room) {
+    return { ok: false, error: "Sala não encontrada.", code: "ROOM_NOT_FOUND" };
+  }
+
+  const { data, error } = await supabase.rpc("reorder_queue", {
+    p_room_id: roomId,
+    p_item_ids: parsed.data,
+  });
+  if (error) {
+    const message = error.message;
+    if (/fila desatualizada/i.test(message)) {
+      return {
+        ok: false,
+        error: "A fila mudou enquanto você reordenava — tentando de novo.",
+        code: "STALE_QUEUE",
+      };
+    }
+    return {
+      ok: false,
+      error: friendlyError(message, "Não foi possível reordenar a fila."),
+      code: "REORDER_FAILED",
+    };
+  }
+  if (data !== true) {
+    return {
+      ok: false,
+      error: "Só o dono da sala pode reorder a fila.",
+      code: "FORBIDDEN",
+    };
+  }
+
+  revalidatePath(`/salas/${room.code}`);
+  return { ok: true, itemIds: parsed.data };
+}
+
+/**
+ * Trocar a música do item mantendo posição e aprovação (Fase 5, Bloco D,
+ * regras D1–D3). Escrita via RPC `replace_queue_song` porque o AUTOR do item
+ * não é host e a policy de UPDATE é host-only — o client não ganha UPDATE em
+ * `queue_items`.
+ */
+export async function replaceQueueSongAction(
+  itemId: string,
+  video: QueueSongVideo
+): Promise<
+  | { ok: true; item: { id: string; title: string } }
+  | { ok: false; error: string; code: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      error: "Faça login para trocar a música.",
+      code: "UNAUTHENTICATED",
+    };
+  }
+
+  const { data: item } = await supabase
+    .from("queue_items")
+    .select("id, status, added_by_user_id, rooms!inner(host_id, code)")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item?.rooms) {
+    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
+  }
+  const room = (Array.isArray(item.rooms) ? item.rooms[0] : item.rooms) as {
+    host_id: string;
+    code: string;
+  };
+
+  const built = buildQueueSongReplacement({
+    isHost: room.host_id === user.id,
+    currentUserId: user.id,
+    item: { id: item.id, status: item.status, added_by_user_id: item.added_by_user_id },
+    input: { video },
+  });
+  if (!built.ok) return built;
+
+  const { data, error } = await supabase.rpc("replace_queue_song", {
+    p_item_id: built.itemId,
+    p_youtube_video_id: built.video.videoId,
+    p_title: built.video.title,
+    p_thumbnail_url: built.video.thumbnailUrl ?? null,
+    p_duration_seconds: built.video.durationSeconds ?? null,
+  });
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível trocar a música."),
+      code: "REPLACE_FAILED",
+    };
+  }
+  if (data !== true) {
+    return {
+      ok: false,
+      error: "Você só pode trocar a música que você mesmo pediu.",
+      code: "FORBIDDEN",
+    };
+  }
+
+  revalidatePath(`/salas/${room.code}`);
+  revalidatePath(`/salas/${room.code}/buscar`);
+  return { ok: true, item: { id: built.itemId, title: built.video.title } };
 }

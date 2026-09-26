@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, MapPin, Music2, Plus, Search, X } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  LoaderCircle,
+  MapPin,
+  Music2,
+  Plus,
+  Repeat2,
+  Search,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SongConfirmDialog } from "@/components/rooms/song-confirm-dialog";
 import { captureGeolocation, writeGeoCookie } from "@/lib/consent/geo";
-import { addSongToQueueAction } from "@/lib/rooms/queue-actions";
+import { addSongToQueueAction, replaceQueueSongAction } from "@/lib/rooms/queue-actions";
 import type { YouTubeVideo } from "@/lib/youtube/types";
 import { formatDurationSeconds } from "@/lib/youtube/format";
 
@@ -25,6 +35,14 @@ type SongSearchProps = {
   presenceMessage: string | null;
   /** `rooms.require_song_confirmation`: abre o modal antes de adicionar (Bloco B). */
   requireSongConfirmation: boolean;
+  /**
+   * Bloco D: id do item da fila que está sendo trocado. search vira troca — a
+   * confirmação é obrigatória mesmo com `require_song_confirmation` desligado,
+   * porque aqui a ação é sobrescrever o pedido de outra pessoa.
+   */
+  replaceItemId?: string;
+  /** Título do item trocado, só para o texto do modal. */
+  replaceItemTitle?: string | null;
 };
 
 const DEBOUNCE_MS = 500;
@@ -34,7 +52,10 @@ export function SongSearch({
   presenceOk,
   presenceMessage,
   requireSongConfirmation,
+  replaceItemId,
+  replaceItemTitle,
 }: SongSearchProps) {
+  const isReplace = Boolean(replaceItemId);
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -110,8 +131,8 @@ export function SongSearch({
 
   function handleAdd(video: YouTubeVideo) {
     if (adding) return;
-    if (added.has(video.videoId)) return;
-    if (requireSongConfirmation) {
+    if (!isReplace && added.has(video.videoId)) return;
+    if (requireSongConfirmation || isReplace) {
       setConfirming(video);
       return;
     }
@@ -120,6 +141,18 @@ export function SongSearch({
 
   async function addToQueue(video: YouTubeVideo) {
     setAdding(video.videoId);
+    if (replaceItemId) {
+      const result = await replaceQueueSongAction(replaceItemId, video);
+      setAdding(null);
+      setConfirming(null);
+      if (result.ok) {
+        toast.success(`${video.title} — música trocada, posição e status mantidos.`);
+        return;
+      }
+      toast.error(result.error ?? "Não foi possível trocar a música.");
+      return;
+    }
+
     const result = await addSongToQueueAction({ roomCode, video });
     setAdding(null);
     setConfirming(null);
@@ -166,7 +199,7 @@ export function SongSearch({
           <ul className="flex flex-col gap-2">
             {state.results.map((video) => {
               const duration = formatDurationSeconds(video.durationSeconds);
-              const isAdded = added.has(video.videoId);
+              const isAdded = !isReplace && added.has(video.videoId);
               return (
                 <li
                   key={video.videoId}
@@ -209,11 +242,17 @@ export function SongSearch({
                       size="icon"
                       onClick={() => handleAdd(video)}
                       disabled={adding === video.videoId}
-                      aria-label={`Adicionar ${video.title} à fila`}
-                      title="Adicionar à fila"
+                      aria-label={
+                        isReplace
+                          ? `Trocar por ${video.title}`
+                          : `Adicionar ${video.title} à fila`
+                      }
+                      title={isReplace ? "Trocar por esta música" : "Adicionar à fila"}
                     >
                       {adding === video.videoId ? (
                         <LoaderCircle className="size-4 animate-spin" />
+                      ) : isReplace ? (
+                        <Repeat2 className="size-4" />
                       ) : (
                         <Plus className="size-4" />
                       )}
@@ -272,13 +311,35 @@ export function SongSearch({
         </div>
       )}
 
+      {isReplace && (
+        <div className="flex flex-col gap-2">
+          <Button asChild size="sm" variant="ghost" className="w-fit">
+            <Link href={`/salas/${roomCode}`}>
+              <ArrowLeft className="size-4" />
+              Voltar para a fila
+            </Link>
+          </Button>
+          <p className="text-muted-foreground text-sm">
+            Trocando a música{" "}
+            <span className="text-foreground font-medium">
+              {replaceItemTitle ?? "da fila"}
+            </span>
+            . A posição e a aprovação são mantidas.
+          </p>
+        </div>
+      )}
+
       <div className="relative">
         <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
           value={query}
           disabled={canSearch === false}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar música no YouTube…"
+          placeholder={
+            isReplace
+              ? "Buscar a música que vai substituir…"
+              : "Buscar música no YouTube…"
+          }
           className="h-12 rounded-xl pr-9 pl-9 text-base"
           aria-label="Buscar música no YouTube"
         />
@@ -299,6 +360,8 @@ export function SongSearch({
       <SongConfirmDialog
         video={confirming}
         busy={adding === confirming?.videoId}
+        mode={isReplace ? "replace" : "add"}
+        replaceItemTitle={replaceItemTitle ?? null}
         onCancel={() => setConfirming(null)}
         onConfirm={(video) => void addToQueue(video)}
       />

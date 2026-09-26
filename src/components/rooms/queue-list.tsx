@@ -1,9 +1,43 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Check, Clock, ListMusic, LoaderCircle, Mic2, Trash2, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import {
+  Check,
+  Clock,
+  GripVertical,
+  ListMusic,
+  LoaderCircle,
+  Mic2,
+  Repeat2,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,9 +49,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
-import { QUEUE_VISIBLE_STATUSES, queueStatusView } from "@/lib/rooms/queue";
+import {
+  QUEUE_VISIBLE_STATUSES,
+  composeQueueOrder,
+  moveQueueItem,
+  queueStatusView,
+} from "@/lib/rooms/queue";
 import {
   removeQueueItemAction,
+  reorderQueueAction,
   setQueueItemStatusAction,
 } from "@/lib/rooms/queue-actions";
 import { formatDurationSeconds } from "@/lib/youtube/format";
@@ -30,7 +70,6 @@ export type QueueItem = {
   duration_seconds: number | null;
   thumbnail_url: string | null;
   added_by_user_id: string;
-  /** Guardado para o Bloco D (trocar a música) — o `QueueList` não usa ainda. */
   youtube_video_id: string;
 };
 
@@ -52,6 +91,15 @@ export function QueueList({
   const [items, setItems] = useState<QueueItem[]>(initial);
   const [names, setNames] = useState<Map<string, string | null>>(new Map());
   const [busy, setBusy] = useState<string | null>(null);
+  /** Ordem das aprovadas durante o drag/⬆/⬇, antes do fetch reconciliar. */
+  const [draftOrder, setDraftOrder] = useState<string[] | null>(null);
+
+  // `distance` evita que o scroll do celular seja capturado como arrasto; o
+  // KeyboardSensor mantém o reorden acessível sem mouse.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const fetchItems = useCallback(async () => {
     const supabase = createClient();
@@ -131,11 +179,59 @@ export function QueueList({
     void fetchItems();
   }
 
+  /**
+   * Grava a nova ordem na fila. O `reorder_queue` exige a fila visível INTEIRA,
+   * então compomos [tocando, aprovadas na ordem escolhida, pendentes] — as
+   * pendentes ficam sempre no fim porque ainda não entraram na ordem do host.
+   */
+  async function commitOrder(approvedIds: string[]) {
+    const nextApproved = approvedIds.filter((id) =>
+      items.some((item) => item.id === id && item.status === "approved")
+    );
+    if (JSON.stringify(nextApproved) === JSON.stringify(approved.map((i) => i.id))) {
+      return;
+    }
+
+    setDraftOrder(nextApproved);
+    setBusy("order");
+    const payload = composeQueueOrder({
+      playing: playing.map((item) => item.id),
+      pending: pending.map((item) => item.id),
+      approved: nextApproved,
+    });
+    const result = await reorderQueueAction(roomId, payload);
+    setBusy(null);
+    if (!result.ok) {
+      toast.error(result.error ?? "Não foi possível reordenar a fila.");
+    }
+    // O realtime também avisa, mas o fetch garante a ordem real (reconcilia
+    // `STALE_QUEUE` e qualquer approve/remove que tenha corrido em paralelo).
+    void fetchItems().finally(() => setDraftOrder(null));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const current = approved.map((item) => item.id);
+    const from = current.indexOf(String(active.id));
+    const to = current.indexOf(String(over.id));
+    if (from === -1 || to === -1) return;
+    void commitOrder(arrayMove(current, from, to));
+  }
+
   const pending = items.filter((item) => item.status === "pending");
   // O host vê as pendentes no bloco de aprovação acima; para o participante elas
   // continuam na lista com o badge "aguardando aprovação".
   const rest = isHost ? items.filter((item) => item.status !== "pending") : items;
   const waiting = isHost ? pending : [];
+  // Só o item em reprodução e as aprovadas formam a ordem que o host controla:
+  // tocando fica fixo no topo e pendentes não entram no reorden.
+  const playing = rest.filter((item) => item.status === "playing");
+  const approved = rest.filter((item) => item.status === "approved");
+  const approvedIds = draftOrder ?? approved.map((item) => item.id);
+  const ordered = approvedIds
+    .map((id) => approved.find((item) => item.id === id))
+    .filter((item): item is QueueItem => Boolean(item));
 
   function requesterName(item: QueueItem) {
     if (item.added_by_user_id === currentUserId) return "você";
@@ -145,6 +241,29 @@ export function QueueList({
   function metaLine(item: QueueItem) {
     const duration = formatDurationSeconds(item.duration_seconds);
     return [duration, `pedido por ${requesterName(item)}`].filter(Boolean).join(" · ");
+  }
+
+  /** D1: o autor troca a própria música e o host troca qualquer uma; D3: nunca o que já tocou. */
+  function canReplace(item: QueueItem) {
+    const mine = item.added_by_user_id === currentUserId;
+    return (mine || isHost) && ["pending", "approved"].includes(item.status);
+  }
+
+  function replaceButton(item: QueueItem) {
+    if (!canReplace(item)) return null;
+    return (
+      <Button
+        asChild
+        size="icon"
+        variant="ghost"
+        aria-label={`Trocar ${item.title}`}
+        title="Trocar esta música"
+      >
+        <Link href={`/salas/${roomCode}/buscar?trocar=${item.id}`}>
+          <Repeat2 className="text-muted-foreground size-4" />
+        </Link>
+      </Button>
+    );
   }
 
   function removeButton(item: QueueItem) {
@@ -255,36 +374,217 @@ export function QueueList({
             )}
           </div>
         ) : (
-          rest.length > 0 && (
-            <ul className="flex flex-col gap-1.5">
-              {rest.map((item) => {
-                const view = queueStatusView(item.status);
-                return (
-                  <li
-                    key={item.id}
-                    className={`border-border flex items-center gap-3 rounded-xl border p-2 ${
-                      view.isPlaying ? "border-emerald-500/50 bg-emerald-500/5" : ""
-                    }`}
-                  >
-                    <span className="text-muted-foreground font-mono text-xs font-semibold">
-                      #{item.position}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{item.title}</p>
-                      <p className="text-muted-foreground text-xs">{metaLine(item)}</p>
-                    </div>
-                    <Badge variant={view.variant} className="shrink-0 text-xs">
-                      {view.isPlaying && <Clock className="size-3" />}
-                      {view.label}
-                    </Badge>
-                    {isHost && removeButton(item)}
-                  </li>
-                );
-              })}
-            </ul>
+          isHost &&
+          ordered.length > 0 && (
+            <p className="text-muted-foreground text-xs">
+              Arraste ou use as setas para mudar a ordem das próximas músicas.
+            </p>
           )
         )}
+
+        {isHost && playing.length > 0 && (
+          <ul className="flex flex-col gap-1.5">
+            {playing.map((item) => (
+              <QueueRow
+                key={item.id}
+                item={item}
+                meta={metaLine(item)}
+                trailing={removeButton(item)}
+              />
+            ))}
+          </ul>
+        )}
+
+        {isHost
+          ? ordered.length > 0 && (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={approvedIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <ul className="flex flex-col gap-1.5">
+                    {ordered.map((item, index) => (
+                      <SortableQueueRow
+                        key={item.id}
+                        item={item}
+                        index={index}
+                        total={ordered.length}
+                        meta={metaLine(item)}
+                        reorderable={busy !== "order"}
+                        reorder={(direction) =>
+                          void commitOrder(moveQueueItem(approvedIds, item.id, direction))
+                        }
+                        trailing={
+                          <>
+                            {replaceButton(item)}
+                            {removeButton(item)}
+                          </>
+                        }
+                      />
+                    ))}
+                  </ul>
+                </SortableContext>
+              </DndContext>
+            )
+          : rest.length > 0 && (
+              <ul className="flex flex-col gap-1.5">
+                {rest.map((item) => (
+                  <QueueRow
+                    key={item.id}
+                    item={item}
+                    meta={metaLine(item)}
+                    trailing={
+                      isHost ? (
+                        removeButton(item)
+                      ) : (
+                        <>
+                          {replaceButton(item)}
+                          {item.added_by_user_id === currentUserId &&
+                            ["pending", "approved"].includes(item.status) && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy === item.id}
+                                onClick={() => moderate(item, "remove")}
+                              >
+                                {busy === item.id ? (
+                                  <LoaderCircle className="size-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-4" />
+                                )}
+                                Tirar da fila
+                              </Button>
+                            )}
+                        </>
+                      )
+                    }
+                  />
+                ))}
+              </ul>
+            )}
       </CardContent>
     </Card>
+  );
+}
+
+type QueueRowProps = {
+  item: QueueItem;
+  meta: string;
+  /** Controles à direita (aprovar/remover/trocar). */
+  trailing?: ReactNode;
+  /** Handle de arrasto do Bloco C (apenas nas aprovadas, só para o host). */
+  handle?: ReactNode;
+  /** Botões ⬆/⬇, acessíveis por teclado como alternativa ao arrasto. */
+  arrows?: ReactNode;
+  /** Props do `useSortable` quando a linha é arrastável. */
+  sortable?: { ref: (node: HTMLLIElement | null) => void; style?: CSSProperties };
+};
+
+function QueueRow({ item, meta, trailing, handle, arrows, sortable }: QueueRowProps) {
+  const view = queueStatusView(item.status);
+  return (
+    <li
+      ref={sortable?.ref}
+      style={sortable?.style}
+      className={`border-border flex items-center gap-3 rounded-xl border p-2 ${
+        view.isPlaying ? "border-emerald-500/50 bg-emerald-500/5" : ""
+      }`}
+    >
+      {handle}
+      <span className="text-muted-foreground font-mono text-xs font-semibold">
+        #{item.position}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{item.title}</p>
+        <p className="text-muted-foreground text-xs">{meta}</p>
+      </div>
+      <Badge variant={view.variant} className="shrink-0 text-xs">
+        {view.isPlaying && <Clock className="size-3" />}
+        {view.label}
+      </Badge>
+      {arrows}
+      {trailing}
+    </li>
+  );
+}
+
+type SortableQueueRowProps = Omit<QueueRowProps, "handle" | "arrows"> & {
+  index: number;
+  total: number;
+  reorderable: boolean;
+  reorder: (direction: "up" | "down") => void;
+};
+
+function SortableQueueRow({
+  item,
+  meta,
+  trailing,
+  index,
+  total,
+  reorderable,
+  reorder,
+}: SortableQueueRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id: item.id,
+      disabled: !reorderable,
+    });
+
+  return (
+    <QueueRow
+      item={item}
+      meta={meta}
+      trailing={trailing}
+      sortable={{
+        ref: setNodeRef,
+        style: {
+          transform: CSS.Transform.toString(transform),
+          transition,
+          zIndex: isDragging ? 10 : undefined,
+          opacity: isDragging ? 0.7 : undefined,
+        },
+      }}
+      handle={
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground cursor-grab touch-none rounded p-1 active:cursor-grabbing"
+          aria-label={`Reordenar ${item.title}`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+      }
+      arrows={
+        <div className="flex shrink-0 items-center">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={`Subir ${item.title}`}
+            disabled={!reorderable || index === 0}
+            onClick={() => reorder("up")}
+          >
+            <span aria-hidden>↑</span>
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={`Descer ${item.title}`}
+            disabled={!reorderable || index === total - 1}
+            onClick={() => reorder("down")}
+          >
+            <span aria-hidden>↓</span>
+          </Button>
+        </div>
+      }
+    />
   );
 }

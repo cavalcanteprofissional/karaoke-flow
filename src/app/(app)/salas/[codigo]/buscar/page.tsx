@@ -19,10 +19,14 @@ import { normalizeRoomCode } from "@/lib/rooms/utils";
 
 type BuscarPageProps = {
   params: Promise<{ codigo: string }>;
+  /** Bloco D: `?trocar=<queue_item_id>` entra no modo troca. */
+  searchParams: Promise<{ trocar?: string | string[] }>;
 };
 
-export default async function BuscarPage({ params }: BuscarPageProps) {
+export default async function BuscarPage({ params, searchParams }: BuscarPageProps) {
   const { codigo } = await params;
+  const { trocar } = await searchParams;
+  const replaceItemId = typeof trocar === "string" ? trocar : undefined;
   const code = normalizeRoomCode(codigo);
 
   const supabase = await createClient();
@@ -130,6 +134,24 @@ export default async function BuscarPage({ params }: BuscarPageProps) {
     });
   }
 
+  // Bloco D: valida o item no servidor para o modo troca. Quem não puder trocar
+  // (não é autor nem host, item já terminal, id inválido) cai no fluxo normal de
+  // "pedir música" — a RPC repetiria a mesma recusa, mas com uma tela morta.
+  let replaceItem: { id: string; title: string } | null = null;
+  if (replaceItemId) {
+    const { data: item } = await supabase
+      .from("queue_items")
+      .select("id, title, status, added_by_user_id, youtube_video_id")
+      .eq("id", replaceItemId)
+      .eq("room_id", room.id)
+      .maybeSingle();
+
+    const mine = item?.added_by_user_id === user.id;
+    if (item && (mine || isHost) && ["pending", "approved"].includes(item.status)) {
+      replaceItem = { id: item.id, title: item.title };
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <BackLink code={code} />
@@ -138,14 +160,15 @@ export default async function BuscarPage({ params }: BuscarPageProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Music2 className="text-muted-foreground size-4" />
-            Pedir música — sala {code}
+            {replaceItem ? "Trocar música" : "Pedir música"} — sala {code}
             <Badge variant="secondary">
               {room.queue_approval_mode === "auto" ? "fila automática" : "host aprova"}
             </Badge>
           </CardTitle>
           <CardDescription>
-            Pesquise no YouTube e adicione à fila. A duração e a miniatura aparecem
-            automaticamente.
+            {replaceItem
+              ? "Escolha a música que substitui a atual. A posição na fila e a aprovação são mantidas."
+              : "Pesquise no YouTube e adicione à fila. A duração e a miniatura aparecem automaticamente."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -154,6 +177,8 @@ export default async function BuscarPage({ params }: BuscarPageProps) {
             presenceOk={presence.ok}
             presenceMessage={presence.ok ? null : presence.error}
             requireSongConfirmation={room.require_song_confirmation}
+            replaceItemId={replaceItem?.id}
+            replaceItemTitle={replaceItem?.title ?? null}
           />
         </CardContent>
       </Card>

@@ -86,3 +86,40 @@ describe("SongConfirmDialog (Bloco B)", () => {
     expect(screen.getByText("Evidências")).toBeInTheDocument();
   });
 });
+
+describe("SongConfirmDialog — modo troca (Bloco D)", () => {
+  it("promete manter posição e aprovação e renomeia o botão", () => {
+    render(
+      <SongConfirmDialog
+        video={VIDEO}
+        mode="replace"
+        replaceItemTitle="Evidências (toca agora)"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByRole("heading", { name: /Trocar a música da fila\?/ })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Evidências (toca agora)")).toBeInTheDocument();
+    expect(
+      screen.getByText(/posição na fila e a aprovação são mantidas/)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Trocar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
+  });
+
+  it("no modo troca o botão chama a troca com a música escolhida", () => {
+    const onConfirm = vi.fn();
+    render(
+      <SongConfirmDialog
+        video={VIDEO}
+        mode="replace"
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Trocar" }));
+    expect(onConfirm).toHaveBeenCalledWith(VIDEO);
+  });
+});

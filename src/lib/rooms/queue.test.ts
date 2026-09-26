@@ -5,6 +5,10 @@ import {
   buildQueueModeration,
   buildQueueRemoval,
   buildQueueSongItem,
+  buildQueueSongReplacement,
+  composeQueueOrder,
+  moveQueueItem,
+  reorderSchema,
   QUEUE_ITEM_STATUSES,
   QUEUE_VISIBLE_STATUSES,
   queueStatusView,
@@ -249,5 +253,132 @@ describe("constantes da fila", () => {
 
   it("mantém a fila viva em pending/approved/playing", () => {
     expect(QUEUE_VISIBLE_STATUSES).toEqual(["pending", "approved", "playing"]);
+  });
+});
+
+describe("composeQueueOrder (Bloco C)", () => {
+  it("mantém tocando na frente, aprovadas na ordem escolhida e pendentes no fim", () => {
+    expect(
+      composeQueueOrder({
+        playing: ["tocando"],
+        approved: ["aprovada-1", "aprovada-2"],
+        pending: ["pendente-1"],
+      })
+    ).toEqual(["tocando", "aprovada-1", "aprovada-2", "pendente-1"]);
+  });
+
+  it("aceita a fila só com-playing e só com-pendente", () => {
+    expect(composeQueueOrder({ playing: ["a"], approved: [], pending: ["b"] })).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(composeQueueOrder({ playing: [], approved: [], pending: ["b"] })).toEqual([
+      "b",
+    ]);
+  });
+});
+
+describe("moveQueueItem (Bloco C)", () => {
+  const order = ["a", "b", "c"];
+
+  it("sobe e desce uma casa", () => {
+    expect(moveQueueItem(order, "c", "up")).toEqual(["a", "c", "b"]);
+    expect(moveQueueItem(order, "a", "down")).toEqual(["b", "a", "c"]);
+  });
+
+  it("não mexe nas bordas", () => {
+    expect(moveQueueItem(order, "a", "up")).toEqual(["a", "b", "c"]);
+    expect(moveQueueItem(order, "c", "down")).toEqual(["a", "b", "c"]);
+  });
+
+  it("id fora da ordem devolve a ordem intacta", () => {
+    expect(moveQueueItem(order, "z", "up")).toEqual(["a", "b", "c"]);
+  });
+
+  it("não muta a lista original", () => {
+    const original = [...order];
+    moveQueueItem(order, "a", "down");
+    expect(order).toEqual(original);
+  });
+});
+
+describe("reorderSchema (Bloco C)", () => {
+  const id = "3f0a1b2c-4d5e-4f60-8a1b-2c3d4e5f6a7b";
+
+  it("aceita a fila completa em qualquer ordem", () => {
+    expect(reorderSchema.safeParse([id, id.replace("3f0a", "9a1b")]).success).toBe(true);
+  });
+
+  it("recusa fila vazia, duplicados e ids inválidos", () => {
+    expect(reorderSchema.safeParse([]).success).toBe(false);
+    expect(reorderSchema.safeParse([id, id]).success).toBe(false);
+    expect(reorderSchema.safeParse(["nao-e-uuid"]).success).toBe(false);
+  });
+});
+
+describe("buildQueueSongReplacement (Bloco D)", () => {
+  const ITEM = {
+    id: "3f0a1b2c-4d5e-4f60-8a1b-2c3d4e5f6a7b",
+    status: "approved",
+    added_by_user_id: "user-1",
+  };
+
+  function context(over: Record<string, unknown> = {}) {
+    return {
+      isHost: false,
+      currentUserId: "user-1",
+      item: ITEM,
+      input: { video: VIDEO },
+      ...over,
+    } as Parameters<typeof buildQueueSongReplacement>[0];
+  }
+
+  it("o autor troca a própria música aprovada, com posição e status preservados", () => {
+    const result = buildQueueSongReplacement(context());
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.itemId).toBe(ITEM.id);
+      expect(result.video.videoId).toBe(VIDEO.videoId);
+    }
+  });
+
+  it("o host troca a música de qualquer participante (D1)", () => {
+    const result = buildQueueSongReplacement(
+      context({
+        isHost: true,
+        currentUserId: "host-1",
+        item: { ...ITEM, added_by_user_id: "outro" },
+      })
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("recusa quando não é autor nem host", () => {
+    const result = buildQueueSongReplacement(
+      context({ currentUserId: "user-9", item: { ...ITEM, added_by_user_id: "outro" } })
+    );
+    expect(result).toMatchObject({ ok: false, code: "FORBIDDEN" });
+  });
+
+  it("aceita item pendente, mas recusa o que já saiu da fila (D3)", () => {
+    expect(
+      buildQueueSongReplacement(context({ item: { ...ITEM, status: "pending" } })).ok
+    ).toBe(true);
+    for (const status of ["playing", "played", "rejected", "cancelled", "skipped"]) {
+      expect(buildQueueSongReplacement(context({ item: { ...ITEM, status } })).ok).toBe(
+        false
+      );
+    }
+  });
+
+  it("trata item ausente e música inválida", () => {
+    expect(buildQueueSongReplacement(context({ item: null }))).toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(
+      buildQueueSongReplacement(context({ input: { video: { ...VIDEO, title: "  " } } }))
+    ).toMatchObject({
+      code: "VALIDATION",
+    });
   });
 });

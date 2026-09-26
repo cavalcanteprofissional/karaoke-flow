@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MESA_MAX } from "@/types/bar";
+import { MESA_MAX, RAIO_MAX_METROS, RAIO_MIN_METROS, RAIO_PADRAO_METROS } from "@/types/bar";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 
 export const mesaNumeroSchema = z
@@ -20,6 +20,23 @@ function nullableCoord(schema: z.ZodNumber) {
 
 const optionalLatitude = nullableCoord(z.number().min(-90).max(90));
 const optionalLongitude = nullableCoord(z.number().min(-180).max(180));
+
+/**
+ * Raio de presença em metros — mesma faixa do `check` do banco
+ * (`bars_raio_check`, 50..1000). Aceita string (input do formulário) e number;
+ * campo vazio vira erro explícito em vez de virar 0.
+ */
+export const barRadiusSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? Number.NaN : value),
+  z.coerce
+    .number({ message: "Informe o raio de presença em metros." })
+    .int("O raio deve ser inteiro.")
+    .min(RAIO_MIN_METROS, `O raio mínimo é ${RAIO_MIN_METROS} m.`)
+    .max(RAIO_MAX_METROS, `O raio máximo é ${RAIO_MAX_METROS} m.`)
+);
+
+/** Mesma validação, já com o padrão do bar (500 m) quando o host não informa. */
+export const barRadiusInputSchema = barRadiusSchema.default(RAIO_PADRAO_METROS);
 
 export const createBarSchema = z
   .object({
@@ -42,12 +59,7 @@ export const createBarSchema = z
     /** Localização física do bar — gate de presença (Requisito, 2026-09-23). */
     latitude: optionalLatitude,
     longitude: optionalLongitude,
-    raio_permitido_metros: z.coerce
-      .number()
-      .int("O raio deve ser inteiro.")
-      .min(50, "O raio mínimo é 50 m.")
-      .max(1000, "O raio máximo é 1000 m.")
-      .default(500),
+    raio_permitido_metros: barRadiusInputSchema,
     /** Código de entrada opcional: vazio → default pelo nome do bar (KARAOKE). */
     codigo_entrada: z.preprocess(
       (value) =>

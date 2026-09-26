@@ -1,7 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Info, Lock, MapPin, Ruler } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Info, LoaderCircle, MapPin, RotateCcw, Ruler, TriangleAlert } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   Card,
@@ -10,8 +12,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { updateBarRadiusAction } from "@/lib/bars/actions";
+import { barRadiusSchema } from "@/lib/bars/schema";
+import {
+  RAIO_MAX_METROS,
+  RAIO_MIN_METROS,
+  RAIO_PADRAO_METROS,
+  RAIO_PASSO_METROS,
+} from "@/types/bar";
 
 /**
  * Leaflet só roda no browser (window/DOM no mount) — carregado sob demanda para
@@ -30,7 +42,10 @@ const PresenceRadiusMap = dynamic(
   }
 );
 
+const DEBOUNCE_MS = 500;
+
 export type PresenceGateInfoProps = {
+  barId: string;
   barName: string;
   address: string | null;
   city: string | null;
@@ -42,16 +57,26 @@ export type PresenceGateInfoProps = {
   entryModeApproval: boolean;
 };
 
+/** Ajusta ao passo do controle (50 m) e mantém dentro da faixa 50–1000 m. */
+function snapRadius(value: number): number {
+  const stepped = Math.round(value / RAIO_PASSO_METROS) * RAIO_PASSO_METROS;
+  return Math.min(RAIO_MAX_METROS, Math.max(RAIO_MIN_METROS, stepped));
+}
+
 /**
- * Aviso do gate de presença + prévia do raio (2026-09-25).
+ * Aviso do gate de presença + raio configurável pelo host (2026-09-25/26).
  *
  * O gate vale nos **dois** modos de entrada: com `entrada livre` ligada o
  * participante entra direto, mas ainda precisa estar dentro do raio — o que a
- * tela deixa explícito, com o círculo do raio e a metragem. A personalização do
- * raio pelo host entra depois; por enquanto o campo aparece desabilitado com o
- * valor efetivo do bar.
+ * tela deixa explícito, com o círculo do raio e a metragem.
+ *
+ * O campo é o **mesmo número** que o servidor cobra (`bars.raio_permitido_metros`,
+ * validado em `checkPresence`/`requirePresence`): o host arrasta, o mapa e o
+ * aviso acompanham na hora (prévia) e a gravação acontece no commit do
+ * controle, com rollback se o banco recusar.
  */
 export function PresenceGateInfo({
+  barId,
   barName,
   address,
   city,
@@ -60,8 +85,110 @@ export function PresenceGateInfo({
   radiusMeters,
   entryModeApproval,
 }: PresenceGateInfoProps) {
+  const [radius, setRadius] = useState(radiusMeters);
+  const [inputValue, setInputValue] = useState(String(radiusMeters));
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [savedRadius, setSavedRadiusState] = useState(radiusMeters);
+  const savedRef = useRef(radiusMeters);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const hasLocation = latitude !== null && longitude !== null;
   const where = [address, city].filter(Boolean).join(", ");
+  const dirty = radius !== savedRadius;
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  /** Último raio confirmado pelo banco (render usa estado, o async usa o ref). */
+  const setSavedRadius = useCallback((value: number) => {
+    savedRef.current = value;
+    setSavedRadiusState(value);
+  }, []);
+
+  const persist = useCallback(
+    async (next: number) => {
+      setSaving(true);
+      setFieldError(null);
+      const result = await updateBarRadiusAction(barId, next);
+      setSaving(false);
+      if (!result.ok) {
+        // Volta ao último valor confirmado pelo banco.
+        setRadius(savedRef.current);
+        setInputValue(String(savedRef.current));
+        setFieldError(result.error);
+        toast.error(result.error);
+        return;
+      }
+      setSavedRadius(result.radiusMeters);
+      setRadius(result.radiusMeters);
+      setInputValue(String(result.radiusMeters));
+      setSavedAt(
+        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      );
+    },
+    [barId, setSavedRadius]
+  );
+
+  const schedule = useCallback(
+    (next: number) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        if (next !== savedRef.current) void persist(next);
+      }, DEBOUNCE_MS);
+    },
+    [persist]
+  );
+
+  function applyRadius(next: number, options: { commit?: boolean } = {}) {
+    const snapped = snapRadius(next);
+    setRadius(snapped);
+    setInputValue(String(snapped));
+    setFieldError(null);
+    if (options.commit) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (snapped !== savedRef.current) void persist(snapped);
+      return;
+    }
+    if (snapped !== savedRef.current) schedule(snapped);
+  }
+
+  function handleInputChange(value: string) {
+    setInputValue(value);
+    const parsed = barRadiusSchema.safeParse(value);
+    if (!parsed.success) {
+      setFieldError(parsed.error.errors[0]?.message ?? "Raio inválido.");
+      return;
+    }
+    setFieldError(null);
+    setRadius(parsed.data);
+    if (parsed.data !== savedRef.current) schedule(parsed.data);
+  }
+
+  function handleInputCommit() {
+    if (!barRadiusSchema.safeParse(inputValue).success) {
+      setRadius(savedRef.current);
+      setInputValue(String(savedRef.current));
+      return;
+    }
+    applyRadius(Number(inputValue), { commit: true });
+  }
+
+  function statusText() {
+    if (saving) return "Salvando…";
+    if (fieldError) return "Não foi possível salvar";
+    if (dirty) return "Ajuste para salvar";
+    if (savedAt) return `Salvo às ${savedAt}`;
+    return "Valor em vigor no gate";
+  }
 
   return (
     <Card>
@@ -82,7 +209,7 @@ export function PresenceGateInfo({
             {entryModeApproval ? (
               <>
                 Com <strong className="text-foreground">entrada com aprovação</strong>{" "}
-                ligada, quem estiver fora de {radiusMeters} m do bar é bloqueado antes de
+                ligada, quem estiver fora de {radius} m do bar é bloqueado antes de
                 pedir entrada.
               </>
             ) : (
@@ -92,7 +219,7 @@ export function PresenceGateInfo({
                 <strong className="text-foreground">
                   o gate de localização continua valendo
                 </strong>
-                : fora de {radiusMeters} m do bar, a entrada é bloqueada do mesmo jeito.
+                : fora de {radius} m do bar, a entrada é bloqueada do mesmo jeito.
               </>
             )}{" "}
             O host nunca é bloqueado.
@@ -104,7 +231,7 @@ export function PresenceGateInfo({
             <PresenceRadiusMap
               latitude={latitude}
               longitude={longitude}
-              radiusMeters={radiusMeters}
+              radiusMeters={radius}
               barName={barName}
             />
             <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -139,27 +266,80 @@ export function PresenceGateInfo({
           </div>
         )}
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="presence-radius" className="text-xs">
-            Raio de presença
-          </Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="presence-radius"
-              readOnly
-              disabled
-              value={`${radiusMeters} m`}
-              className="text-muted-foreground w-28"
-            />
-            <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-              <Lock className="size-3" />
-              Personalização em breve
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="presence-radius" className="text-xs">
+              Raio de presença
+            </Label>
+            <span
+              role="status"
+              className="text-muted-foreground flex items-center gap-1 text-xs"
+            >
+              {saving ? (
+                <LoaderCircle className="size-3 animate-spin" />
+              ) : fieldError ? (
+                <TriangleAlert className="size-3 text-amber-500" />
+              ) : dirty ? (
+                <Ruler className="size-3" />
+              ) : (
+                <Check className="size-3 text-emerald-500" />
+              )}
+              {statusText()}
             </span>
           </div>
-          <p className="text-muted-foreground text-xs">
-            Valor em vigor no gate (padrão de {radiusMeters} m). A escolha do host entra
-            em uma próxima fase.
-          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Slider
+              value={[radius]}
+              min={RAIO_MIN_METROS}
+              max={RAIO_MAX_METROS}
+              step={RAIO_PASSO_METROS}
+              thumbAriaLabel="Ajustar raio de presença"
+              onValueChange={(value) => applyRadius(value[0] ?? radius)}
+              onValueCommit={(value) => applyRadius(value[0] ?? radius, { commit: true })}
+            />
+            <div className="flex items-center gap-1">
+              <Input
+                id="presence-radius"
+                type="number"
+                inputMode="numeric"
+                min={RAIO_MIN_METROS}
+                max={RAIO_MAX_METROS}
+                step={RAIO_PASSO_METROS}
+                value={inputValue}
+                onChange={(event) => handleInputChange(event.target.value)}
+                onBlur={handleInputCommit}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleInputCommit();
+                }}
+                className="w-24"
+                aria-invalid={fieldError ? true : undefined}
+              />
+              <span className="text-muted-foreground text-sm">m</span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => applyRadius(RAIO_PADRAO_METROS, { commit: true })}
+              disabled={saving || radius === RAIO_PADRAO_METROS}
+            >
+              <RotateCcw className="size-3.5" />
+              Restaurar {RAIO_PADRAO_METROS} m
+            </Button>
+          </div>
+
+          {fieldError ? (
+            <p role="alert" className="text-xs text-amber-500">
+              {fieldError}
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              Entre {RAIO_MIN_METROS} e {RAIO_MAX_METROS} m, de {RAIO_PASSO_METROS} em{" "}
+              {RAIO_PASSO_METROS} m. Vale para todas as salas deste bar — é este número
+              que o servidor compara com a localização de quem pede música.
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

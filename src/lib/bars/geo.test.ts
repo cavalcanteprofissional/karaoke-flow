@@ -6,6 +6,8 @@ import {
   haversineDistanceMeters,
   PRESENCE_ERROR_GEO,
   PRESENCE_ERROR_OUTSIDE,
+  radiusTickStep,
+  radiusTicks,
   withinRadius,
 } from "./geo";
 import { requirePresence, readUserGeoFromCookies } from "./presence";
@@ -257,5 +259,36 @@ describe("createBarSchema — localização e raio", () => {
     expect(
       createBarSchema.safeParse({ nome: "Bar", cidade: "SP", quantidade_mesas: 1, raio_permitido_metros: "2000" }).success
     ).toBe(false);
+  });
+});
+describe("radiusTicks (anéis do mapa do raio)", () => {
+  it("afina o passo conforme o raio", () => {
+    expect(radiusTickStep(50)).toBe(25);
+    expect(radiusTickStep(100)).toBe(25);
+    expect(radiusTickStep(300)).toBe(50);
+    expect(radiusTickStep(500)).toBe(100);
+    expect(radiusTickStep(1000)).toBe(200);
+  });
+
+  it("lista os anéis internos, sem repetir a borda do raio", () => {
+    expect(radiusTicks(500)).toEqual([100, 200, 300, 400]);
+    expect(radiusTicks(50)).toEqual([25]);
+  });
+
+  it("nunca passa do raio", () => {
+    for (const radius of [50, 75, 250, 500, 1000]) {
+      expect(radiusTicks(radius).every((meters) => meters < radius)).toBe(true);
+    }
+  });
+
+  it("aceita passo explícito e ignora passo inválido", () => {
+    expect(radiusTicks(500, 250)).toEqual([250]);
+    expect(radiusTicks(500, 0)).toEqual([100, 200, 300, 400]);
+  });
+
+  it("devolve lista vazia para raio ausente ou inválido", () => {
+    expect(radiusTicks(0)).toEqual([]);
+    expect(radiusTicks(-100)).toEqual([]);
+    expect(radiusTicks(Number.NaN)).toEqual([]);
   });
 });

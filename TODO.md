@@ -25,7 +25,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Plano de testes por fase (ampliação da bateria)
 
-> **Situação atual (2026-09-23):** Vitest + RTL + jsdom com **152 testes** (rooms/utils, `src/lib/bars/qr.test.ts` 16, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 31, `queue` matriçada, rota `/api/youtube/search` **18 via MSW** — incl. Bearer de OAuth host/app — e **roundtrip OAuth authorize→callback 4**). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada.
+> **Situação atual (2026-09-26):** Vitest + RTL + jsdom com **198 testes** (21 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 21, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 31, `queue` matriçada, rota `/api/youtube/search` **18 via MSW** — incl. Bearer de OAuth host/app —, **roundtrip OAuth authorize→callback 4**, entrada com aprovação (`entry-approval-wait` 11, `pending-entry-requests` 5) e o gate de presença (`presence-gate-info` 14). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada. Detalhamento por área em `TESTING.md` §3.2.
 >
 > Princípios: testar o que agrega (helpers de domínio e componentes críticos em unit; fluxos de usuário em e2e); manter a suíte rápida; RLS validada via smoke/e2e, não em unit.
 
@@ -124,8 +124,8 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] Pedido `pending` recuperável após sair da tela: membership devolvida pelo preview, lista de pedidos no dashboard e em `/entrar` sem token ("Acompanhar aprovação" → `/entrar?code=…`), e o gate de presença não esconde mais quem já tem pedido em andamento (2026-09-25)
 - [x] Participante cancela o próprio pedido `pending` (tela de espera e lista) e volta ao preview do bar/sala para poder pedir de novo (2026-09-25)
 - [x] Raio de presença visível para o host: aviso no toggle "Entrada livre" de que o gate barra **independente** do modo de entrada, mapa (Leaflet + OSM) com o círculo em **500 m** e a metragem, campo de raio **bloqueado/desabilitado** com "Personalização em breve", e migration do padrão 150 → 500 m (2026-09-25)
-- [ ] **Personalização do raio pelo host** (bloqueada nesta entrega): campo habilitado com validação 50–1000 m, preview do círculo em tempo real e persistência — o card já mostra o valor em vigor e o aviso de que a personalização chega depois (2026-09-25)
-- [ ] **HUD/sprites animados sobre o mapa do raio** (2026-09-25): o `PresenceRadiusMap` deixa o wrapper relativo para receber camadas sobrepostas (sprites de círculo por metragem, HUD com o número). Decisão registrada: Google Maps Embed foi descartado por exigir API key + billing e não permitir círculo nem update in-place; Leaflet + OSM é o caminho, com a chave de API habilitada para o embed no futuro, se fizer sentido
+- [x] **Personalização do raio pelo host** (2026-09-26): campo habilitado (input numérico + slider, **50–1000 m** de 50 em 50), **prévia do círculo em tempo real** (o mapa e o texto do aviso acompanham o valor local antes de gravar) e persistência em `bars.raio_permitido_metros` via `updateBarRadiusAction` (escrita pelo client do usuário → barrada pela RLS `bars_update_own` para quem não é dono; `.select()` detecta no-op de policy). Grava no commit do controle (soltar o slider, sair do campo, Enter ou debounce de 500 ms), com status "Salvando…/Salvo às HH:MM", rollback + toast se o banco recusar e botão "Restaurar 500 m". Validação em `barRadiusSchema` (mesma faixa do `check` do banco, fonte única em `src/types/bar.ts`)
+- [x] **HUD/sprites animados sobre o mapa do raio** (2026-09-26): o wrapper relativo do `PresenceRadiusMap` recebe duas camadas `pointer-events-none` (não roubam pan/zoom) — o HUD com a metragem e a etiqueta do passo ("anéis de 100 m") e os anéis internos do raio, cada um pulsando com atraso escalonado e `motion-reduce:animate-none`. A geometria vem de `RadiusGeometry`, que mede a escala do próprio Leaflet (`latLngToContainerPoint` + `containerPointToLatLng`) e republica a cada `move`/`zoom`/`resize`; o passo dos anéis é puro e testado (`radiusTickStep`/`radiusTicks` em `src/lib/bars/geo.ts`)
 
 ## Fase 3.5 — Domínio bar/mesas/karaokês + acesso anônimo
 
@@ -245,13 +245,18 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > 7. **Bloco F — testes + docs:** unit/UI das actions e RPC; TESTING §3.5; TODO/CHANGELOG.
 > 8. **Canal `room:{id}` (broadcast) fica para Fase 6/7** (player/controller); nesta fase a fila segue no `postgres_changes` por sala (`queue-{roomId}`, já isolado por `room_id=eq`).
 
+> **Decisões fechadas com o PO (26/09) — Bloco C:**
+>
+> 1. **Drag-and-drop com `@dnd-kit`** (biblioteca especializada em DnD; `KeyboardSensor` + `PointerSensor`, handle só no item para não conflitar com o scroll vertical da lista). Instalada como dependência de produção no Bloco C — o fallback acessível continua sendo o mover ⬆/⬇, que não pode ser removido.
+> 2. **Reordenar em uma só chamada atômica: RPC `reorder_queue`** (`security definer`, valida host + itens da mesma sala + faixa de posições e reescreve `position` com `row_number()`), no lugar de N updates client-side — evita estados intermediários inconsistentes e dispensa transação do browser. Segue o mesmo desenho das RPCs já entregues (`close_room`, `replace_queue_song`), com testes de RLS no checklist da fase.
+
 - [ ] Estados da fila e transições: `pending → approved → playing → played`; `rejected`, `skipped`; `cancelled` (terminal — dono encerra a sala, já entregue na Fase 4)
 - [ ] `queueApprovalMode = auto`: entra direto na fila
 - [ ] `queueApprovalMode = manual`: entra como `pending` até host aprovar (**painel de aprovação no Bloco A**)
 - [ ] `requireSongConfirmation = true`: modal de confirmação (Dialog) com thumbnail/título/duração antes de enviar à fila; só persiste após "Confirmar" (Bloco B)
 - [ ] Realtime da fila via canal `room:{id}` (especificamente por sala, nunca canal global) — **deferido p/ Fase 6/7**; nesta fase continua `postgres_changes` por sala
 - [ ] Painel de aprovação de fila (drawer, ações aprovar/rejeitar sem sair da tela principal) — Bloco A
-- [ ] Reordenar e remover itens (host) — mover ⬆/⬇ **e drag-and-drop (ambos)** — Bloco C
+- [ ] Reordenar e remover itens (host) — mover ⬆/⬇ **e drag-and-drop com `@dnd-kit` (ambos, decidido em 26/09)** e gravação em **uma RPC atômica `reorder_queue`** (`security definer`, `row_number()` reescrevendo `position`; nada de N updates client-side) — Bloco C
 - [ ] **Trocar a própria música mantendo a posição na fila** (RPC `replace_queue_song` — dashboard caso A; regras fechadas com o PO em `docs/flows/fluxos-do-sistema.md` §5/§5.2: quem troca = autor+host; status preservado; estados `pending`+`approved`) — Bloco D
 - [ ] Feedback visual claro por estado: `pendente de aprovação` vs `na fila` vs `tocando agora` (+ "quem pediu") — Bloco E
 - [ ] Indicador "quem está cantando agora" e "próximo da fila" sempre visíveis, mesmo rolando — depende de playback (Fase 6/7)

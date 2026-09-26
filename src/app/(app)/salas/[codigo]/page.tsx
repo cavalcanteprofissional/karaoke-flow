@@ -309,6 +309,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
           bar={
             bar
               ? {
+                  id: bar.id,
                   nome: bar.nome,
                   endereco: bar.endereco,
                   cidade: bar.cidade,

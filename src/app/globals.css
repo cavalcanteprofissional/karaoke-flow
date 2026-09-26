@@ -186,3 +186,32 @@ input,
     overscroll-behavior: auto;
   }
 }
+
+/* Anéis de metragem sobre o mapa do raio de presença. A classe (e não o style
+   inline) controla a animação, senão o `animation` inline venceria o
+   `prefers-reduced-motion`; o inline só passa o atraso escalonado. */
+.radius-sprite {
+  animation: radius-ping 3.2s ease-out infinite;
+  animation-delay: var(--radius-ping-delay, 0ms);
+}
+
+@keyframes radius-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 0.35;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radius-sprite {
+    animation: none;
+  }
+}

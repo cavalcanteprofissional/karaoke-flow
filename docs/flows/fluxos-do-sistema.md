@@ -171,18 +171,28 @@ Regra de reentrada (migration `20260921000004`): `rejected` pode reentrar (RPC a
 
 **Recuperar/cancelar o pedido (2026-09-25):** o `pending` **sobrevive à navegação** — `getEntryPreviewAction` lê a própria linha em `room_members` (RLS `room_members_select_self_or_host`) e devolve `membership`, de modo que `/entrar?code=…`, `/entrar?bar=…` e `/salas/[código]` renderizam a mesma tela de espera (`EntryApprovalWait`) sem pedir entrada de novo. `getMyEntryRequestsAction` lista os pedidos `pending` com bar/código/mesa para o dashboard e o `/entrar` sem token; como a RLS de `rooms` esconde a sala de quem não está `approved`, nome e código são resolvidos com o client de service role (**somente leitura**, nunca `youtube_api_key`). Cancelar é `cancelEntryRequestAction` (`DELETE` da própria linha com `status = 'pending'`, permitido pela RLS) — sem migration nova.
 
-**Raio de presença no painel do host (2026-09-25):** `bars.raio_permitido_metros` tem default **500 m** (migration `20260925000024`, `check` 50..1000 mantida; bars existentes migrados para 500) e é o número que o gate valida em `checkPresence`/`requirePresence` — a tela lê o mesmo campo, então mapa e gate não podem divergir. O card `PresenceGateInfo` (abaixo dos toggles, só para o host) mostra: o aviso de que o gate vale nos dois modos de entrada, o mapa com o círculo do raio em metros (`PresenceRadiusMap` = Leaflet + tiles do OpenStreetMap, sem chave de API), links para Google Maps/OpenStreetMap e o campo "Raio de presença" **desabilitado** com o valor em vigor — a personalização pelo host fica para fase seguinte. Bar sem coordenadas: o gate cai em `geo-unavailable` e bloqueia todo participante (o host entra).
+**Raio de presença no painel do host (2026-09-25, editável em 2026-09-26):** `bars.raio_permitido_metros` tem default **500 m** (migration `20260925000024`, `check` 50..1000 mantida; bars existentes migrados para 500) e é o número que o gate valida em `checkPresence`/`requirePresence` — a tela lê o mesmo campo, então mapa e gate não podem divergir. O card `PresenceGateInfo` (abaixo dos toggles, só para o host) mostra: o aviso de que o gate vale nos dois modos de entrada e de que o raio vale para **todas as salas do bar**, o mapa com o círculo do raio em metros (`PresenceRadiusMap` = Leaflet + tiles do OpenStreetMap, sem chave de API), links para Google Maps/OpenStreetMap e o campo "Raio de presença" (**input numérico + slider**, 50–1000 m de 50 em 50) com status de gravação, "Restaurar 500 m" e botão de reenvio em caso de erro. **Prévia antes de gravar:** mover o controle redesenha o círculo e reescreve o texto do aviso com o valor local; a gravação acontece no **commit** (soltar o slider, sair do campo, Enter ou debounce de 500 ms). Bar sem coordenadas: o gate cai em `geo-unavailable` e bloqueia todo participante (o host entra).
 
 ```mermaid
 flowchart TD
     A["Host abre Configurações da sala"] --> B["Card 'Raio de presença' (room-settings → PresenceGateInfo)"]
     B --> C{"Bar tem lat/lng?"}
     C -->|não| C1["Aviso: sem coordenadas o gate bloqueia todo participante"]
-    C -->|sim| D["PresenceRadiusMap: marcador + círculo do raio (m) + rótulo"]
-    D --> D1["Leaflet: círculo/enquadramento reage a cada mudança de raio em tempo real"]
-    B --> E["Campo 'Raio de presença' desabilitado (500 m) + 'Personalização em breve'"]
-    D --> F["Links: abrir no Google Maps / OpenStreetMap"]
+    C -->|sim| D["PresenceRadiusMap: marcador + círculo do raio (m) + HUD 'anéis de N m'"]
+    D --> D1["Prévia: cada mudança (input/slider) redesenha círculo, anéis e texto do aviso — sem gravar"]
+    B --> E["Input + slider 50–1000 m (passo 50) + 'Restaurar 500 m'"]
+    E --> F{"Commit: soltar slider / blur / Enter / 500 ms"}
+    F --> G["updateBarRadiusAction(barId, raio) — barRadiusSchema (50..1000)"]
+    G --> H{"Barritzou?"}
+    H -->|"não (bar sem coords)"| H1["Erro claro, sem gravar"]
+    H -->|sim| I["UPDATE bars (RLS bars_update_own) + .select() anti-no-op"]
+    I --> J{"Linha devolvida?"}
+    J -->|não| J1["403/permission denied → aviso 'só o dono altera'"]
+    J -->|sim| K["revalidatePath('/salas/[codigo]') + 'Salvo às HH:MM'"]
+    D --> L["Links: abrir no Google Maps / OpenStreetMap"]
 ```
+
+**Dono do raio (2026-09-26):** a escrita é feita pelo **client do usuário** (`updateBarRadiusAction` → `supabase.from("bars").update(...)`), não por RPC — quem não é o dono é barrado pela RLS `bars_update_own`, e o `.select()` posterior transforma o "no-op" da policy em erro em vez de sucesso silencioso. O valor é do **bar**, não da sala: o raio salvo vale para as outras salas do mesmo bar sem nova ação. Constantes e validação são uma fonte só (`RAIO_*` em `src/types/bar.ts` → `barRadiusSchema` em `src/lib/bars/schema.ts`), casando com o `check` do banco; **nenhuma migration nova** foi necessária.
 
 ### 2.3 Fechar/sair/reabrir
 

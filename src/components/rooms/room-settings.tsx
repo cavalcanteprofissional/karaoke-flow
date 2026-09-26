@@ -38,6 +38,7 @@ type RoomSettingsProps = {
   youtubeConnectedAt: string | null;
   /** Bar da sala — só o host vê as configurações; alimenta o aviso/mapa do raio. */
   bar: {
+    id: string;
     nome: string;
     endereco: string | null;
     cidade: string | null;
@@ -211,6 +212,7 @@ export function RoomSettings({
 
       {bar && (
         <PresenceGateInfo
+          barId={bar.id}
           barName={bar.nome}
           address={bar.endereco}
           city={bar.cidade}

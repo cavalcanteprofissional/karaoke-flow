@@ -54,3 +54,13 @@ export type EntryScreen = {
 };
 
 export const MESA_MAX = 999;
+
+/**
+ * Raio de presença do bar (`bars.raio_permitido_metros`) — mesmo `check` do
+ * banco (migration `20260923000015_bars_geo.sql`), em uma fonte só para a UI.
+ */
+export const RAIO_MIN_METROS = 50;
+export const RAIO_MAX_METROS = 1000;
+export const RAIO_PADRAO_METROS = 500;
+/** Granularidade do controle do host (slider e input). */
+export const RAIO_PASSO_METROS = 50;

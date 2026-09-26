@@ -44,6 +44,36 @@ export function withinRadius(
   return haversineDistanceMeters(user, bar) <= radiusMeters;
 }
 
+/**
+ * Passo dos anéis de metragem desenhados sobre o mapa do raio: quanto menor o
+ * raio, mais fino o passo — assim o mapa sempre mostra alguma referência sem
+ * virar um rosca de linhas.
+ */
+export function radiusTickStep(radiusMeters: number): number {
+  if (radiusMeters <= 100) return 25;
+  if (radiusMeters <= 300) return 50;
+  if (radiusMeters <= 600) return 100;
+  return 200;
+}
+
+/**
+ * Metragens dos anéis internos do mapa (HUD/sprites). O anel de fora é o próprio
+ * círculo do raio, desenhado pelo Leaflet — aqui ficam só as referências
+ * intermediárias, que nunca passam do raio.
+ */
+export function radiusTicks(
+  radiusMeters: number,
+  stepMeters: number = radiusTickStep(radiusMeters)
+): number[] {
+  if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) return [];
+  const step = Number.isFinite(stepMeters) && stepMeters > 0 ? stepMeters : radiusTickStep(radiusMeters);
+  const ticks: number[] = [];
+  for (let meters = step; meters < radiusMeters; meters += step) {
+    ticks.push(meters);
+  }
+  return ticks;
+}
+
 export const PRESENCE_ERROR_GEO = "Precisamos da sua localização para confirmar que você está no bar.";
 export const PRESENCE_ERROR_OUTSIDE = "Você precisa estar no bar para participar desta sala.";
 

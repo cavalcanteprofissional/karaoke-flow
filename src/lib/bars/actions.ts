@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdmin } from "@/lib/supabase/admin";
-import { createBarSchema, type CreateBarInput } from "@/lib/bars/schema";
+import { createBarSchema, barRadiusSchema, type CreateBarInput } from "@/lib/bars/schema";
 import { requirePresence } from "@/lib/bars/presence";
 import { geocodeAddress, type PresenceDecision } from "@/lib/bars/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
@@ -52,6 +52,61 @@ function readMembership(value: unknown): EntryMembership | null {
 export type CreateBarResult =
   | { ok: true; bar: { id: string; code: string; room_code: string } }
   | { ok: false; error: string };
+
+export type UpdateBarRadiusResult =
+  | { ok: true; radiusMeters: number }
+  | { ok: false; error: string };
+
+/**
+ * Raio de presença escolhido pelo host (`bars.raio_permitido_metros`).
+ *
+ * O raio é **do bar** (vale para as salas dele) e é o mesmo número que o gate
+ * valida no servidor (`checkPresence`/`requirePresence`) — por isso a tela não
+ * pode ter cópia: o que o host vê aqui é o que o banco cobra.
+ *
+ * A escrita vai pelo client do usuário, então quem não é dono é barrado pela
+ * RLS (`bars_update_own`); o `.select()` sem linhas detecta o no-op da policy
+ * para nunca devolver sucesso silencioso.
+ */
+export async function updateBarRadiusAction(
+  barId: string,
+  rawRadius: unknown
+): Promise<UpdateBarRadiusResult> {
+  const parsed = barRadiusSchema.safeParse(rawRadius);
+  if (!parsed.success) {
+    const first = parsed.error.errors[0];
+    return { ok: false, error: first?.message ?? "Raio de presença inválido." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Faça login para mudar o raio do bar." };
+  }
+
+  const { data, error } = await supabase
+    .from("bars")
+    .update({ raio_permitido_metros: parsed.data })
+    .eq("id", barId)
+    .select("id, raio_permitido_metros");
+  if (error) {
+    if (/raio_permitido_metros|bars_raio_check/i.test(error.message)) {
+      return { ok: false, error: "Raio de presença inválido (50–1000 m)." };
+    }
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível salvar o raio de presença."),
+    };
+  }
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Só o dono do bar pode mudar o raio de presença." };
+  }
+
+  revalidatePath("/salas/[codigo]", "page");
+  return { ok: true, radiusMeters: parsed.data };
+}
 
 export async function createBarAction(raw: unknown): Promise<CreateBarResult> {
   const supabase = await createClient();

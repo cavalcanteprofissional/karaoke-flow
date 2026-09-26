@@ -243,6 +243,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > 5. **Bloco D — trocar a própria música** mantendo posição/status: RPC `replace_queue_song` (`security definer`, regras D1–D3 em `docs/flows/fluxos-do-sistema.md` §5) + action + botão em itens `pending`/`approved` do autor/host.
 > 6. **Bloco E — feedback visual:** mostrar "quem pediu" (join `added_by` × `profiles_public`) e distinguir `pendente de aprovação` vs `na fila` vs `tocando agora`.
 > 7. **Bloco F — testes + docs:** unit/UI das actions e RPC; TESTING §3.5; TODO/CHANGELOG.
+>    8.1. **Lote 1 entregue em 26/09 (Blocos A/B/E)** — ver lista de checkboxes acima. **Lote 2 (Blocos C/D)**: `reorder_queue`/`replace_queue_song` (`security definer`, migrations 00025/00026) + `@dnd-kit`; **features que ficaram de fora de propósito**: participante **não** cancela o próprio pedido (DELETE é host-only — exigiria policy nova), e o item **tocando** só sai pela ação de pular (Fase 6/7).
 > 8. **Canal `room:{id}` (broadcast) fica para Fase 6/7** (player/controller); nesta fase a fila segue no `postgres_changes` por sala (`queue-{roomId}`, já isolado por `room_id=eq`).
 
 > **Decisões fechadas com o PO (26/09) — Bloco C:**
@@ -252,13 +253,13 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 - [ ] Estados da fila e transições: `pending → approved → playing → played`; `rejected`, `skipped`; `cancelled` (terminal — dono encerra a sala, já entregue na Fase 4)
 - [ ] `queueApprovalMode = auto`: entra direto na fila
-- [ ] `queueApprovalMode = manual`: entra como `pending` até host aprovar (**painel de aprovação no Bloco A**)
-- [ ] `requireSongConfirmation = true`: modal de confirmação (Dialog) com thumbnail/título/duração antes de enviar à fila; só persiste após "Confirmar" (Bloco B)
+- [x] `queueApprovalMode = manual`: entra como `pending` até host aprovar (**painel entregue em 26/09 — Bloco A**: bloco "Aguardando sua aprovação (N)" no topo do `QueueList`, com Aprovar/Rejeitar/Remover via `setQueueItemStatusAction`/`removeQueueItemAction`, escrita pelo client → RLS `queue_items_update_host`/`queue_items_delete_host` + `.select()` anti-no-op; regra pura `buildQueueModeration` com 18 unit)
+- [x] `requireSongConfirmation = true`: modal de confirmação (Dialog) com thumbnail/título/duração antes de enviar à fila; só persiste após "Confirmar" (**Bloco B entregue em 26/09** — `SongConfirmDialog`; o flag deixou de ser decorativo: `/buscar` passa `requireSongConfirmation` ao `SongSearch` e só "Confirmar" chama `addSongToQueueAction`)
 - [ ] Realtime da fila via canal `room:{id}` (especificamente por sala, nunca canal global) — **deferido p/ Fase 6/7**; nesta fase continua `postgres_changes` por sala
-- [ ] Painel de aprovação de fila (drawer, ações aprovar/rejeitar sem sair da tela principal) — Bloco A
-- [ ] Reordenar e remover itens (host) — mover ⬆/⬇ **e drag-and-drop com `@dnd-kit` (ambos, decidido em 26/09)** e gravação em **uma RPC atômica `reorder_queue`** (`security definer`, `row_number()` reescrevendo `position`; nada de N updates client-side) — Bloco C
-- [ ] **Trocar a própria música mantendo a posição na fila** (RPC `replace_queue_song` — dashboard caso A; regras fechadas com o PO em `docs/flows/fluxos-do-sistema.md` §5/§5.2: quem troca = autor+host; status preservado; estados `pending`+`approved`) — Bloco D
-- [ ] Feedback visual claro por estado: `pendente de aprovação` vs `na fila` vs `tocando agora` (+ "quem pediu") — Bloco E
+- [x] Painel de aprovação de fila (ações aprovar/rejeitar sem sair da tela principal) — Bloco A **entregue em 26/09** como seção do próprio card da fila (o host vê cada pendente uma vez só, sem lista duplicada; "Remover" também entrou aqui)
+- [ ] Reordenar e remover itens (host) — mover ⬆/⬇ **e drag-and-drop com `@dnd-kit` (ambos, decidido em 26/09)** e gravação em **uma RPC atômica `reorder_queue`** (`security definer`, `row_number()` reescrevendo `position`; nada de N updates client-side)
+- [ ] **Trocar a própria música mantendo a posição na fila** (RPC `replace_queue_song` — dashboard caso A; regras fechadas com o PO em `docs/flows/fluxos-do-sistema.md` §5/§5.2: quem troca = autor+host; status preservado; estados `pending`+`approved`)
+- [x] Feedback visual claro por estado: `pendente de aprovação` vs `na fila` vs `tocando agora` (+ "quem pediu") — Bloco E **entregue em 26/09** (`queueStatusView` + badge por estado, destaque no item tocando, linha "4:05 · pedido por Ana" com "você" no próprio pedido; nome via `profiles_public` em 2ª query)
 - [ ] Indicador "quem está cantando agora" e "próximo da fila" sempre visíveis, mesmo rolando — depende de playback (Fase 6/7)
 
 ## Fase 6 — Player device (tela `/player/[codigo]`)

@@ -8,6 +8,7 @@ import { PendingEntries } from "@/components/rooms/pending-entries";
 import type { PendingEntry } from "@/components/rooms/pending-entries";
 import { QueueList } from "@/components/rooms/queue-list";
 import type { QueueItem } from "@/components/rooms/queue-list";
+import { QUEUE_VISIBLE_STATUSES } from "@/lib/rooms/queue";
 import { RoomQr } from "@/components/rooms/room-qr";
 import { RoomSettings } from "@/components/rooms/room-settings";
 import { CloseRoomButton } from "@/components/rooms/close-room-button";
@@ -176,10 +177,10 @@ export default async function RoomPage({ params }: RoomPageProps) {
   const { data: queueRows } = await supabase
     .from("queue_items")
     .select(
-      "id, title, status, position, duration_seconds, thumbnail_url, added_by_user_id"
+      "id, title, status, position, duration_seconds, thumbnail_url, added_by_user_id, youtube_video_id"
     )
     .eq("room_id", room.id)
-    .in("status", ["pending", "approved", "playing"])
+    .in("status", QUEUE_VISIBLE_STATUSES)
     .order("position", { ascending: true })
     .limit(100);
   const queueInitial = (queueRows ?? []) as QueueItem[];
@@ -344,6 +345,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
           roomCode={code}
           initial={queueInitial}
           isHost={isHost}
+          currentUserId={user.id}
         />
       )}
 

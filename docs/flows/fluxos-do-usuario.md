@@ -104,7 +104,6 @@ flowchart TD
 >
 > **Raio de presença no painel do host (2026-09-25, editável em 2026-09-26):** o card "Raio de presença" (abaixo dos toggles de "Como a sala funciona") explica que o gate de localização vale **mesmo com entrada livre ligada** e que o raio vale para **todas as salas do bar**, desenha o raio (padrão **500 m**) sobre o endereço do bar num mapa Leaflet/OpenStreetMap — com a metragem no HUD, os anéis internos rotulados ("anéis de 100 m") e links para abrir no Google Maps/OpenStreetMap. O host ajusta o valor no **input numérico ou no slider** (**50 a 1000 m**, de 50 em 50) e **vê o círculo e o aviso mudarem na hora, antes de gravar**; ao soltar o slider, sair do campo, apertar Enter ou parar por meio segundo, o valor é gravado e aparece "Salvo às HH:MM". Valor inválido (abaixo de 50 ou acima de 1000) é recusado no campo, erro do servidor devolve o valor anterior com aviso, e há "Restaurar 500 m" para voltar ao padrão. Bar sem endereço geolocalizado: aviso de que todo participante é bloqueado (o host entra). Quem não é dono do bar vê o mesmo mapa em modo somente leitura.
 
->
 > **Busca (Fase 4):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida só no servidor (chave do bar → OAuth do host → OAuth do app → dev); cota esgotada vira mensagem amigável; 429 por excesso de buscas.
 
 ### 3.3 Participante — trocar a própria música mantendo a posição (Proposta, Fase 5)
@@ -140,6 +139,10 @@ flowchart TD
     D --> H["Host continua em aprovação de fila + playback"]
     F --> H
 ```
+
+**Aprovação de músicas entregue em 2026-09-26 (Fase 5, Blocos A/B/E):** o bloco **"Aguardando sua aprovação (N)"** fica no topo do card da fila, dentro da própria sala — os pedidos chegam por realtime e o host **Aprova**, **Rejeita** ou **Remove** ali mesmo (reordenar chega no Bloco C). Cada linha mostra `4:05 · pedido por Ana` (o próprio pedido diz "pedido por **você**") e um badge de estado: _aguardando aprovação_, _na fila_ ou _tocando agora_ — este último com destaque. As ações são otimistas (a lista muda na hora) e, se o banco recusar, um aviso explica e a lista volta ao estado real.
+
+**Confirmação antes de adicionar:** com **"Pedir confirmação do vídeo"** ligado nas configurações, o participante vê um modal com **thumbnail, título e duração** ao tocar em "Adicionar à fila" — "Cancelar" não adiciona nada, "Confirmar" é o único caminho que envia. Com o toggle desligado, a música vai direto.
 
 ---
 

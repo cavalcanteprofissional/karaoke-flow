@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SongConfirmDialog } from "@/components/rooms/song-confirm-dialog";
 import { captureGeolocation, writeGeoCookie } from "@/lib/consent/geo";
 import { addSongToQueueAction } from "@/lib/rooms/queue-actions";
 import type { YouTubeVideo } from "@/lib/youtube/types";
@@ -22,15 +23,23 @@ type SongSearchProps = {
   roomCode: string;
   presenceOk: boolean;
   presenceMessage: string | null;
+  /** `rooms.require_song_confirmation`: abre o modal antes de adicionar (Bloco B). */
+  requireSongConfirmation: boolean;
 };
 
 const DEBOUNCE_MS = 500;
 
-export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearchProps) {
+export function SongSearch({
+  roomCode,
+  presenceOk,
+  presenceMessage,
+  requireSongConfirmation,
+}: SongSearchProps) {
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<YouTubeVideo | null>(null);
   const [granting, setGranting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -86,7 +95,9 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
     setGranting(true);
     const geo = await captureGeolocation();
     if (geo.status === "denied") {
-      toast.error("Permissão de localização negada. Habilite no navegador para pedir músicas.");
+      toast.error(
+        "Permissão de localização negada. Habilite no navegador para pedir músicas."
+      );
     } else if (geo.status === "unavailable") {
       toast.error("Não foi possível obter sua localização neste dispositivo.");
     } else {
@@ -97,14 +108,25 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
     setGranting(false);
   }
 
-  async function handleAdd(video: YouTubeVideo) {
+  function handleAdd(video: YouTubeVideo) {
     if (adding) return;
+    if (added.has(video.videoId)) return;
+    if (requireSongConfirmation) {
+      setConfirming(video);
+      return;
+    }
+    void addToQueue(video);
+  }
+
+  async function addToQueue(video: YouTubeVideo) {
     setAdding(video.videoId);
     const result = await addSongToQueueAction({ roomCode, video });
     setAdding(null);
+    setConfirming(null);
     if (result.ok) {
       setAdded((prev) => new Set(prev).add(video.videoId));
-      const label = result.item.status === "pending" ? "aguardando aprovação do host" : "na fila";
+      const label =
+        result.item.status === "pending" ? "aguardando aprovação do host" : "na fila";
       toast.success(`${video.title} — ${label}`);
     } else {
       if (result.geoRequired) {
@@ -134,7 +156,11 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
         );
       case "results":
         if (state.results.length === 0) {
-          return <p className="text-muted-foreground text-sm">Nada encontrado. Tente outra busca.</p>;
+          return (
+            <p className="text-muted-foreground text-sm">
+              Nada encontrado. Tente outra busca.
+            </p>
+          );
         }
         return (
           <ul className="flex flex-col gap-2">
@@ -144,7 +170,7 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
               return (
                 <li
                   key={video.videoId}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-background p-2"
+                  className="border-border bg-background flex items-center gap-3 rounded-xl border p-2"
                 >
                   <div className="relative shrink-0">
                     {video.thumbnailUrl ? (
@@ -171,7 +197,9 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-sm font-medium">{video.title}</p>
                     {video.channelTitle && (
-                      <p className="text-muted-foreground truncate text-xs">{video.channelTitle}</p>
+                      <p className="text-muted-foreground truncate text-xs">
+                        {video.channelTitle}
+                      </p>
                     )}
                   </div>
                   {isAdded ? (
@@ -205,7 +233,11 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
             </p>
             {state.geoRequired && (
               <Button size="sm" onClick={handleGrantLocation} disabled={granting}>
-                {granting ? <LoaderCircle className="size-3.5 animate-spin" /> : <MapPin className="size-3.5" />}
+                {granting ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <MapPin className="size-3.5" />
+                )}
                 Permitir localização
               </Button>
             )}
@@ -222,10 +254,17 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
         <div className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm">
           <MapPin className="mt-0.5 size-4 shrink-0 text-amber-400" />
           <div className="flex flex-col gap-2">
-            <p>{presenceMessage ?? "Precisamos da sua localização para confirmar que você está no bar."}</p>
+            <p>
+              {presenceMessage ??
+                "Precisamos da sua localização para confirmar que você está no bar."}
+            </p>
             <div>
               <Button size="sm" onClick={handleGrantLocation} disabled={granting}>
-                {granting ? <LoaderCircle className="size-3.5 animate-spin" /> : <MapPin className="size-3.5" />}
+                {granting ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <MapPin className="size-3.5" />
+                )}
                 Permitir localização
               </Button>
             </div>
@@ -256,6 +295,13 @@ export function SongSearch({ roomCode, presenceOk, presenceMessage }: SongSearch
       </div>
 
       {placesLabel()}
+
+      <SongConfirmDialog
+        video={confirming}
+        busy={adding === confirming?.videoId}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(video) => void addToQueue(video)}
+      />
     </div>
   );
 }

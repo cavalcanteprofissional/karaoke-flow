@@ -5,11 +5,10 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-26):** suite com **198 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — o **roundtrip authorize→callback** com 4 provas do estado, e a **entrada com aprovação**: `src/components/bars/entry-approval-wait.test.tsx` (11) + `src/components/bars/pending-entry-requests.test.tsx` (5) e `src/components/rooms/presence-gate-info.test.tsx` (14)). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-26):** suite com **234 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — o **roundtrip authorize→callback** com 4 provas do estado, e a **entrada com aprovação**: `src/components/bars/entry-approval-wait.test.tsx` (11) + `src/components/bars/pending-entry-requests.test.tsx` (5) e `src/components/rooms/presence-gate-info.test.tsx` (14) e a **fila** (regras de aprovação em `src/lib/rooms/queue.test.ts` +18, `queue-list.test.tsx` 12 e `song-confirm-dialog.test.tsx` 7)). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
->
 > **Ambiente Windows (2026-09-25):** `npm test` (pool `threads`) pode falhar na primeira execução com _"Timeout waiting for worker to respond"_; `npx vitest run --pool=forks --maxWorkers=1` roda a suite inteira sem flaky. Nenhuma configuração do repositório foi alterada por causa disso.
 
 ---
@@ -154,6 +153,23 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Concorrência: dois usuários adicionam ao mesmo tempo → posições distintas na fila (sem corrida).
 - [ ] Estados visuais: `pendente` vs `na fila` vs `tocando` legíveis.
 - [ ] Reordenação e remoção apenas pelo host (validação no backend, não só UI).
+- [ ] **`npm test` (Vitest) passa** — inclui `src/lib/rooms/queue.test.ts` (+18 unit das regras de aprovação: decisão inválida, item ausente, não-host, `playing`/terminais), `src/components/rooms/queue-list.test.tsx` (12) e `src/components/rooms/song-confirm-dialog.test.tsx` (7) — **234 testes** no total.
+
+**Fase 5, Bloco A/E — aprovação e estados (2026-09-26, manual):**
+
+- [ ] Host em `/salas/[codigo]` com `queueApprovalMode=manual`: pedido de participante aparece no topo como **"Aguardando sua aprovação (1)"** (realtime, sem F5) e **também** na lista de baixo se o participante estiver em outra aba.
+- [ ] **Aprovar** tira do bloco de pendentes e a música passa a "na fila"; **Rejeitar** some da fila dos dois lados; **Remover** apaga (com `✕` do participante sempre na lista).
+- [ ] Segundo host/participante **não** vê os botões; a linha "4:05 · pedido por Ana" aparece para todos, e o próprio pedido diz "pedido por **você**".
+- [ ] Item com `status=playing` ganha o badge **"tocando agora"** com destaque; `rejected`/`played`/`skipped`/`cancelled` não aparecem na fila viva.
+- [ ] **RLS (a prova real, não automatizada):** com a sessão de um participante, `setQueueItemStatusAction`/`removeQueueItemAction` devem falhar com "Só o dono da sala pode…" (`RLS_BLOCKED`, `.select()` vazio) e a lista voltar ao estado anterior; o mesmo com o host de **outra** sala.
+- [ ] Sala encerrada (`close_room`): a fila zera, o bloco de aprovação some e as actions recusam com "Esta música não está mais na fila" (itens viram `cancelled`).
+
+**Fase 5, Bloco B — confirmação do vídeo (2026-09-26, manual):**
+
+- [ ] `requireSongConfirmation=true`: "Adicionar à fila" abre o modal com **thumbnail, título e duração**; "Cancelar" (ou Esc) não adiciona; "Confirmar" adiciona e mostra o toast ("aguardando aprovação" ou "na fila").
+- [ ] `requireSongConfirmation=false`: adiciona direto, sem modal.
+- [ ] Ligar o toggle em Configurações muda o comportamento **na hora** (recarrega a página de busca ou reabre) — antes o flag não era lido em lugar nenhum.
+- [ ] Música já adicionada mantém o botão desabilitado mesmo depois de passar pelo modal.
 
 ### 3.6 Player device (Fase 6)
 

@@ -288,15 +288,23 @@ sequenceDiagram
 
 **OAuth por-host:** bloco "Conta do YouTube" no `RoomSettings` (mostra "conectado à conta Google + data" quando há token, com botão "Remover conexão" que **revoga na Google** e apaga a linha) → `/auth/youtube/authorize` (estado nonce em cookie httpOnly, `access_type=offline&prompt=consent`) → Google → `/auth/youtube/callback` (exchange → `youtube_oauth_tokens`, **sem policies — service role**) → redirect à sala. Fallback do app: `scripts/youtube-app-oauth.mjs` (loopback) coleta o `YOUTUBE_APP_REFRESH_TOKEN` para o `.env.local`.
 
-### 3.2 Aprovação (host)
+### 3.2 Aprovação (host) — entregue em 2026-09-26 (Fase 5, Bloco A)
+
+O `QueueList` ganhou um bloco **"Aguardando sua aprovação (N)"** no topo, acima da fila: o host aprova, rejeita e remove sem sair da tela, e a fila não é duplicada (as pendentes aparecem **uma vez só**, nesse bloco). Quem não é o host não vê o bloco nem os botões, mas continua vendo os pedidos pendentes na lista com o badge "aguardando aprovação". **Remover** é do mesmo Bloco A; **reordenar** é o Bloco C (RPC `reorder_queue`, ainda não entregue).
+
+As duas server actions (`setQueueItemStatusAction`/`removeQueueItemAction`) escrevem pelo **client do usuário** — a autorização é a RLS existente (`queue_items_update_host`/`queue_items_delete_host`, host-only), sem RPC nova e sem relaxar policy. O `.select()` posterior (em `update` e em `delete`) é a prova de que a policy deixou passar: retorno vazio vira erro "Só o dono da sala pode…", não sucesso silencioso. A regra pura (`buildQueueModeration`/`buildQueueRemoval`, em `src/lib/rooms/queue.ts`) roda antes, dando a mensagem imediata e recusando `playing`/terminais — o item que está tocando só sai pela ação de pular (Fase 6/7).
 
 ```mermaid
 flowchart TD
-    A["Item pending"] --> B["Host: aprovar/rejeitar"]
-    B -->|aprovar| C["UPDATE status = approved (backend: host-only)"]
-    B -->|rejeitar| D["UPDATE status = rejected (backend: host-only)"]
-    C --> E["Realtime room:{id}"]
-    D --> E
+    A["Item pending"] --> B["Host: aprovar/rejeitar/remover (bloco de aprovação no QueueList)"]
+    B --> C{"Regra pura: moderável?"}
+    C -->|"pending/approved"| D["setQueueItemStatusAction / removeQueueItemAction"]
+    C -->|"playing/terminal ou não-host"| C1["Erro claro, sem chamada"]
+    D --> E["UPDATE/DELETE queue_items (RLS host-only) + .select() anti-no-op"]
+    E --> F{"Linha devolvida?"}
+    F -->|não| F1["'Só o dono da sala pode…' + toast + refetch da fila"]
+    F -->|sim| G["revalidatePath + refetch (otimista antes)"]
+    G --> H["Realtime queue-{roomId} → fila dos dois lados reflete"]
 ```
 
 ### 3.3 Reprodução e transições
@@ -374,12 +382,14 @@ Cada item da fila é uma linha de `queue_items` com `position` atribuído no ban
 
 ```mermaid
 flowchart TD
-    A["Item na minha fila: botão 'Trocar música'"] --> B["Abre busca (mesmo flow da Fase 4)"]
-    B --> C{requireSongConfirmation?}
-    C -->|sim| D["Modal confirmação do vídeo novo"]
-    D --> E["RPC replace_queue_song(item_id, yt_video, title, thumb, duration) — (backend)"]
+    A["Item em 'meus pedidos' (ainda não tocou)"] --> B["'Trocar música'"]
+    B --> C["Abre a mesma busca da Fase 4"]
+    C --> D["Escolhe novo vídeo"]
+    D --> E{Sala pede confirmação?}
+    C -->|sim| D2["Modal confirmação do vídeo novo"]
+    D2 --> E
     C -->|não| E
-    E --> F{Validações no banco}
+    E["RPC replace_queue_song(item_id, yt_video, title, thumb, duration) — (backend)"]
     F --> F1["item existe e room está active"]
     F --> F2["added_by = auth.uid() OU is_host(room)"]
     F --> F3["status ∈ {pending, approved}"]
@@ -395,8 +405,6 @@ flowchart TD
 > **Formas de reordenar (Fase 5, decidido 26/09):** mover ⬆/⬇ por item **e** drag-and-drop (ambos); `position` reescrito de forma atômica no backend, sem constraint única em `(room_id, position)` hoje — validar concorrência na implementação.
 
 **Payload da RPC (sugestão):** `p_item_id uuid`, `p_youtube_video_id text`, `p_title text`, `p_thumbnail_url text`, `p_duration_seconds integer`. Retorna o item atualizado ou levanta exceção com mensagem legível.
-
-**RLS impactada:** hoje `queue_items` só aceita UPDATE de host (`queue_items_update_host`). A RPC `security definer` roda como superuser/definer e impõe as checagens acima explicitamente — **o client não ganha UPDATE direto** (nada de relaxar a policy).
 
 ### 5.2 Questões de fluxo — resolvidas com o PO ✅
 

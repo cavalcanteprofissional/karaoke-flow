@@ -80,11 +80,17 @@ export default async function BuscarPage({ params }: BuscarPageProps) {
         <BackLink code={code} />
         <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
           <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-            {membership === "pending" ? <Clock3 className="size-6" /> : <DoorOpen className="size-6" />}
+            {membership === "pending" ? (
+              <Clock3 className="size-6" />
+            ) : (
+              <DoorOpen className="size-6" />
+            )}
           </span>
           <div className="flex flex-col gap-1">
             <p className="font-medium">
-              {membership === "pending" ? "Aguardando aprovação do host" : "Você ainda não está nesta sala"}
+              {membership === "pending"
+                ? "Aguardando aprovação do host"
+                : "Você ainda não está nesta sala"}
             </p>
             <p className="text-muted-foreground text-sm">
               {membership === "pending"
@@ -147,6 +153,7 @@ export default async function BuscarPage({ params }: BuscarPageProps) {
             roomCode={code}
             presenceOk={presence.ok}
             presenceMessage={presence.ok ? null : presence.error}
+            requireSongConfirmation={room.require_song_confirmation}
           />
         </CardContent>
       </Card>

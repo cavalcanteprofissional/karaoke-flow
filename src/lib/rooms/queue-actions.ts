@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { readUserGeoFromCookies } from "@/lib/bars/presence";
 import { createClient } from "@/lib/supabase/server";
 import type { BarLocation } from "@/lib/bars/geo";
-import { buildQueueSongItem } from "./queue";
+import { buildQueueModeration, buildQueueRemoval, buildQueueSongItem } from "./queue";
 import type { QueueSongInput } from "./queue";
 
 function friendlyError(message: string, fallback: string): string {
@@ -25,7 +25,11 @@ export async function addSongToQueueAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { ok: false, error: "Faça login para adicionar músicas.", code: "UNAUTHENTICATED" };
+    return {
+      ok: false,
+      error: "Faça login para adicionar músicas.",
+      code: "UNAUTHENTICATED",
+    };
   }
 
   const { data: room } = await supabase
@@ -110,4 +114,145 @@ export async function addSongToQueueAction(
   revalidatePath(`/salas/${input.roomCode}`);
   revalidatePath(`/salas/${input.roomCode}/buscar`);
   return { ok: true, item: { status: data[0].status, position: data[0].position } };
+}
+/**
+ * Aprova ou rejeita uma música da fila (Fase 5, Bloco A).
+ *
+ * A escrita vai pelo client do usuário (RLS `queue_items_update_host`,
+ * host-only) — sem RPC: a RPC só é necessária quando alguém que **não** é o
+ * host precisa escrever (`replace_queue_song`, Bloco D). A regra pura
+ * (`buildQueueModeration`) dá o feedback imediato; o `.select()` abaixo é a
+ * prova de que a policy deixou passar (no-op de policy vira erro, não sucesso
+ * silencioso). Sala encerrada não precisa de checagem própria: `close_room`
+ * deixa os itens em `cancelled`, que a regra trata como transição inválida.
+ */
+export async function setQueueItemStatusAction(
+  itemId: string,
+  decision: unknown
+): Promise<
+  | { ok: true; item: { id: string; status: string } }
+  | { ok: false; error: string; code: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      error: "Faça login para gerenciar a fila.",
+      code: "UNAUTHENTICATED",
+    };
+  }
+
+  const { data: item } = await supabase
+    .from("queue_items")
+    .select("id, status, added_by_user_id, rooms!inner(host_id, code)")
+    .eq("id", itemId)
+    .maybeSingle();
+
+  const room = (item?.rooms ?? null) as { host_id: string; code: string } | null;
+  if (!item || !room) {
+    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
+  }
+  const isHost = room.host_id === user.id;
+
+  const built = buildQueueModeration({
+    isHost,
+    userId: user.id,
+    item: item
+      ? { id: item.id, status: item.status, added_by_user_id: item.added_by_user_id }
+      : null,
+    decision,
+  });
+  if (!built.ok) return built;
+
+  const { data, error } = await supabase
+    .from("queue_items")
+    .update({ status: built.status })
+    .eq("id", built.itemId)
+    .select("id, status");
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível atualizar a música."),
+      code: "UPDATE_FAILED",
+    };
+  }
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: "Só o dono da sala pode aprovar ou rejeitar músicas.",
+      code: "RLS_BLOCKED",
+    };
+  }
+
+  revalidatePath(`/salas/${room.code}`);
+  revalidatePath(`/salas/${room.code}/buscar`);
+  return { ok: true, item: { id: data[0].id, status: data[0].status } };
+}
+
+/**
+ * Remove uma música da fila (Fase 5, Bloco A). DELETE é host-only na RLS
+ * (`queue_items_delete_host`) e o `.select()` prova que a linha saiu — o mesmo
+ * anti-no-op do update.
+ */
+export async function removeQueueItemAction(
+  itemId: string
+): Promise<{ ok: true; itemId: string } | { ok: false; error: string; code: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      error: "Faça login para gerenciar a fila.",
+      code: "UNAUTHENTICATED",
+    };
+  }
+
+  const { data: item } = await supabase
+    .from("queue_items")
+    .select("id, status, added_by_user_id, rooms!inner(host_id, code)")
+    .eq("id", itemId)
+    .maybeSingle();
+
+  const room = (item?.rooms ?? null) as { host_id: string; code: string } | null;
+  if (!item || !room) {
+    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
+  }
+  const isHost = room.host_id === user.id;
+
+  const built = buildQueueRemoval({
+    isHost,
+    item: item
+      ? { id: item.id, status: item.status, added_by_user_id: item.added_by_user_id }
+      : null,
+  });
+  if (!built.ok) return built;
+
+  const { data, error } = await supabase
+    .from("queue_items")
+    .delete()
+    .eq("id", built.itemId)
+    .select("id");
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível remover a música."),
+      code: "DELETE_FAILED",
+    };
+  }
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: "Só o dono da sala pode remover músicas.",
+      code: "RLS_BLOCKED",
+    };
+  }
+
+  revalidatePath(`/salas/${room.code}`);
+  revalidatePath(`/salas/${room.code}/buscar`);
+  return { ok: true, itemId: data[0].id };
 }

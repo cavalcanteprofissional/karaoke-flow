@@ -92,6 +92,7 @@ supabase/
 └─ migrations/     # SQL versionado (Fase 1 → 3.5)
 scripts/           # seed, apply-sql, enable-anonymous-signins, oauth
 docs/flows/        # fluxos do sistema, do usuário e banco de dados (Mermaid)
+docs/engenharia/   # post-mortems e playbooks de verificação
 ```
 
 ## ▶️ Começando
@@ -195,6 +196,10 @@ _Nota de manutenção:_ todo diagrama reflete o **código real** (migrations, `s
 ### Produto (roadmap)
 
 - [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md) — **planejamento (sem código)** das Fases 9–15: entrada de gente fora do raio de presença sinalizada só para o dono, permissão "fora do raio vê mas não pede música", tela da mesa (colegas + músicas da mesa), perfil de karaokê com check de som/microfone, tempo de música com teste grátis/alarme/countdown de 30 s, recompensas (dias consecutivos + músicas por bar) e pagamento/pedido de comida via mesa contra o sistema que o bar já usa. Inclui **12 decisões em aberto (D1–D12)**.
+
+### Engenharia (post-mortems e playbooks)
+
+- [`docs/engenharia/pos-mortem-smoke-playback.md`](./docs/engenharia/pos-mortem-smoke-playback.md) — **post-mortem da validação da Fase 6/7 (player da TV)**: por que a verificação do playback contra o Supabase remoto custou ~8 rodadas, as **6 armadilhas** de SQL/plumbing que quase mandaram a validação por água abaixo (ordem de avaliação de `jsonb_build_object`, `DO` que aborta inteiro, saída truncada do `apply-sql.mjs`, estado não previsível do banco de dev, material insuficiente no roteiro, smoke que suja os dados) e o **checklist para o próximo smoke**. Lê antes de escrever verificação por script.
 
 ### Ciência de dados (roadmap)
 

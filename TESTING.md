@@ -246,6 +246,8 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 
 Cada execução é um round-trip ao Management API contra um banco cujo estado não é previsível, e o smoke mexe nos dados de verdade. Planeje a sequência inteira antes de rodar (quantos itens, o que cada passo deixa para o próximo) — o `DO` inteiro aborta no primeiro passo que levanta exceção, então um erro no meio faz o relatório inteiro sumir e custa um `seed` + uma aplicação para cada ajuste.
 
+> As armadilhas concreteadas nesse loop (ordem de avaliação de `jsonb_build_object`, `DO` que aborta inteiro, saída truncada do `apply-sql.mjs`, estado não previsível do banco de dev, material insuficiente) e o checklist do próximo smoke estão em [`docs/engenharia/pos-mortem-smoke-playback.md`](./docs/engenharia/pos-mortem-smoke-playback.md).
+
 **Cuidados com o smoke**
 
 `scripts/smoke-playback.sql` **mexe nos dados de verdade**: cria itens "Smoke 1..3" com vídeo falso, marca itens como `played`/`skipped` e apaga um. Rode `npm run seed` antes (ele precisa de uma sala com itens) e **de novo depois**. Para ver o relatório inteiro: `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000` (o segundo argumento é o limite de caracteres; o padrão 2000 corta o JSON).

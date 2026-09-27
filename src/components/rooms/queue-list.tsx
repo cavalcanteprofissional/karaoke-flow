@@ -60,6 +60,8 @@ import {
   reorderQueueAction,
   setQueueItemStatusAction,
 } from "@/lib/rooms/queue-actions";
+import { announcePlaybackChange } from "@/lib/rooms/player-channel";
+import { announceQueueChange, subscribeToQueueChanges } from "@/lib/rooms/room-channel";
 import { formatDurationSeconds } from "@/lib/youtube/format";
 
 export type QueueItem = {
@@ -80,6 +82,13 @@ type QueueListProps = {
   isHost: boolean;
   currentUserId: string;
 };
+
+/**
+ * Rede de segurança da lista: 10s. Curto o bastante para o participante não
+ * achar que a tela travou, longo o bastante para não martelar o banco com um
+ * celular de participant em cada mesa do bar.
+ */
+const POLL_MS = 10_000;
 
 export function QueueList({
   roomId,
@@ -129,7 +138,18 @@ export function QueueList({
     }
   }, [roomId]);
 
+  /**
+   * Por que três camadas (2026-09-27): a lista do participante parava de
+   * atualizar e nada explicava. `postgres_changes` depende da publicação
+   * `supabase_realtime` e da RLS no momento do evento (se qualquer um dos dois
+   * falhar, a assinatura sobe e não chega nada, sem erro); celular travado dorme
+   * o WebSocket; e o aviso de "a fila mudou" ia só para a TV, nunca para quem
+   * está na sala. Então: broadcast de quem mutou + poll de 10s + relê quando a
+   * tela volta a ficar visível. Cada camada é barata e vale a redundância
+   * porque o custo de uma lista parada é o participante achando que deu errado.
+   */
   useEffect(() => {
+    // 1. `postgres_changes`: o caminho que já funcionava para o host.
     const supabase = createClient();
     const channel = supabase
       .channel(`queue-${roomId}`)
@@ -149,10 +169,50 @@ export function QueueList({
         void fetchItems();
       });
 
+    // 2. Broadcast: quem mutou a fila avisa, sem depender de RLS/publicação.
+    const unsubscribeBroadcast = subscribeToQueueChanges(
+      roomCode,
+      () => void fetchItems(),
+      (status) => {
+        if (status !== "SUBSCRIBED") {
+          console.warn(
+            `[fila ${roomCode}] realtime da fila em ${status} — caindo no poll de ${POLL_MS / 1000}s.`
+          );
+        }
+      }
+    );
+
+    // 3. Poll de segurança, só com a tela visível: TV e celular dormem.
+    const poll = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void fetchItems();
+    }, POLL_MS);
+
+    // 4. O caso real do bar: a tela estava travada e o WS nunca acordou.
+    const wake = () => {
+      void fetchItems();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", wake);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", wake);
+      window.addEventListener("online", wake);
+    }
+
     return () => {
+      clearInterval(poll);
+      unsubscribeBroadcast();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", wake);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", wake);
+        window.removeEventListener("online", wake);
+      }
       void supabase.removeChannel(channel);
     };
-  }, [roomId, fetchItems]);
+  }, [roomId, roomCode, fetchItems]);
 
   async function moderate(item: QueueItem, action: "approved" | "rejected" | "remove") {
     if (busy) return;
@@ -175,6 +235,10 @@ export function QueueList({
       void fetchItems();
       return;
     }
+    // Duas audiências, um aviso cada: a TV (que pode estar ociosa e precisa
+    // puxar a próxima) e os aparelhos da sala (a lista de quem está com o
+    // celular na mão). Em paralelo, para não somar latência.
+    await Promise.all([announcePlaybackChange(roomCode), announceQueueChange(roomCode)]);
     // Reconcilia posição/status (o trigger `touch_updated_at` também dispara o realtime).
     void fetchItems();
   }
@@ -204,6 +268,9 @@ export function QueueList({
     if (!result.ok) {
       toast.error(result.error ?? "Não foi possível reordenar a fila.");
     }
+    // A TV mostra a ordem da fila e a sala mostra a lista: sem o aviso, os dois
+    // ficariam com a ordem antiga até o poll.
+    await Promise.all([announcePlaybackChange(roomCode), announceQueueChange(roomCode)]);
     // O realtime também avisa, mas o fetch garante a ordem real (reconcilia
     // `STALE_QUEUE` e qualquer approve/remove que tenha corrido em paralelo).
     void fetchItems().finally(() => setDraftOrder(null));

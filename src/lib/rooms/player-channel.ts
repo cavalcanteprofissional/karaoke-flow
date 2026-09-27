@@ -24,19 +24,27 @@ const EVENT = "playback-changed";
 
 /** Avisa a TV depois de um ajuste de playback (ou de trocar o link). */
 export async function announcePlaybackChange(roomCode: string): Promise<void> {
-  const supabase = createClient();
-  const channel = supabase.channel(playerChannelName(roomCode));
   try {
-    await new Promise<void>((resolve) => {
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") resolve();
+    // O client no try: o playback já está gravado no banco, e um aviso
+    // best-effort não pode virar erro na tela de quem apertou o botão.
+    const supabase = createClient();
+    const channel = supabase.channel(playerChannelName(roomCode));
+    try {
+      await new Promise<void>((resolve) => {
+        channel.subscribe((status) => {
+          if (status === "SUBSCRIBED") resolve();
+        });
       });
-    });
-    await channel.send({ type: "broadcast", event: EVENT, payload: { at: Date.now() } });
+      await channel.send({
+        type: "broadcast",
+        event: EVENT,
+        payload: { at: Date.now() },
+      });
+    } finally {
+      void supabase.removeChannel(channel);
+    }
   } catch {
     // Sem realtime, a TV continua funcionando pelo poll.
-  } finally {
-    void supabase.removeChannel(channel);
   }
 }
 

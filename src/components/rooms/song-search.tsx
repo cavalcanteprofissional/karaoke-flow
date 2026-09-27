@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   LoaderCircle,
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { SongConfirmDialog } from "@/components/rooms/song-confirm-dialog";
 import { captureGeolocation, writeGeoCookie } from "@/lib/consent/geo";
 import { addSongToQueueAction, replaceQueueSongAction } from "@/lib/rooms/queue-actions";
+import { announceQueueChange } from "@/lib/rooms/room-channel";
 import type { YouTubeVideo } from "@/lib/youtube/types";
 import { formatDurationSeconds } from "@/lib/youtube/format";
 
@@ -56,6 +58,7 @@ export function SongSearch({
   replaceItemTitle,
 }: SongSearchProps) {
   const isReplace = Boolean(replaceItemId);
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -146,6 +149,9 @@ export function SongSearch({
       setAdding(null);
       setConfirming(null);
       if (result.ok) {
+        // A troca muda título/duração do item que TODO mundo vê na lista: os
+        // aparelhos da sala precisam reler (o poll de 10s cobre quem não ouvir).
+        void announceQueueChange(roomCode);
         toast.success(`${video.title} — música trocada, posição e status mantidos.`);
         return;
       }
@@ -158,9 +164,20 @@ export function SongSearch({
     setConfirming(null);
     if (result.ok) {
       setAdded((prev) => new Set(prev).add(video.videoId));
+      // A sala precisa ver o pedido chegar na hora — em especial o host, que é
+      // quem aprova, e os outros participantes, que era o que não acontecia.
+      void announceQueueChange(roomCode);
       const label =
         result.item.status === "pending" ? "aguardando aprovação do host" : "na fila";
       toast.success(`${video.title} — ${label}`);
+      // Pediu a música: a watch party é o destino. O player abre pela SESSÃO
+      // (`/player/<código>` sem token), então o participante nunca vê o token
+      // da TV; se a música foi para `pending`, a tela mostra o contador de
+      // aguardando aprovação e o quiosque puxa sozinha quando o host aprovar.
+      // TODO(Bloco 2/E): o destino passa a ser a tela da mesa
+      // (`/salas/<código>`), com fila realtime, status da minha música e as
+      // métricas — não a tela do player.
+      router.push(`/player/${roomCode}`);
     } else {
       if (result.geoRequired) {
         toast.error(result.error);

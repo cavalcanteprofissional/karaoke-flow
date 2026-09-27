@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-27):** suite com **308 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — o **roundtrip authorize→callback** com 4 provas do estado, e a **entrada com aprovação**: `src/components/bars/entry-approval-wait.test.tsx` (11) + `src/components/bars/pending-entry-requests.test.tsx` (5) e `src/components/rooms/presence-gate-info.test.tsx` (14) e a **fila** (regras de aprovação/reordenação/troca em `src/lib/rooms/queue.test.ts` +50, `queue-list.test.tsx` 23, `song-search.test.tsx` 6 e `song-confirm-dialog.test.tsx` 9), e o **player** (`src/lib/rooms/playback.test.ts` 20 de regras puras, `player-kiosk.test.tsx` 10 com a **YouTube IFrame Player API mockada** disparando `onStateChange`/`onError`, e `playback-controls.test.tsx` 12 do painel do host)). O contrato do playback no banco remoto tem smoke próprio em `scripts/smoke-playback.sql`. Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-27):** suite com **353 testes** (32 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 55, `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **16 provas via MSW** — incl. credencial OAuth via **Bearer** host/app —, o **roundtrip authorize→callback** com 4 provas do estado, a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 23, `song-search` 9, `song-confirm-dialog` 9), o **player** (`playback` 24 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 18 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host) e a **Fase 8a** (`queue-actions` 7, `entry-state` 5, `room-settings` 3). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -195,7 +195,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 
 > **O que dá para automatizar sem browser (entregue):** o contrato do banco, com `scripts/smoke-playback.sql` rodando contra o remoto (20 passos, verde). Ele fixa as regras que o player consome: token inválido não abre nada, sala encerrada não avança, só `approved` entra em `playing`, o player não pula em pausa, o item que sai da fila deixa a sala `idle` e o link antigo morre na rotação. **Rodar:** `npm run seed` → `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000` → `npm run seed` (o smoke mexe nos dados). Os itens de browser ficam para o Playwright.
 
-- [x] `/player/[code]` acessível **sem login** — e **com** token: link sem token ou com token velho mostra aviso, não player.
+- [x] `/player/[code]` acessível **sem login** pela porta do token (a TV); **sem token** também abre para quem está logado e é host ou membro aprovado (Fase 8a) — link com token velho mostra aviso e **não** cai para a sessão.
 - [x] Primeira reprodução exige um toque (autoplay) — botão "Toque para começar" e aviso quando o player trava.
 - [x] Eventos `play/pause/skip/queueUpdated/reorder` refletem na tela sem reload (< 2s) — `play/pause/skip/stop` por broadcast; `queueUpdated/reorder` por poll de 5s.
 - [ ] Pré-carregamento do próximo vídeo (transição sem tela preta) — fora do escopo entregue.
@@ -204,6 +204,13 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [x] Estado vazio: QR grande + CTA "escaneie para adicionar uma música".
 - [x] Sessão estável por horas (reconexão do Realtime automática) — o poll cobre canal caído; reconexão fina do canal ainda é do e2e.
 - [ ] Smoke HTTP da rota pública (a página carregando, o `noindex`) — depende do Playwright.
+
+> **Correção de 27/09 — o player de verdade quebrou e a suíte não viu (leitura obrigatória):** abrir `/player/KARAOKE?token=…` no browser derrubou a tela com `player.loadVideoById is not a function` no primeiro approve. A IFrame API devolve do construtor um objeto **parcial** — os métodos só existem depois do `onReady` do iframe, e o handle documentado é o `event.target` —, enquanto o componente (e o **duplo de teste**) acreditavam que a instância já estava pronta. **Regra permanente:** API de terceiro no client entra com o duplo fiel ao contrato documentado, **na mesma task do código**; um duplo que antecipa o ciclo de vida da dependência aprova código que não roda.
+>
+> - O duplo agora é `src/test/fake-youtube.ts`, compartilhado pelo stage e pelo quiosque: a instância do construtor **não tem métodos**, e o teste dispara o `onReady` como o iframe faria.
+> - `player-kiosk.test.tsx` chama `fireReady()` num lugar só (`renderKiosk`) — **não** em cada teste. Todo cenário novo que precisar do player já pronto usa `renderKiosk(state)`; o que precisa do player ainda subindo usa `renderKiosk(state, { ready: false })`.
+> - Coberto agora: primeira música do boot, avanço do host com o player subindo (toca a nova, não a velha), fila esgota e volta a tocar, boot lento virando aviso, `onEnded`, 150 vs. erro, unmount antes/depois do ready (`youtube-stage` 13, `player-kiosk` 18, `player-error-boundary` 2).
+> - O que segue valendo: **suíte verde não substitui browser real**, e browser não substitui TV (som, tela do bar) — item aberto no `TODO.md`.
 
 ### 3.7 Controle do host (Fase 7)
 
@@ -237,10 +244,19 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Pausar → a TV para; Retomar → **continua de onde parou** (o player do YouTube guarda a posição).
 - [ ] Pular → a atual vira "pulada" e a próxima entra.
 - [ ] Parar → a sala para; "Tocar" de novo entra na próxima aprovada que sobrou.
-- [ ] Aprovar uma música nova pelo painel → ela aparece na TV em até ~5s (é o poll; o broadcast ainda não cobre `queueUpdated`).
-- [ ] Reordenar a fila → a TV reflete em até ~5s (mesma razão).
+- [ ] Aprovar uma música nova pelo painel → ela aparece na TV **sem esperar os 5s** (broadcast, desde a Fase 8a).
+- [ ] Reordenar a fila → a TV reflete em até ~5s (o canal do player cobre só `playback_status`; reordenar chega pelo poll).
 - [ ] "Gerar novo link" → o link velho passa a mostrar aviso, e o novo funciona.
 - [ ] participante no celular: **não** vê o card "Player da TV".
+
+**No celular do participante (Fase 8a — o caminho que faltava)**
+
+- [ ] Adicionar música leva direto para o **player da própria sala** (sem token, sem link da TV) — a fila e o que está tocando aparecem.
+- [ ] Recarregar essa URL continua abrindo (a autorização é a **sessão**, não o token) — e um logout derruba para o aviso de "não autorizado".
+- [ ] Membro com o pedido ainda **pendente** recebe aviso, não o player; aprovado pelo host passa a abrir.
+- [ ] Com a TV fechada: adicionar duas músicas e deixar a sala ociosa → o player do celular **toca a primeira sozinho** (claim com a sala ociosa).
+- [ ] O link da TV (`?token=…`) continua abrindo **sem login nenhum**, e um token velho não "volta" para a sessão de quem está logado no mesmo navegador.
+- [ ] Entrar, sair e voltar em menos de 24h **sem o host tocar em nada** → entra aprovado (pré-aprovação); **sair** e voltar → pede aprovação de novo.
 
 **Cuidados com o smoke** (e por que ele demora)
 
@@ -258,11 +274,64 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 |---|---|
 | TV recarrega enquanto está **pausada** → música volta do zero | a âncora de tempo é zerada no pause de propósito (decisão P6 da migration `00027`); o cronômetro de verdade é da Fase 13 |
 | Não pré-carrega a próxima faixa | fora do escopo entregue; pode dar um piscar preto na virada |
-| Fila/reordenação chegam por poll de 5s, não por push | o canal do player cobre só `playback_status` |
+| Reordenar a fila chega à TV por poll de 5s, não por push | o canal do player cobre só `playback_status`; aprovar/rejeitar/remover já vão por broadcast (Fase 8a) |
 | Uma TV mostrando aviso de link invalidado | é o token rotacionado; pegue o link novo no card do host |
 | Vídeo que o YouTube não deixa embutir | erro 101/150 do player; a TV mostra o aviso de autoplay, mas vídeo bloqueado para embedding é caso do conteúdo da música |
+| Participante aprovado que voltou depois de 24h precisa de aprovação nova | é a pré-aprovação de 24h funcionando (`pre_approval_24h` ON, travado na UI) |
 
-### 3.9 Segurança / LGPD / NFR (Fase 8)
+### 3.9 Fase 8a — fila/player no uso real, player por sessão e pré-aprovação de 24h
+
+> **O que dá para automatizar sem browser (entregue):** o contrato do banco, com `scripts/smoke-player-session.sql` rodando contra o remoto. Ele é **autossuficiente** — cria a sala `SMOKE8` e os usuários de teste, roda a matriz e **se apaga no fim**, então não exige `npm run seed` antes nem depois (o `smoke-playback.sql` da Fase 6 exige). **Rodar:** `node scripts/apply-sql.mjs scripts/smoke-player-session.sql 100000` (o segundo argumento é o limite de caracteres do relatório; o padrão 2000 corta o JSON). Novidade de schema: `pre_approval_24h` ON/off, `room_members.approved_at`, `current_user_is_anonymous`, `member_entry_state` e as duas portas de `player_room_id`. O que dá para rodar antes de qualquer deploy: **`npm run diagnose:queue`**, que reproduz as quatro actions de moderação e mostra o erro cru do PostgREST — foi ele que achou o `PGRST201` do embed ambíguo, que a UI escondia como "música não encontrada".
+
+- [x] **Aprovar/rejeitar/remover/reordenar funcionam de verdade** (o `PGRST201` do embed ambíguo corrigido com hint explícito da FK) — `queue-actions.test.ts` (7) + smoke.
+- [x] **Erro de banco vira erro na tela**: falha de leitura/escrita na moderação chega ao `toast`, não como "música não encontrada".
+- [x] **A TV retoma sozinha** com a sala ociosa e fila aprovada (acordar/recarregar/poll) — `shouldClaimFromIdle` em `playback.test.ts` (24) + `player-kiosk.test.tsx` (18).
+- [x] **Fila mutada avisa a TV** sem esperar o poll de 5s (broadcast depois de aprovar/rejeitar/remover/reordenar).
+- [x] **Participante e host entram no player sem token** (`/player/<codigo>` por sessão) e **adicionar música leva ao player** — `song-search.test.tsx` (9).
+- [x] **Negados no player:** membro `pending`, anônimo sem aprovação, não-membro e token errado — token errado **não** cai para a sessão.
+- [x] **Pré-aprovação de 24h:** autenticado aprovado há 23h reentra aprovado; aos 25h volta a `pending` (com "entrada livre" OFF); toggle OFF não pré-aproveja ninguém; **anônimo nunca** é pré-aprovado; **reaprovar não renova** a janela.
+- [x] **Toggle travado ON na UI** do `RoomSettings` (a decisão do PO) com o backend aceitando os dois valores — `room-settings.test.tsx` (3).
+- [x] **Fila/player/seed de dev** — o seed deixa uma música `approved` (a trigger de status inicial ignora o `approved` do `INSERT`), senão o teste manual do player não tinha com o que testar.
+- [ ] **Smoke HTTP** da rota pública com os dois caminhos de autorização e o redirect depois de adicionar — depende de Playwright.
+- [ ] **Player em browser de TV de verdade** (IFrame API real, autoplay, latência) — o smoke prova o contrato, não a tela. **O browser de dev já rodou em 27/09** e expôs o crash de prontidão (ver §3.6): o que falta é a confirmação na TV.
+
+### 3.9·bis Player em browser depois da correção de 27/09 (roteiro curto)
+
+> Feito **com o dev server rodando e o console do browser aberto** (o crash só aparece com a API real; nenhum duplo de teste substitui este passo). Guarde o console: o `player.loadVideoById is not a function` aparecia aí, antes de qualquer elemento da tela.
+
+- [ ] **Abrir `/player/<codigo>?token=…` com uma música já `approved`**: o vídeo começa sozinho (ou aparece "Toque para começar" se o navegador bloquear autoplay) — **sem overlay de erro**.
+- [ ] **Aprovar uma música com a TV já aberta**: ela entra em ≤ 5s, sem recarregar a faixa que estava tocando.
+- [ ] **Pular pelo celular do host**: a próxima começa e a faixa nova **não pisca preto**.
+- [ ] **Fila acaba e a sala esvazia**: a TV mostra o QR; na música seguinte, o vídeo volta (o caminho do remount do stage, que era o segundo bug do mesmo defeito).
+- [ ] **Devtools com o throttling em "Slow 3G"**: nada de crash; o aviso de "Não foi possível tocar esta música" aparece se o player demorar (8s) e some quando ficar pronto.
+- [ ] **Autoplay bloqueado**: o botão "Toque para começar" aparece **só** quando o player está pronto, e um toque toca.
+- [ ] **Comentar a `https://www.youtube.com/iframe_api` no DevTools** (simula ad-blocker): a TV mostra o aviso com o botão de recarregar, em vez de tela preta.
+
+### 3.9·ter Player e fila depois do 2º round de correções de 27/09
+
+> Mesmo princípio do roteiro acima: o que quebrou desta vez (`destroy()` depois do React, CTA repetido, lista do participante parada) só aparece com **timing de verdade** — poll de 5s, clique do host e celular com tela dormindo. Aplique a migração `20260927000031_queue_author_delete.sql` **antes** (ela traz a policy nova e o `replica identity full`; sem isso, o teste de remoção falha por RLS).
+
+**TV + console aberto**
+
+- [ ] **Fim da última música (fila vira vazia)**: a TV mostra o QR **sem `NotFoundError`/`removeChild` no console**.
+- [ ] **Host clica "Parar" com música tocando**: a TV esvazia, **sem crash no console** — o mesmo crash do item anterior, por um caminho diferente (ver pós-mortem §3.8). Estado do console é o que conta aqui, não a tela.
+- [ ] **"Parar" com outra música aprovada na fila**: hoje a próxima entra sozinha (comportamento pendente de mudança — ver TODO Fase 8b). Anotar o comportamento, não falhar o teste por isso.
+- [ ] **Deixar tocar ≥ 60s com a CTA visível**: o texto "Toque para começar" **não** reaparece por cima do vídeo (regressão do poll).
+- [ ] **Buffering (Throttling "Slow 3G") depois da faixa já ter começado**: a CTA **não** volta.
+- [ ] **Sequência longa (5+ músicas, atravessando a virada)**: nenhum erro no console no fim de cada faixa.
+- [ ] **Sair do `/player` pelo histórico do browser** (não pelo botão): sem erro.
+
+**Lista no celular do participante (com a TV/host em outro aparelho)**
+
+- [ ] **Host aprova**: a lista do participante atualiza em **segundos**, sem recarregar a página.
+- [ ] **Host tira da fila / moderador rejeita**: a linha some da lista do participante (cobre o `DELETE` + filtro de `room_id`).
+- [ ] **Participante pede/troca música pelo próprio celular**: os outros aparelhos da sala (inclusive a TV) enxergam na hora.
+- [ ] **Celular do participante com o app em background (≥ 30s) e depois aberto**: a lista relê sozinha (cobre `visibilitychange`).
+- [ ] **Participante pede música e depois toca em "Tirar da fila"**: some sem erro (D1).
+- [ ] **Modo avião → online**: a lista volta a atualizar.
+- [ ] **Desligar o realtime no DevTools (abrir a aba "Channels" e matar o WS)**: a lista continua atualizando pelo poll de 10s, e o console mostra o aviso de assinatura falha (log proposital, ver §3.10 do pós-mortem).
+
+### 3.10 Segurança / LGPD / NFR (Fase 8)
 
 - [ ] RLS: participante aprovado de sala A **não** lê a fila da sala B (comprovar via API direta).
 - [ ] Ações de host rejeitadas no backend quando chamadas por não-host.

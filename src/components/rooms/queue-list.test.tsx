@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 type TestItem = {
   id: string;
@@ -21,7 +21,14 @@ const mocks = vi.hoisted(() => {
     items: TestItem[];
     names: { id: string; name: string }[];
     realtimeHandler?: () => void;
-  } = { items: [], names: [] };
+    /** Handlers e status do canal da sala (`room-queue-<código>`). */
+    queueSubscribe: {
+      roomCode: string;
+      onChange: () => void;
+      onStatus?: (status: string) => void;
+      unsubscribe: ReturnType<typeof vi.fn>;
+    }[];
+  } = { items: [], names: [], queueSubscribe: [] };
 
   const makeQuery = (getData: () => unknown[]) => {
     const query: Record<string, unknown> = {
@@ -48,7 +55,9 @@ const mocks = vi.hoisted(() => {
 
   const supabase = {
     from: (table: string) =>
-      table === "profiles_public" ? makeQuery(() => state.names) : makeQuery(() => state.items),
+      table === "profiles_public"
+        ? makeQuery(() => state.names)
+        : makeQuery(() => state.items),
     channel: () => channel,
     removeChannel: vi.fn(),
   };
@@ -59,6 +68,8 @@ const mocks = vi.hoisted(() => {
     setQueueItemStatusAction: vi.fn(),
     removeQueueItemAction: vi.fn(),
     reorderQueueAction: vi.fn(),
+    announceQueueChange: vi.fn(),
+    announcePlaybackChange: vi.fn(),
     toast: { success: vi.fn(), error: vi.fn() },
   };
 });
@@ -82,6 +93,27 @@ vi.mock("@/lib/rooms/queue-actions", () => ({
     mocks.reorderQueueAction(roomId, itemIds),
 }));
 
+// O canal da sala e o aviso de playback são um eventinho sem dado: quem entra
+// aqui só precisa de poderprovocar o handler e conferir quem foi avisado.
+vi.mock("@/lib/rooms/room-channel", () => ({
+  subscribeToQueueChanges: (
+    roomCode: string,
+    onChange: () => void,
+    onStatus?: (status: string) => void
+  ) => {
+    const unsubscribe = vi.fn();
+    mocks.state.queueSubscribe.push({ roomCode, onChange, onStatus, unsubscribe });
+    return unsubscribe;
+  },
+  announceQueueChange: (roomCode: string) =>
+    mocks.announceQueueChange(roomCode) as unknown,
+}));
+
+vi.mock("@/lib/rooms/player-channel", () => ({
+  announcePlaybackChange: (roomCode: string) =>
+    mocks.announcePlaybackChange(roomCode) as unknown,
+}));
+
 import { QueueList } from "./queue-list";
 import type { QueueItem } from "./queue-list";
 
@@ -99,7 +131,9 @@ function item(over: Partial<TestItem> = {}): TestItem {
   };
 }
 
-function renderList(props: { isHost?: boolean; currentUserId?: string; initial?: QueueItem[] } = {}) {
+function renderList(
+  props: { isHost?: boolean; currentUserId?: string; initial?: QueueItem[] } = {}
+) {
   return render(
     <QueueList
       roomId={ROOM_ID}
@@ -115,9 +149,12 @@ beforeEach(() => {
   mocks.state.items = [item()];
   mocks.state.names = [{ id: "user-2", name: "Ana" }];
   mocks.state.realtimeHandler = undefined;
+  mocks.state.queueSubscribe = [];
   mocks.setQueueItemStatusAction.mockReset();
   mocks.removeQueueItemAction.mockReset();
   mocks.reorderQueueAction.mockReset();
+  mocks.announceQueueChange.mockReset();
+  mocks.announcePlaybackChange.mockReset();
   mocks.toast.error.mockReset();
   mocks.setQueueItemStatusAction.mockResolvedValue({
     ok: true,
@@ -138,18 +175,26 @@ describe("QueueList — aprovação pelo host (Bloco A)", () => {
       await screen.findByRole("region", { name: "Aguardando sua aprovação" })
     ).toBeInTheDocument();
     expect(screen.getByText("Aguardando sua aprovação (1)")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Aprovar Evidências" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rejeitar Evidências" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remover Evidências" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Aprovar Evidências" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Rejeitar Evidências" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remover Evidências" })
+    ).toBeInTheDocument();
   });
 
   it("aprova: chama a action com approved e a música passa para a fila", async () => {
-    mocks.setQueueItemStatusAction.mockImplementation(async (itemId: string, decision: string) => {
-      mocks.state.items = mocks.state.items.map((i) =>
-        i.id === itemId ? { ...i, status: decision } : i
-      );
-      return { ok: true, item: { id: itemId, status: decision } };
-    });
+    mocks.setQueueItemStatusAction.mockImplementation(
+      async (itemId: string, decision: string) => {
+        mocks.state.items = mocks.state.items.map((i) =>
+          i.id === itemId ? { ...i, status: decision } : i
+        );
+        return { ok: true, item: { id: itemId, status: decision } };
+      }
+    );
     renderList();
     await screen.findByRole("button", { name: "Aprovar Evidências" });
 
@@ -157,18 +202,22 @@ describe("QueueList — aprovação pelo host (Bloco A)", () => {
 
     expect(mocks.setQueueItemStatusAction).toHaveBeenCalledWith("item-1", "approved");
     await waitFor(() => {
-      expect(screen.queryByRole("region", { name: "Aguardando sua aprovação" })).toBeNull();
+      expect(
+        screen.queryByRole("region", { name: "Aguardando sua aprovação" })
+      ).toBeNull();
       expect(screen.getByText("na fila")).toBeInTheDocument();
     });
   });
 
   it("rejeita: chama a action com rejected e a música some da fila", async () => {
-    mocks.setQueueItemStatusAction.mockImplementation(async (itemId: string, decision: string) => {
-      if (decision === "rejected") {
-        mocks.state.items = mocks.state.items.filter((i) => i.id !== itemId);
+    mocks.setQueueItemStatusAction.mockImplementation(
+      async (itemId: string, decision: string) => {
+        if (decision === "rejected") {
+          mocks.state.items = mocks.state.items.filter((i) => i.id !== itemId);
+        }
+        return { ok: true, item: { id: itemId, status: decision } };
       }
-      return { ok: true, item: { id: itemId, status: decision } };
-    });
+    );
     renderList();
     await screen.findByRole("button", { name: "Rejeitar Evidências" });
 
@@ -194,7 +243,9 @@ describe("QueueList — aprovação pelo host (Bloco A)", () => {
     // Otimista: some antes da resposta do banco.
     expect(screen.queryByText("Evidências")).toBeNull();
     resolveAction({ ok: true, itemId: "item-1" });
-    await waitFor(() => expect(mocks.removeQueueItemAction).toHaveBeenCalledWith("item-1"));
+    await waitFor(() =>
+      expect(mocks.removeQueueItemAction).toHaveBeenCalledWith("item-1")
+    );
   });
 
   it("erro do banco: avisa e volta a mostrar a música (refetch)", async () => {
@@ -209,7 +260,9 @@ describe("QueueList — aprovação pelo host (Bloco A)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Aprovar Evidências" }));
 
     await waitFor(() =>
-      expect(mocks.toast.error).toHaveBeenCalledWith("Só o dono da sala pode aprovar ou rejeitar músicas.")
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        "Só o dono da sala pode aprovar ou rejeitar músicas."
+      )
     );
     await waitFor(() => expect(screen.getByText("Evidências")).toBeInTheDocument());
   });
@@ -284,9 +337,27 @@ describe("QueueList — reordenação da fila (Bloco C)", () => {
 
   function queue() {
     return [
-      item({ id: A, title: "A", status: "playing", position: 1, added_by_user_id: "user-2" }),
-      item({ id: B, title: "B", status: "approved", position: 2, added_by_user_id: "user-2" }),
-      item({ id: C, title: "C", status: "approved", position: 3, added_by_user_id: "user-2" }),
+      item({
+        id: A,
+        title: "A",
+        status: "playing",
+        position: 1,
+        added_by_user_id: "user-2",
+      }),
+      item({
+        id: B,
+        title: "B",
+        status: "approved",
+        position: 2,
+        added_by_user_id: "user-2",
+      }),
+      item({
+        id: C,
+        title: "C",
+        status: "approved",
+        position: 3,
+        added_by_user_id: "user-2",
+      }),
     ];
   }
 
@@ -349,12 +420,16 @@ describe("QueueList — reordenação da fila (Bloco C)", () => {
   it("mantém o item em reprodução fora das setas", async () => {
     renderList();
     expect(await screen.findByRole("button", { name: "Remover A" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^(Subir|Descer|Reordenar) A$/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^(Subir|Descer|Reordenar) A$/ })
+    ).toBeNull();
   });
 
   it("oferece handle de arrasto com nome acessível", async () => {
     renderList();
-    expect(await screen.findByRole("button", { name: "Reordenar B" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Reordenar B" })
+    ).toBeInTheDocument();
   });
 });
 
@@ -364,8 +439,20 @@ describe("QueueList — trocar música (Bloco D)", () => {
 
   beforeEach(() => {
     mocks.state.items = [
-      item({ id: A, title: "A", status: "approved", position: 1, added_by_user_id: "user-2" }),
-      item({ id: B, title: "B", status: "pending", position: 2, added_by_user_id: "user-9" }),
+      item({
+        id: A,
+        title: "A",
+        status: "approved",
+        position: 1,
+        added_by_user_id: "user-2",
+      }),
+      item({
+        id: B,
+        title: "B",
+        status: "pending",
+        position: 2,
+        added_by_user_id: "user-9",
+      }),
     ];
     mocks.state.names = [{ id: "user-2", name: "Ana" }];
   });
@@ -378,8 +465,20 @@ describe("QueueList — trocar música (Bloco D)", () => {
 
   it("quem não pediu a música não vê o link de troca, mas pode tirar o próprio pedido", async () => {
     mocks.state.items = [
-      item({ id: A, title: "A", status: "approved", position: 1, added_by_user_id: "user-2" }),
-      item({ id: B, title: "B", status: "pending", position: 2, added_by_user_id: "user-5" }),
+      item({
+        id: A,
+        title: "A",
+        status: "approved",
+        position: 1,
+        added_by_user_id: "user-2",
+      }),
+      item({
+        id: B,
+        title: "B",
+        status: "pending",
+        position: 2,
+        added_by_user_id: "user-5",
+      }),
     ];
     renderList({ isHost: false, currentUserId: "user-5" });
     expect(await screen.findByText("A")).toBeInTheDocument();
@@ -401,10 +500,120 @@ describe("QueueList — trocar música (Bloco D)", () => {
 
   it("não oferece troca para o que já está tocando", async () => {
     mocks.state.items = [
-      item({ id: A, title: "A", status: "playing", position: 1, added_by_user_id: "user-2" }),
+      item({
+        id: A,
+        title: "A",
+        status: "playing",
+        position: 1,
+        added_by_user_id: "user-2",
+      }),
     ];
     renderList({ isHost: false, currentUserId: "user-2" });
     expect(await screen.findByText("A")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Trocar A" })).toBeNull();
+  });
+});
+
+/**
+ * A lista do participante parava de atualizar e o código não dizia por quê
+ * (2026-09-27). São três causas independentes, e por isso a correção é
+ * redundância: broadcast de quem mutou (não depende de RLS nem da publicação do
+ * realtime), poll de 10s e relê quando a tela volta a ficar visível.
+ */
+describe("QueueList — a lista volta a atualizar sozinha (2026-09-27)", () => {
+  it("assina o canal da sala, não só o postgres_changes", async () => {
+    renderList();
+    await screen.findByText("Evidências");
+
+    expect(mocks.state.queueSubscribe).toHaveLength(1);
+    expect(mocks.state.queueSubscribe[0].roomCode).toBe(ROOM_CODE);
+  });
+
+  it("relê a fila quando o aviso de quem aprovou chega", async () => {
+    renderList({ isHost: false, currentUserId: "user-9" });
+    await screen.findByText("Evidências");
+
+    // O banco mudou: o host aprovou, o participante ainda vê "aguardando".
+    mocks.state.items = [item({ status: "approved" })];
+    await act(async () => {
+      mocks.state.queueSubscribe[0].onChange();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByText("na fila")).toBeInTheDocument());
+  });
+
+  it("aprovar avisa a TV e a sala", async () => {
+    renderList();
+    await screen.findByRole("button", { name: "Aprovar Evidências" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar Evidências" }));
+
+    // A TV pode estar ociosa e precisa puxar a próxima; os aparelhos da sala
+    // precisam ver a música entrar na fila.
+    await waitFor(() =>
+      expect(mocks.announcePlaybackChange).toHaveBeenCalledWith(ROOM_CODE)
+    );
+    await waitFor(() =>
+      expect(mocks.announceQueueChange).toHaveBeenCalledWith(ROOM_CODE)
+    );
+  });
+
+  it("o poll de 10s relê mesmo sem realtime nenhum", async () => {
+    vi.useFakeTimers();
+    try {
+      renderList({ isHost: false, currentUserId: "user-9" });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText("aguardando aprovação")).toBeInTheDocument();
+
+      // Nenhum evento de realtime: só o tempo passando.
+      mocks.state.items = [item({ status: "approved" })];
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(screen.getByText("na fila")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("relê quando a tela volta a ficar visível (o caso real: celular travado)", async () => {
+    renderList({ isHost: false, currentUserId: "user-9" });
+    await screen.findByText("Evidências");
+
+    mocks.state.items = [item({ status: "approved" })];
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByText("na fila")).toBeInTheDocument());
+  });
+
+  it("assinatura quebrada aparece no console (falha silenciosa custa caro)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      renderList();
+      await screen.findByText("Evidências");
+
+      mocks.state.queueSubscribe[0].onStatus?.("CHANNEL_ERROR");
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("CHANNEL_ERROR"));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("10s"));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("desmontar cancela o canal e os listeners", async () => {
+    const { unmount } = renderList();
+    await screen.findByText("Evidências");
+
+    unmount();
+
+    expect(mocks.state.queueSubscribe[0].unsubscribe).toHaveBeenCalledTimes(1);
   });
 });

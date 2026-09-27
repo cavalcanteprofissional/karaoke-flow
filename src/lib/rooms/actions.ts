@@ -26,6 +26,12 @@ export type RoomSettingsInput = {
   entry_mode: RoomEntryMode;
   queue_approval_mode: RoomQueueApprovalMode;
   require_song_confirmation: boolean;
+  /**
+   * Pré-aprovação de 24h (Fase 8a). É um toggle FUNCIONAL de verdade — o
+   * estado OFF já está implementado e testado no banco — mas a UI o apresenta
+   * travado em ON, então o host ainda não chega até ele.
+   */
+  pre_approval_24h: boolean;
 };
 
 export async function updateRoomSettingsAction(

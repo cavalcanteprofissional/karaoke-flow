@@ -1,16 +1,23 @@
 import type { Metadata } from "next";
 
+import { PlayerErrorBoundary } from "@/components/rooms/player-error-boundary";
 import { PlayerKiosk } from "@/components/rooms/player-kiosk";
 import { getPlayerStateAction } from "@/lib/rooms/playback-actions";
 import { parsePlayerToken } from "@/lib/rooms/playback";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 
 /**
- * Tela do player (Fase 6) — rota PÚBLICA de propósito: é a TV do bar, aberta
- * em modo quiosque, sem login e sem cookie de sessão. A autorização é o token
- * de capacidade na URL (`?token=`), conferido no banco por `get_player_state`
- * (`security definer`), então esta página não recebe nenhum dado que o token
- * não autorize. Ela também não é quebrada pelo proxy: `/player` não está em
+ * Tela do player (Fase 6/8a) — rota PÚBLICA de propósito: é a TV do bar, aberta
+ * em modo quiosque, sem login e sem cookie de sessão. A autorização tem duas
+ * portas, conferidas no banco por `player_room_id` (`security definer`):
+ *
+ *   - `?token=` → a TV, com o token de capacidade que o host gerou;
+ *   - sem token  → a sessão de quem está abrindo: dono da sala ou membro
+ *     `approved`. É o caminho do participante que acabou de pedir uma música
+ *     (ele vai para `/player/<codigo>` sem nunca ver o token).
+ *
+ * Esta página não recebe nenhum dado que essas duas portas não autorizem, e
+ * ela também não é quebrada pelo proxy: `/player` não está em
  * `PROTECTED_PREFIXES`.
  */
 export const metadata: Metadata = {
@@ -40,24 +47,32 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const code = normalizeRoomCode(codigo);
   const token = parsePlayerToken(rawToken);
 
-  if (!token) {
-    return (
-      <PlayerNotice
-        title="Link do player incompleto"
-        description="Abra o link completo que o dono da sala gerou, com o código do player no final da URL."
-      />
-    );
-  }
-
+  // Sem token: tenta a sessão. Quem não tem sessão nenhuma cai no aviso com o
+  // caminho do QR (é o caso da TV aberta sem o link completo).
   const result = await getPlayerStateAction(code, token);
   if (!result.ok) {
+    if (token) {
+      return (
+        <PlayerNotice
+          title="Player não autorizado"
+          description="Este link do player não é mais válido. Peça um link novo ao dono da sala."
+        />
+      );
+    }
     return (
       <PlayerNotice
-        title="Player não autorizado"
-        description="Este link do player não é mais válido. Peça um link novo ao dono da sala."
+        title="Abra o link do player"
+        description={`Entre na sala ${code} para assistir, ou peça ao dono da sala o link completo da TV.`}
       />
     );
   }
 
-  return <PlayerKiosk roomCode={code} token={token} initialState={result.state} />;
+  // O boundary fica acima do quiosque de propósito: exceção no player (ou em
+  // qualquer efeito da tela) vira o aviso com botão de recarregar, no lugar do
+  // overlay de erro que deixava a TV morta durante a festa.
+  return (
+    <PlayerErrorBoundary>
+      <PlayerKiosk roomCode={code} token={token} initialState={result.state} />
+    </PlayerErrorBoundary>
+  );
 }

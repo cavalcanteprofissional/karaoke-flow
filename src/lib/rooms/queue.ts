@@ -197,6 +197,8 @@ export function buildQueueModeration(ctx: QueueModerationContext): QueueModerati
 
 export type QueueRemovalContext = {
   isHost: boolean;
+  /** Quem está clicando (o `auth.uid()` da action). */
+  userId: string;
   item: QueueItemSummary | null;
 };
 
@@ -204,9 +206,18 @@ export type QueueRemovalResult =
   { ok: true; itemId: string } | { ok: false; error: string; code: string };
 
 /**
- * Regra pura da remoção de uma música da fila pelo host (Bloco A). O DELETE é
- * host-only na RLS (`queue_items_delete_host`) e o item pode ser `pending`,
- * `approved` ou `playing`; terminais já sumiram da fila viva.
+ * Regra pura da remoção de uma música da fila (Bloco A + correção de
+ * 2026-09-27).
+ *
+ * Antes isto era host-only, e a UI mostrava "Tirar da fila" para o
+ * participante que tinha pedido a música: o botão dava sempre "Só o dono da sala
+ * pode remover músicas". Um botão que nunca funciona é pior que botão nenhum.
+ *
+ * Agora quem pede a música pode tirar o PRÓPRIO pedido enquanto ele ainda
+ * `pending` (nem chegou ao host) ou `approved` (está na fila mas ainda não
+ * tocou). O que já está `playing` é caso do host: música tocando não se cancela
+ * da fila, se pula. A policy nova (`queue_items_delete_own`) é quem autoriza no
+ * banco — esta função só evita a viagem inútil e dá a mensagem certa.
  */
 export function buildQueueRemoval(ctx: QueueRemovalContext): QueueRemovalResult {
   if (!ctx.item) {
@@ -216,17 +227,25 @@ export function buildQueueRemoval(ctx: QueueRemovalContext): QueueRemovalResult 
   if (!id.success) {
     return { ok: false, error: "Música inválida.", code: "VALIDATION" };
   }
-  if (!ctx.isHost) {
-    return {
-      ok: false,
-      error: "Só o dono da sala pode remover músicas.",
-      code: "FORBIDDEN",
-    };
-  }
   if (!QUEUE_VISIBLE_STATUSES.includes(ctx.item.status as QueueItemStatus)) {
     return {
       ok: false,
       error: "Esta música já saiu da fila.",
+      code: "INVALID_TRANSITION",
+    };
+  }
+  const mine = ctx.item.added_by_user_id === ctx.userId;
+  if (!ctx.isHost && !mine) {
+    return {
+      ok: false,
+      error: "Você só pode tirar da fila a música que você mesmo pediu.",
+      code: "FORBIDDEN",
+    };
+  }
+  if (!ctx.isHost && ctx.item.status === "playing") {
+    return {
+      ok: false,
+      error: "Esta música está tocando agora — peça para o dono da sala pular.",
       code: "INVALID_TRANSITION",
     };
   }

@@ -1,9 +1,16 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+} from "react";
 
 /**
- * Integração com a YouTube IFrame Player API (Fase 6).
+ * Integração com a YouTube IFrame Player API (Fase 6, corrigida em 2026-09-27).
  *
  * Duas regras de produto que moldaram o componente:
  *  - "sem overlays sobre o player" (restrição de TOS): a tela do quiosque não
@@ -16,6 +23,42 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 
  * A API é carregada por script e o player é imperativo (`useImperativeHandle`):
  * é o mesmo player quem recebe `play/pause/load` quando o estado muda, sem
  * remontar o iframe (remontar recarregaria o vídeo e piscaria a tela da TV).
+ *
+ * ── Regra 1: readiness real, e a intenção que chega antes dele ───────────────
+ * A instância devolvida por `new YT.Player(...)` é um objeto **parcial**: ela só
+ * ganha `loadVideoById`/`playVideo`/etc. quando o iframe posta o evento
+ * `onReady`, e o handle documentado como confiável é o `event.target` desse
+ * evento. A versão anterior deste arquivo chamava `onReady` logo depois do
+ * construtor, acreditando que a API "enfileirava" a chamada — ela não enfileira,
+ * ela lança `player.loadVideoById is not a function`, e a TV caía no erro logo
+ * no primeiro approve.
+ *
+ * Então o componente só diz "pronto" quando o player está de fato reproduzível,
+ * e qualquer comando que chegar antes disso fica **pendente** (a última
+ * intenção de cada tipo) e é aplicado no `onReady`, nesta ordem: faixa nova →
+ * play/pause. Nenhum comando se perde — que é a propriedade que importa num
+ * produto em que a fila cresce a noite inteira por aprovação do host.
+ *
+ * ── Regra 2: `destroy()` em fase de LAYOUT (2026-09-27) ──────────────────────
+ * A IFrame API destrói o player **removendo o iframe do pai**. O cleanup de
+ * `useEffect` (fase passiva) roda DEPOIS de o React já ter removido o DOM: o
+ * player ainda respondia eventos e o quiosque ainda montava outro stage, mas o
+ * `removeChild` do YouTube era sobre um nó que não era mais filho → `NotFoundError`
+ * → tela de erro na TV. Foi exatamente o que derrubou a TV em dois gatilhos
+ * diferentes: a música acabando com a fila vazia e o host clicando em "Parar"
+ * (nos dois, `current` vira `null` e o stage é desmontado). Por isso a destruição
+ * mora num cleanup de `useLayoutEffect`, que o React roda no commit, ANTES de
+ * mexer no DOM — com `try/catch` como segunda rede, porque a ordem do DOM do
+ * player é território do YouTube, não nosso.
+ *
+ * ── Regra 3: o CTA de "toque para começar" só sai quando toca ────────────────
+ * O quiosque relê o estado a cada 5s (poll) e reaplica `play()` a cada leitura
+ * (o objeto `current` é novo a cada fetch). Com o pedido de gesto armado em
+ * todo `play()`, a TV mostrava o CTA de "toque para começar" voltando sem parar
+ * por cima de um vídeo que já estava tocando. Agora ele só é armado por um
+ * `loadVideoById` de verdade, por `CUED`/buffering **antes** de a faixa tocar
+ * uma vez, ou por um `play()` marcado como gesto do usuário — e some no
+ * `PLAYING`.
  */
 
 export const YT_STATE = {
@@ -30,6 +73,31 @@ export const YT_STATE = {
 /** Erro 150: o YouTube recusou autoplay com áudio (falta gesto do usuário). */
 export const YT_ERROR_AUTOPLAY_BLOCKED = 150;
 
+/** O script da API não carregou. */
+export const YT_ERROR_API_UNAVAILABLE = -1;
+
+/** O player não ficou pronto em `READY_TIMEOUT_MS` (rede, ad-blocker, script). */
+export const YT_ERROR_API_TIMEOUT = -2;
+
+/** Depois disso a TV vira um aviso, não uma tela preta silenciosa. */
+const READY_TIMEOUT_MS = 8000;
+
+/**
+ * Janela para pedir o gesto do usuário: a faixa carregou e não entrou em play
+ * por isso. Curta de propósito — a TV é um bar, não um player de cinema, e o
+ * usuário tocando resolve na hora. Ela SÓ existe enquanto a faixa ainda não
+ * tocou nenhuma vez (ver `playedRef`).
+ */
+const BLOCKED_PROBE_MS = 1500;
+
+/**
+ * `useLayoutEffect` só pode rodar no cliente: o quiosque é SSR-rendered e o
+ * React avisa no servidor. A ordem de cleanup que importa (destroy antes do
+ * React mexer no DOM) só existe no cliente mesmo.
+ */
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 type YtPlayer = {
   playVideo(): void;
   pauseVideo(): void;
@@ -40,7 +108,7 @@ type YtPlayer = {
 };
 
 type YtEvents = {
-  onReady?: () => void;
+  onReady?: (event: { target: YtPlayer }) => void;
   onStateChange?: (event: { data: number; target: YtPlayer }) => void;
   onError?: (event: { data: number }) => void;
 };
@@ -80,6 +148,9 @@ export function loadYouTubeIframeApi(): Promise<YtNamespace> {
       if (w.YT?.Player) resolve(w.YT);
     };
 
+    // Já existe script na página: o `onYouTubeIframeAPIReady` acima resolve a
+    // promise quando a API terminar de subir. O componente tem timeout próprio
+    // para o caso de a API nunca aparecer.
     if (document.querySelector(`script[src="${API_SRC}"]`)) return;
 
     const script = document.createElement("script");
@@ -96,9 +167,22 @@ export function loadYouTubeIframeApi(): Promise<YtNamespace> {
 }
 
 export type YouTubeStageHandle = {
+  /**
+   * O player já está reproduzível? (só depois do `onReady` real do YouTube).
+   * Quem manda no player pergunta isto em vez de guardar um "pronto" próprio:
+   * assim um stage novo (fila esvaziou e voltou a ter música) nunca é confundido
+   * com o player antigo.
+   */
+  isPlayable: () => boolean;
   /** Carrega um vídeo (reinicia do início ou de `startSeconds`). */
   load: (videoId: string, startSeconds?: number | null) => void;
-  play: () => void;
+  /**
+   * Aplica play. `userGesture: true` só quando quem chama é o clique do
+   * "toque para começar" — é o único caso em que vale rearmar o pedido de
+   * gesto. O quiosque também chama `play()` a cada poll de 5s, e aí não é gesto
+   * nenhum (foi exatamente isso que virou spam de CTA na TV).
+   */
+  play: (options?: { userGesture?: boolean }) => void;
   pause: () => void;
   stop: () => void;
 };
@@ -106,27 +190,67 @@ export type YouTubeStageHandle = {
 export type YouTubeStageProps = {
   className?: string;
   /**
-   * Disparado assim que a INSTÂNCIA do player existe (o `new YT.Player` já
-   * rodou). A IFrame API aceita `loadVideoById` nesse momento — a chamada fica
-   * na fila interna e roda quando o iframe fica pronto — e é o que permite ao
-   * quiosque aplicar o estado do banco já no primeiro render, sem esperar o
-   * evento `onReady` do YouTube (que chegaria tarde para a TV).
+   * Disparado quando o player está de fato reproduzível (o `onReady` real do
+   * YouTube, com os métodos disponíveis). O quiosque só aplica o estado do banco
+   * depois disso; antes, o estado fica pendente dentro do stage.
    */
   onReady?: () => void;
   onEnded?: (videoId: string) => void;
+  /**
+   * O vídeo entrou em `PLAYING` de verdade. É o sinal de que o CTA de "toque
+   * para começar" pode sair: antes disso, o vídeo pode estar carregado e mudo.
+   */
+  onPlaying?: () => void;
   /** Autoplay recusado (erro 150) ou vídeo que não entrou em play. */
   onBlocked?: () => void;
   onError?: (code: number) => void;
 };
 
+/** O que o player deveria estar fazendo, independente de já estar pronto. */
+type PlaybackIntent = {
+  videoId: string;
+  startSeconds: number | null;
+  playback: "play" | "pause";
+};
+
+/** O que já foi pedido ao player de fato. */
+type LoadedVideo = {
+  videoId: string;
+  startSeconds: number | null;
+};
+
+/**
+ * A API só "tem" o método depois do ready. Checar a existência em vez de
+ * envolver tudo em try/catch distingue os dois problemas: método ausente é o
+ * player subindo (a TV espera), erro dentro do método é bug (o error boundary
+ * do quiosque assume).
+ */
+function canCall<K extends keyof YtPlayer>(
+  player: YtPlayer | null,
+  method: K
+): player is YtPlayer & Required<Pick<YtPlayer, K>> {
+  return typeof player?.[method] === "function";
+}
+
 export const YouTubeStage = forwardRef<YouTubeStageHandle, YouTubeStageProps>(
-  function YouTubeStage({ className, onReady, onEnded, onBlocked, onError }, ref) {
+  function YouTubeStage(
+    { className, onReady, onEnded, onPlaying, onBlocked, onError },
+    ref
+  ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const playerRef = useRef<YtPlayer | null>(null);
-    const videoIdRef = useRef<string | null>(null);
+    const intentRef = useRef<PlaybackIntent | null>(null);
+    const loadedRef = useRef<LoadedVideo | null>(null);
     const playProbeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const callbacks = useRef({ onEnded, onBlocked, onError });
-    callbacks.current = { onEnded, onBlocked, onError };
+    const reportedRef = useRef(false);
+    /**
+     * A faixa atual já entrou em play ao menos uma vez? Enquanto for `false`, um
+     * `BUFFERING` ainda é a faixa subindo (e vale esperar o gesto); depois que
+     * tocou, buffering é só reconexão de rede e NÃO pode gerar CTA.
+     */
+    const playedRef = useRef(false);
+    const callbacks = useRef({ onReady, onEnded, onPlaying, onBlocked, onError });
+    callbacks.current = { onReady, onEnded, onPlaying, onBlocked, onError };
 
     const clearBlockedProbe = useCallback(() => {
       if (playProbeRef.current) {
@@ -140,46 +264,127 @@ export const YouTubeStage = forwardRef<YouTubeStageHandle, YouTubeStageProps>(
       playProbeRef.current = setTimeout(() => {
         playProbeRef.current = null;
         callbacks.current.onBlocked?.();
-      }, 1500);
+      }, BLOCKED_PROBE_MS);
     }, [clearBlockedProbe]);
+
+    const reportError = useCallback(
+      (code: number) => {
+        if (reportedRef.current) return;
+        reportedRef.current = true;
+        clearBlockedProbe();
+        callbacks.current.onError?.(code);
+      },
+      [clearBlockedProbe]
+    );
+
+    /**
+     * Aplica a intenção pendente **no player**; se ele ainda não estiver pronto,
+     * a intenção fica guardada e será aplicada no `onReady`. Idempotente: chamar
+     * de novo com a mesma intenção não recarrega a faixa (recarregar=zera o
+     * vídeo na TV).
+     */
+    const applyIntent = useCallback(() => {
+      const player = playerRef.current;
+      if (!player) return;
+
+      const intent = intentRef.current;
+      if (!intent) {
+        if (loadedRef.current) {
+          if (canCall(player, "stopVideo")) player.stopVideo();
+          loadedRef.current = null;
+        }
+        playedRef.current = false;
+        clearBlockedProbe();
+        return;
+      }
+
+      const startSeconds = intent.startSeconds ?? 0;
+      const alreadyLoaded =
+        loadedRef.current?.videoId === intent.videoId &&
+        loadedRef.current.startSeconds === startSeconds;
+      if (!alreadyLoaded) {
+        if (!canCall(player, "loadVideoById")) {
+          reportError(YT_ERROR_API_UNAVAILABLE);
+          return;
+        }
+        playedRef.current = false;
+        player.loadVideoById(intent.videoId, startSeconds);
+        loadedRef.current = { videoId: intent.videoId, startSeconds };
+        // O vídeo acabou de carregar e começa a tocar por conta própria
+        // (playerVars.autoplay); se o navegador recusar, o probe abaixo
+        // dispara o CTA de toque. É o ÚNICO `play()` implícito que arma o
+        // probe: os `play()` do quiosque (poll de 5s) não são gesto nem carga.
+        armBlockedProbe();
+      }
+
+      if (intent.playback === "play") {
+        if (canCall(player, "playVideo")) {
+          player.playVideo();
+        } else {
+          reportError(YT_ERROR_API_UNAVAILABLE);
+        }
+      } else if (canCall(player, "pauseVideo")) {
+        player.pauseVideo();
+        playedRef.current = true;
+        clearBlockedProbe();
+      } else {
+        reportError(YT_ERROR_API_UNAVAILABLE);
+      }
+    }, [armBlockedProbe, clearBlockedProbe, reportError]);
 
     useImperativeHandle(
       ref,
       () => ({
+        isPlayable: () => playerRef.current !== null,
         load(videoId: string, startSeconds?: number | null) {
-          const player = playerRef.current;
-          if (!player) return;
-          videoIdRef.current = videoId;
-          player.loadVideoById(videoId, startSeconds ?? 0);
-          // O vídeo que acabou de carregar começa a tocar por conta própria
-          // (playerVars.autoplay); se o navegador recusar, o probe abaixo
-          // dispara o CTA de toque.
-          armBlockedProbe();
+          // A faixa nova entra tocando (playerVars.autoplay) e o quiosque logo
+          // em seguida decide play/pause pelo estado da sala.
+          intentRef.current = {
+            videoId,
+            startSeconds: startSeconds ?? 0,
+            playback: "play",
+          };
+          applyIntent();
         },
-        play() {
-          playerRef.current?.playVideo();
-          armBlockedProbe();
+        play(options?: { userGesture?: boolean }) {
+          const intent = intentRef.current;
+          if (!intent) return;
+          intent.playback = "play";
+          // Só o clique real do CTA rearma o pedido de gesto: aqui a TV já
+          // esperou o probe uma vez e o navegador decide de novo.
+          if (options?.userGesture && !playedRef.current) armBlockedProbe();
+          applyIntent();
         },
         pause() {
-          playerRef.current?.pauseVideo();
-          clearBlockedProbe();
+          const intent = intentRef.current;
+          if (intent) {
+            intent.playback = "pause";
+            applyIntent();
+          }
         },
         stop() {
-          playerRef.current?.stopVideo();
-          videoIdRef.current = null;
-          clearBlockedProbe();
+          intentRef.current = null;
+          applyIntent();
         },
       }),
-      [armBlockedProbe, clearBlockedProbe]
+      [applyIntent, armBlockedProbe]
     );
 
     useEffect(() => {
       let cancelled = false;
 
+      // Rede lenta, ad-blocker ou script bloqueado: a TV precisa de uma tela de
+      // erro, não de um retângulo preto com a faixa errada no rodapé.
+      const readyTimer = setTimeout(() => {
+        if (!cancelled && !playerRef.current) {
+          reportError(YT_ERROR_API_TIMEOUT);
+        }
+      }, READY_TIMEOUT_MS);
+
       void loadYouTubeIframeApi()
         .then((YT) => {
           if (cancelled || !hostRef.current) return;
-          playerRef.current = new YT.Player(hostRef.current, {
+          new YT.Player(hostRef.current, {
             playerVars: {
               autoplay: 1,
               controls: 1,
@@ -190,20 +395,47 @@ export const YouTubeStage = forwardRef<YouTubeStageHandle, YouTubeStageProps>(
               origin: window.location.origin,
             },
             events: {
-              onReady: () => {
-                clearBlockedProbe();
-                onReady?.();
+              onReady: (event) => {
+                if (cancelled) return;
+                clearTimeout(readyTimer);
+                // `event.target` é o handle documentado — e o único que já tem
+                // os métodos. A instância do construtor ainda não tem.
+                playerRef.current = event.target;
+                reportedRef.current = false;
+                callbacks.current.onReady?.();
+                applyIntent();
               },
               onStateChange: (event) => {
                 if (event.data === YT_STATE.PLAYING) {
+                  // Tocou de verdade: o CTA de gesto tem que sair, senão ele
+                  // fica por cima do vídeo que já está passando.
+                  playedRef.current = true;
+                  clearBlockedProbe();
+                  callbacks.current.onPlaying?.();
+                  return;
+                }
+                if (event.data === YT_STATE.CUED) {
+                  // Carregou e NÃO começou: é a assinatura do autoplay bloqueado.
+                  if (!playedRef.current) armBlockedProbe();
+                  return;
+                }
+                if (event.data === YT_STATE.BUFFERING) {
+                  // Só interessa antes da faixa tocar a primeira vez — depois
+                  // disso é reconexão de rede e não pode virar CTA.
+                  if (!playedRef.current) armBlockedProbe();
+                  return;
+                }
+                if (event.data === YT_STATE.PAUSED) {
+                  playedRef.current = true;
                   clearBlockedProbe();
                   return;
                 }
-                if (event.data === YT_STATE.ENDED && videoIdRef.current) {
+                if (event.data === YT_STATE.ENDED) {
+                  playedRef.current = false;
                   clearBlockedProbe();
-                  const finished = videoIdRef.current;
-                  videoIdRef.current = null;
-                  callbacks.current.onEnded?.(finished);
+                  const finished = loadedRef.current?.videoId;
+                  loadedRef.current = null;
+                  if (finished) callbacks.current.onEnded?.(finished);
                 }
               },
               onError: (event) => {
@@ -215,20 +447,52 @@ export const YouTubeStage = forwardRef<YouTubeStageHandle, YouTubeStageProps>(
               },
             },
           });
-          onReady?.();
         })
         .catch(() => {
-          callbacks.current.onError?.(-1);
+          if (cancelled) return;
+          clearTimeout(readyTimer);
+          reportError(YT_ERROR_API_UNAVAILABLE);
         });
 
       return () => {
         cancelled = true;
+        clearTimeout(readyTimer);
         clearBlockedProbe();
-        playerRef.current?.destroy();
-        playerRef.current = null;
+        intentRef.current = null;
+        // NÃO destroi o player aqui: este cleanup é passivo e roda depois de o
+        // React já ter removido o DOM (a IFrame API remove o iframe do pai e
+        // isso estourava `NotFoundError`). A destruição é no cleanup de layout
+        // abaixo.
       };
-      // Monta uma vez: o player é imperativo e sobrevive à mudança de estado.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [applyIntent, armBlockedProbe, clearBlockedProbe, reportError]);
+
+    /**
+     * Destruição em FASE DE LAYOUT (antes de o React mexer no DOM).
+     *
+     * `destroy()` da IFrame API tira o iframe do pai: se o React já tiver
+     * desmontado o stage, o `removeChild` é sobre um nó órfão e o erro
+     * derrubava a TV inteira. Dois gatilhos diferentes chegaram aqui — a
+     * música acabando com a fila vazia e o host apertando "Parar" (nos dois,
+     * `current` vira `null` e o `<YouTubeStage>` sai do DOM).
+     *
+     * O `try/catch` é a segunda rede: mesmo em ordem, o player pode ter sido
+     * derrubado por outra via (navegador, script do YouTube) e um
+     * `NotFoundError` no teardown não pode virar tela de erro na TV.
+     */
+    useIsomorphicLayoutEffect(() => {
+      return () => {
+        const player = playerRef.current;
+        playerRef.current = null;
+        // Nunca chegou a ficar pronto: não há player para destruir (e `destroy`
+        // nem existe na instância parcial).
+        if (!canCall(player, "destroy")) return;
+        try {
+          player.destroy();
+        } catch {
+          // Player já indo embora; a TV continua. Erro aqui é do YouTube, não
+          // do estado da sala.
+        }
+      };
     }, []);
 
     return <div ref={hostRef} className={className} data-testid="youtube-stage" />;

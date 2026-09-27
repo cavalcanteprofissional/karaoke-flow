@@ -15,9 +15,77 @@ import {
 } from "./queue";
 import type { QueueSongInput, QueueSongVideo } from "./queue";
 
+type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
+
 function friendlyError(message: string, fallback: string): string {
   if (/row-level security|permission denied|policy/i.test(message)) return fallback;
   return message;
+}
+
+type ModerationTarget = {
+  item: { id: string; status: string; added_by_user_id: string };
+  room: { host_id: string; code: string };
+};
+
+type ModerationTargetResult =
+  | { ok: true; target: ModerationTarget }
+  | { ok: false; error: string; code: string };
+
+/**
+ * Pré-leitura compartilhada por aprovar/rejeitar, remover e trocar (Fase 8a).
+ *
+ * O embed precisa do NOME da FK. A Fase 6 (migration 00027) criou
+ * `rooms.current_item_id → queue_items.id`, e isso deixou a relação
+ * `queue_items → rooms` ambígua: o PostgREST passou a responder PGRST201
+ * ("more than one relationship") para o `rooms!inner(...)` sem hint. Como a
+ * action só olhava `data`, qualquer erro virava `data: null` → NOT_FOUND
+ * "Essa música não está mais na fila." e o UPDATE/DELETE nunca rodava — aprovar,
+ * remover e trocar estavam mortos desde a Fase 6.
+ *
+ * Duas defesas, para o próximo erro de PostgREST não virar "a música sumiu" de
+ * novo: o hint desambigua, e o `error` é reportado como READ_FAILED com a
+ * mensagem real em vez de ser descartado. Reproduza com `npm run
+ * diagnose:queue` (scripts/diagnose-queue-actions.mjs).
+ */
+async function readModerationTarget(
+  supabase: ServerSupabase,
+  itemId: string
+): Promise<ModerationTargetResult> {
+  const { data, error } = await supabase
+    .from("queue_items")
+    .select("id, status, added_by_user_id, rooms!queue_items_room_id_fkey(host_id, code)")
+    .eq("id", itemId)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível ler a fila desta sala."),
+      code: "READ_FAILED",
+    };
+  }
+
+  const embedded = data?.rooms;
+  const room = (Array.isArray(embedded) ? embedded[0] : embedded ?? null) as {
+    host_id: string;
+    code: string;
+  } | null;
+  if (!data || !room) {
+    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
+  }
+
+  return {
+    ok: true,
+    target: {
+      item: {
+        id: data.id,
+        status: data.status,
+        // `queue_items.added_by_user_id` é NOT NULL no banco.
+        added_by_user_id: data.added_by_user_id as string,
+      },
+      room,
+    },
+  };
 }
 
 export async function addSongToQueueAction(
@@ -151,26 +219,12 @@ export async function setQueueItemStatusAction(
     };
   }
 
-  const { data: item } = await supabase
-    .from("queue_items")
-    .select("id, status, added_by_user_id, rooms!inner(host_id, code)")
-    .eq("id", itemId)
-    .maybeSingle();
-
-  const room = (item?.rooms ?? null) as { host_id: string; code: string } | null;
-  if (!item || !room) {
-    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
-  }
+  const target = await readModerationTarget(supabase, itemId);
+  if (!target.ok) return target;
+  const { item, room } = target.target;
   const isHost = room.host_id === user.id;
 
-  const built = buildQueueModeration({
-    isHost,
-    userId: user.id,
-    item: item
-      ? { id: item.id, status: item.status, added_by_user_id: item.added_by_user_id }
-      : null,
-    decision,
-  });
+  const built = buildQueueModeration({ isHost, userId: user.id, item, decision });
   if (!built.ok) return built;
 
   const { data, error } = await supabase
@@ -199,9 +253,13 @@ export async function setQueueItemStatusAction(
 }
 
 /**
- * Remove uma música da fila (Fase 5, Bloco A). DELETE é host-only na RLS
- * (`queue_items_delete_host`) e o `.select()` prova que a linha saiu — o mesmo
- * anti-no-op do update.
+ * Remove uma música da fila (Fase 5, Bloco A; corrigido em 2026-09-27).
+ *
+ * Quem apaga: o host (qualquer item visível) ou o AUTOR do pedido, enquanto ele
+ * não entrou em reprodução — a policy `queue_items_delete_own` foi criada junto
+ * com a regra pura, porque sem ela o botão "Tirar da fila" do participante
+ * devolvia sempre "Só o dono da sala pode remover músicas". O `.select()` prova
+ * que a linha saiu (no-op de policy vira erro, não sucesso silencioso).
  */
 export async function removeQueueItemAction(
   itemId: string
@@ -218,24 +276,12 @@ export async function removeQueueItemAction(
     };
   }
 
-  const { data: item } = await supabase
-    .from("queue_items")
-    .select("id, status, added_by_user_id, rooms!inner(host_id, code)")
-    .eq("id", itemId)
-    .maybeSingle();
-
-  const room = (item?.rooms ?? null) as { host_id: string; code: string } | null;
-  if (!item || !room) {
-    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
-  }
+  const target = await readModerationTarget(supabase, itemId);
+  if (!target.ok) return target;
+  const { item, room } = target.target;
   const isHost = room.host_id === user.id;
 
-  const built = buildQueueRemoval({
-    isHost,
-    item: item
-      ? { id: item.id, status: item.status, added_by_user_id: item.added_by_user_id }
-      : null,
-  });
+  const built = buildQueueRemoval({ isHost, userId: user.id, item });
   if (!built.ok) return built;
 
   const { data, error } = await supabase
@@ -253,7 +299,9 @@ export async function removeQueueItemAction(
   if (!data || data.length === 0) {
     return {
       ok: false,
-      error: "Só o dono da sala pode remover músicas.",
+      error: isHost
+        ? "Não foi possível remover a música."
+        : "Você só pode tirar da fila a música que você mesmo pediu.",
       code: "RLS_BLOCKED",
     };
   }
@@ -361,23 +409,14 @@ export async function replaceQueueSongAction(
     };
   }
 
-  const { data: item } = await supabase
-    .from("queue_items")
-    .select("id, status, added_by_user_id, rooms!inner(host_id, code)")
-    .eq("id", itemId)
-    .maybeSingle();
-  if (!item?.rooms) {
-    return { ok: false, error: "Essa música não está mais na fila.", code: "NOT_FOUND" };
-  }
-  const room = (Array.isArray(item.rooms) ? item.rooms[0] : item.rooms) as {
-    host_id: string;
-    code: string;
-  };
+  const target = await readModerationTarget(supabase, itemId);
+  if (!target.ok) return target;
+  const { item, room } = target.target;
 
   const built = buildQueueSongReplacement({
     isHost: room.host_id === user.id,
     currentUserId: user.id,
-    item: { id: item.id, status: item.status, added_by_user_id: item.added_by_user_id },
+    item,
     input: { video },
   });
   if (!built.ok) return built;

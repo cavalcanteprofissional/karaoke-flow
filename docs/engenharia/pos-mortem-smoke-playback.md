@@ -106,6 +106,117 @@ Ele cria itens "Smoke N" com vídeo falso, marca itens como `played`/`skipped` e
 
 **Regra:** `npm run seed` → smoke → `npm run seed`. Sempre.
 
+### 3.7 O duplo de teste era **mais permissivo** que a API real
+
+Mesma família da 3.5, vista pelo lado do teste: a suíte do player (333 testes)
+passava porque o `window.YT` falso devolvia do construtor uma instância **com
+`loadVideoById`/`playVideo` prontas**. A IFrame API real devolve um objeto
+**parcial** — os métodos só existem depois do `onReady` do iframe, e o handle
+documentado é o `event.target` desse evento. Resultado: a TV quebrou no primeiro
+approve com `player.loadVideoById is not a function`, e o `destroy()` do cleanup
+estourava pelo mesmo motivo. Só apareceu em **browser real**, depois de meses de
+suíte verde.
+
+**Regra:** antes de confiar num teste que envolve API de terceiro, confira o
+duplo contra o **contrato documentado** da API — em especial a ordem dos
+eventos e **quais métodos existem quando**. Um duplo que antecipa o ciclo de
+vida da dependência não é um teste fraco, é um teste **enganoso**: ele aprova
+código que não roda. Hoje o duplo vive em
+[`src/test/fake-youtube.ts`](../../src/test/fake-youtube.ts) e só dá os métodos
+na hora do `onReady`.
+
+### 3.8 O `destroy()` do YouTube roda depois do React — 2º incidente, mesma causa-raiz
+
+O teste manual na TV, na sequência "toca, termina, aprova outra, toca", mostrou
+`Console NotFoundError` / `Failed to execute 'removeChild' on 'Node': The node to
+be removed is not a child of this node.` em `player/[codigo]/page.tsx`. A causa
+não era a readiness (3.7, já corrigida): a IFrame API **destrói o player
+removendo o iframe do pai**, e o `destroy()` estava no cleanup do `useEffect` —
+fase **passiva**, que o React roda **depois** de já ter removido o DOM. O
+`removeChild` do YouTube era, portanto, sobre um nó órfão: o método.exists, o
+`event.target` está lá, e mesmo assim ele estoura.
+
+O detalhe quecustou tempo: **o mesmo crash tinha dois gatilhos**, e só um deles
+estava no relato:
+
+| Gatilho | Caminho | Por que desmonta o stage |
+|---|---|---|
+| Fim da última música | `onEnded` → claim → fila vazia | `state.current = null` |
+| **Host clica "Parar"** | `set_playback('stop')` → sala `idle` sem item | `state.current = null` |
+
+Nos dois, `player-kiosk.tsx` deixa de renderizar `<YouTubeStage>` (render
+condicional por `state.current`). Por isso o botão "Parar" derrubava a TV do mesmo
+jeito que a fila vazia — e a ordem importa mais que o `try/catch`: destruir
+depois do React já ter mexido no DOM é inútil. A correção é o cleanup em
+**`useLayoutEffect`** (que o React roda no commit, antes de mexer no DOM), com
+`try/catch` como segunda rede, porque a ordem do DOM do player é território do
+YouTube.
+
+O teste que trava isso não é "não lança": é **onde** o `destroy()` acontece. O
+duplo de `fake-youtube.ts` ficou configurável para lançar `NotFoundError` e o
+teste grava, dentro do `destroy()`, se o stage ainda estava no documento
+(`document.querySelector('[data-testid="youtube-stage"]')`). Verificado: com o
+cleanup passivo o teste **falha** (`expected false to be true`), com o de layout
+passa.
+
+**Regra:** `useEffect` serve para efeito colateral assíncrono; **cleanup que
+depende do DOM estar intacto** (ou seja: que a biblioteca vai removê-lo) é
+`useLayoutEffect`. E, para qualquer API de terceiro, liste os gatilhos de
+desmontagem — um só costuma esconder o resto.
+
+### 3.9 O CTA de "toque para começar" rearmava sozinho (o poll é um `play()`)
+
+Mesmo arquivo, mesmo dia: a TV mostrava "Toque para começar" **repetidamente por
+cima de um vídeo que já estava tocando**. O pedido de gesto (o probe de autoplay)
+era armado em **todo** `play()`, e o quiosque chama `play()` a cada leitura de
+estado — o poll de 5s, e cada leitura devolve um objeto `current` novo do banco,
+o que reexecuta o efeito de aplicação.
+
+Duas regras saíram daí:
+
+- o probe só é armado por eventos que realmente significam "carregou e não
+  começou": um `loadVideoById` de verdade, `CUED`/buffering **antes** da faixa
+  tocar a primeira vez, ou um `play()` explicitamente marcado como gesto do
+  usuário;
+- o CTA **sai** no `PLAYING` (callback `onPlaying` novo), e não no clique nem no
+  `setNeedsGesture(false)`.
+
+`BUFFERING` é o detalhe que impedia o conserto ingênuo: rearmar em todo
+`BUFFERING` troca o spam do poll por spam de reconexão de rede. Por isso o
+componente guarda `playedRef` — antes da faixa tocar uma vez, buffering é "ainda
+subindo" e vale esperar; depois, é só buffer.
+
+**Regra:** antes de "corrigir" um efeito que reexecuta sozinho, conte quantas
+vezes ele roda no mundo real (poll? foco? websocket?) e teste a suíte com o
+temporizador do produto rodando. Um teste que só monta e desmonta não vê nada
+disso.
+
+### 3.10 A lista do participante parava de atualizar — e ninguém sabia por quê
+
+"Na minha lista não atualiza quando o host aprova" é o pior tipo de bug: a
+funcionalidade existe, o código parece certo, e nenhuma pista. As três causas
+possíveis, todas verdadeiras ao mesmo tempo:
+
+1. **`postgres_changes` filtra, e filtro de DELETE não funciona sem
+   `REPLICA IDENTITY FULL`.** A `QueueList` escuta com
+   `filter: room_id=eq.<id>`. Para INSERT/UPDATE o Realtime usa a linha nova e o
+   filtro casa; para DELETE ele precisa da linha **antiga**, que só vem com
+   `replica identity full` — sem isso o evento sai sem `old_record`, o filtro não
+   casa e a remoção simplesmente não chega (sem erro visível). Isso explica
+   "aprovar às vezes funciona, tirar da fila nunca".
+2. **celular de participante dorme o WebSocket** e a reconexão só acontece quando
+   o app volta ao primeiro plano.
+3. **ninguém avisava os aparelhos da sala.** O aviso de "a fila mudou" ia só para
+   a TV (`announcePlaybackChange`); o participante não tinha caminho rápido
+   nenhum.
+
+**Regra:** atualização "ao vivo" em produto de bar/celular é redundância em
+camadas — broadcast de quem mutou (não depende de RLS nem de publicação), poll de
+segurança, e relê em `visibilitychange`/`focus`/`online`. E **log do estado da
+assinatura**: realtime que falha é silencioso por natureza, e sem log o próximo
+"não atualiza" é caça ao tesouro. Vale conferir `replica identity` sempre que
+houver filtro em `postgres_changes` sobre coluna que não é a PK.
+
 ---
 
 ## 4. Checklist antes de rodar o próximo smoke
@@ -116,6 +227,12 @@ Ele cria itens "Smoke N" com vídeo falso, marca itens como `played`/`skipped` e
 - [ ] Toda seleção termina em `order by` determinístico.
 - [ ] O limite de caracteres do `apply-sql.mjs` está alto, e o JSON está sendo parseado por máquina antes de ser lido.
 - [ ] `npm run seed` rodou antes, e está anotado que roda de novo depois.
+- [ ] Se o passo toca o player (ou qualquer API de terceiro), o duplo de teste reproduz o ciclo de vida real dessa API — suíte verde não substitui browser real.
+- [ ] Os **gatilhos de desmontagem** do player estão enumerados (fim de música, fila vazia, botão Parar, troca de faixa, saída da página) — e o cleanup que fala com a API está em `useLayoutEffect`, não em `useEffect`.
+- [ ] Se a tela tem poll de estado, existe teste que roda o temporizador do produto (senão o efeito de aplicação é exercitado uma vez e nunca de novo).
+- [ ] Se a tela escuta `postgres_changes` **com filtro**, a tabela tem `replica identity full` quando algum evento é `DELETE`.
+- [ ] Se a lista é "ao vivo" para o celular do participante, existe poll de segurança e relê em `visibilitychange`/`focus` — e o estado da assinatura é logado.
+- [ ] Avisos de "a fila mudou" são enviados para **todos** os públicos (TV + sala), não só para quem já estava sincronizando.
 
 ---
 
@@ -134,6 +251,24 @@ avançando.
 renderização real do quiosque, a latência < 2s ponta a ponta, e a reconexão fina
 do canal Realtime. O manual em [`TESTING.md`](../../TESTING.md) §3.8 é o
 intermediário até o Playwright existir.
+
+**Atualização 2026-09-27 (depois da Fase 8a):** o browser Common do dev rodou o
+player de verdade e **achou o crash de prontidão** que 333 testes não pegaram
+(ver 3.7). Ou seja: o item "IFrame API" da lista acima já foi exercitado em
+browser, e o que falta é o **TV de verdade** (tela, som, rede do bar) e o
+Playwright. O duplo de teste agora segue o ciclo de vida real da API, e a
+correção está em [`src/components/rooms/youtube-stage.tsx`](../../src/components/rooms/youtube-stage.tsx)
+— `onReady` real + `event.target` + intenção pendente, em vez de "pronto" no
+construtor.
+
+**Atualização 2026-09-27 (depois do segundo round no browser, mesma causa-raiz):**
+o `destroy()` em cleanup passivo (3.8) e o CTA rearmando pelo poll (3.9) só
+apareceram com o **timing de verdade** — o quiosque leyendo o estado a cada 5s e o
+host clicando "Parar". E a lista do participante (3.10) nunca teve bug de frontend
+único: faltava `replica identity full`, que **não** aparece em suíte unitária
+porque filtro de Realtime é do banco. A 4ª lição do dia: **`replica identity` e
+ordem de cleanup são contrato, não detalhe** — os dois bugs passaram por 379
+testes verdes.
 
 ---
 

@@ -187,6 +187,7 @@ describe("buildQueueRemoval (remover da fila)", () => {
   };
   const ctx = (over: Partial<Parameters<typeof buildQueueRemoval>[0]> = {}) => ({
     isHost: true,
+    userId: "host-1",
     item,
     ...over,
   });
@@ -200,10 +201,36 @@ describe("buildQueueRemoval (remover da fila)", () => {
     }
   });
 
-  it("não deixa participante remover (nem o próprio pedido)", () => {
-    const built = buildQueueRemoval(ctx({ isHost: false }));
+  it("o autor tira o próprio pedido, pendente ou aprovado", () => {
+    // Correção de 2026-09-27: o botão "Tirar da fila" já era renderizado para
+    // quem pediu, mas a regra recusava — e o DELETE era host-only na RLS
+    // (policy `queue_items_delete_own`, migration 20260927000031).
+    for (const status of ["pending", "approved"]) {
+      expect(
+        buildQueueRemoval(
+          ctx({ isHost: false, userId: "user-1", item: { ...item, status } })
+        )
+      ).toEqual({ ok: true, itemId: item.id });
+    }
+  });
+
+  it("participante não tira o pedido de outra pessoa", () => {
+    const built = buildQueueRemoval(ctx({ isHost: false, userId: "user-2" }));
     expect(built).toMatchObject({ ok: false, code: "FORBIDDEN" });
-    expect(built.ok === false && built.error).toMatch(/dono da sala/);
+    expect(built.ok === false && built.error).toMatch(/você mesmo pediu/);
+  });
+
+  it("o autor não cancela o que já está tocando (isso é do host)", () => {
+    const built = buildQueueRemoval(
+      ctx({ isHost: false, userId: "user-1", item: { ...item, status: "playing" } })
+    );
+    expect(built).toMatchObject({ ok: false, code: "INVALID_TRANSITION" });
+    expect(built.ok === false && built.error).toMatch(/tocando agora/);
+  });
+
+  it("o host tira o que está tocando e o pedido de qualquer pessoa", () => {
+    expect(buildQueueRemoval(ctx({ userId: "user-2", item: { ...item, status: "playing" } })))
+      .toEqual({ ok: true, itemId: item.id });
   });
 
   it("recusa item que já saiu da fila", () => {

@@ -13,27 +13,39 @@ function friendlyError(message: string, fallback: string): string {
 }
 
 /**
- * Estado da tela do player (Fase 6). Vai por `get_player_state`, que é
- * `security definer` e confere o token dentro da função — a TV não tem sessão
- * e não é membro de nada, então a RLS de `rooms`/`queue_items` não se aplica a
- * ela. É a mesma leitura usada no primeiro render da página e no polling do
- * quiosque (o canal realtime é o caminho rápido, o poll é a rede de
+ * Token do player, se houver. `null` = pedir pelo caminho da sessão.
+ *
+ * Duas portas, decididas aqui e conferidas no banco (`player_room_id`,
+ * migration 20260927000029): token = a TV sem sessão; sem token = o dono ou um
+ * membro `approved` chamando com a própria sessão. O participante NUNCA recebe
+ * o token — ele navega até `/player/<codigo>` e o servidor resolve a sessão
+ * dele, sem expor `rooms.player_token` no navegador.
+ */
+function parsePlayerTokenArg(token: string | null | undefined): string | null {
+  if (!token) return null;
+  const parsed = playerTokenSchema.safeParse(token);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Estado da tela do player (Fase 6/8a). Vai por `get_player_state`, que é
+ * `security definer` e confere token OU sessão dentro da função — a TV não tem
+ * sessão e não é membro de nada, então a RLS de `rooms`/`queue_items` não se
+ * aplica a ela. É a mesma leitura usada no primeiro render da página e no
+ * polling do quiosque (o canal realtime é o caminho rápido, o poll é a rede de
  * segurança para a TV ficar de pé por horas).
  */
 export async function getPlayerStateAction(
   roomCode: string,
-  token: string
+  token: string | null = null
 ): Promise<PlayerStateResult> {
   const code = normalizeRoomCode(roomCode);
-  const parsedToken = playerTokenSchema.safeParse(token);
-  if (!parsedToken.success) {
-    return { ok: false, error: "Player inválido.", code: "PLAYER_INVALID" };
-  }
+  const parsedToken = parsePlayerTokenArg(token);
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_player_state", {
     p_room_code: code,
-    p_token: parsedToken.data,
+    p_token: parsedToken,
   });
 
   if (error) {
@@ -49,8 +61,9 @@ export async function getPlayerStateAction(
 
 /**
  * Auto-avanço do player (Fase 6): o quiosque chama quando a faixa termina (e
- * no boot, se a sala estiver ociosa com algo aprovado). O banco decide o que
- * entra — sob advisory lock, só `approved`, e `paused` não pula nada.
+ * sempre que relê o banco e a sala está ociosa com algo aprovado). O banco
+ * decide o que entra — sob advisory lock, só `approved`, e `paused` não pula
+ * nada.
  *
  * `finishedItemId` é o item que acabou de terminar: sem ele, o banco só pega a
  * fila se a sala estiver ociosa (nunca pula o que está no ar), e com ele a
@@ -58,22 +71,19 @@ export async function getPlayerStateAction(
  */
 export async function claimNextSongAction(
   roomCode: string,
-  token: string,
+  token: string | null = null,
   finishedItemId?: string | null
 ): Promise<
   | { ok: true; playbackStatus: string; item: unknown }
   | { ok: false; error: string; code: string }
 > {
   const code = normalizeRoomCode(roomCode);
-  const parsedToken = playerTokenSchema.safeParse(token);
-  if (!parsedToken.success) {
-    return { ok: false, error: "Player inválido.", code: "PLAYER_INVALID" };
-  }
+  const parsedToken = parsePlayerTokenArg(token);
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("claim_next_song", {
     p_room_code: code,
-    p_token: parsedToken.data,
+    p_token: parsedToken,
     p_finished_item_id: finishedItemId ?? null,
   });
 

@@ -137,8 +137,10 @@ flowchart TD
     DG0 -->|não| DG1{Sala ativa?}
     DG1 -->|não| Z["erro: sala não encontrada/inativa"]
     DG1 -->|sim| ROOM2{entry_mode?}
-    ROOM2 -->|approval| PEND["pending · mesa_numero null — vê 'aguardando aprovação' na sala"]
+    ROOM2 -->|approval| PRE{Pré-aprovação de 24h?}
     ROOM2 -->|open| APPR["approved · mesa_numero null"]
+    PRE -->|sim| APPR2["approved · reconecta sem novo pedido"]
+    PRE -->|não| PEND["pending · mesa_numero null — vê 'aguardando aprovação' na sala"]
     APPR --> MESA_DENTRO["Sala pede a mesa (MesaPicker → RPC pick_mesa, migration 00022)"]
     PEND --> HOST2["Host aprova → approved · mesa null"]
     HOST2 --> MESA_DENTRO
@@ -159,17 +161,44 @@ flowchart TD
     E -->|não| E1["erro: mesa inválida / fora de 1..quantidade_mesas ou inexistente"]
     E -->|sim| E2{entry_mode = open?}
     E2 -->|sim| F["status = approved · mesa_numero gravado (backend)"]
-    E2 -->|não| G["status = pending · mesa_numero gravado (backend)"]
+    E2 -->|não| PRE2{Pré-aprovação de 24h?}
+    PRE2 -->|sim| F2["status = approved · reconecta sem novo pedido"]
+    PRE2 -->|não| G["status = pending · mesa_numero gravado (backend)"]
     F --> H
+    F2 --> H
     G --> I["Notifica host (Realtime room:{id})"]
     I --> J{Host aprova?}
     J -->|sim| H
     J -->|não| K["status = rejected - pode reentrar depois (backend)"]
 ```
 
-Regra de reentrada (migration `20260921000004`): `rejected` pode reentrar (RPC atualiza), mas `approved`/`pending` existentes **não** são rebaixados. O `mesa_numero` é atualizado no reentrar (`coalesce(excluded.mesa_numero, ...)`) ou via `pick_mesa`.
+Regra de reentrada (migration `20260921000004`, **revisada na Fase 8a** — `20260927000030`): `rejected` pode reentrar (a RPC atualiza); `approved`/`pending` existentes **não são rebaixados**; o `mesa_numero` é atualizado no reentrar (`coalesce(excluded.mesa_numero, ...)`) ou via `pick_mesa`.
 
-**Recuperar/cancelar o pedido (2026-09-25):** o `pending` **sobrevive à navegação** — `getEntryPreviewAction` lê a própria linha em `room_members` (RLS `room_members_select_self_or_host`) e devolve `membership`, de modo que `/entrar?code=…`, `/entrar?bar=…` e `/salas/[código]` renderizam a mesma tela de espera (`EntryApprovalWait`) sem pedir entrada de novo. `getMyEntryRequestsAction` lista os pedidos `pending` com bar/código/mesa para o dashboard e o `/entrar` sem token; como a RLS de `rooms` esconde a sala de quem não está `approved`, nome e código são resolvidos com o client de service role (**somente leitura**, nunca `youtube_api_key`). Cancelar é `cancelEntryRequestAction` (`DELETE` da própria linha com `status = 'pending'`, permitido pela RLS) — sem migration nova.
+O que mudou na Fase 8a é **para quem** vale o `approved` guardado: antes ele valia para sempre (era o `on conflict` que preservava qualquer status antigo), agora vale **24h** e só para usuário **autenticado**. A janela nasce em `room_members.approved_at` (trigger, escrita só na transição para `approved` — reaprovar não renova) e a regra mora em uma função só, `member_entry_state`, que o `join_room` consome e o app lê (preview, tela de espera, página da sala):
+
+```mermaid
+flowchart TD
+    A["join_room: já existe linha na sala?"] -->|não| B{"entry_mode"}
+    B -->|open| B1[approved]
+    B -->|approval| B2[pending]
+    A -->|sim| C{"pre_approval_24h ligado<br/>e autenticado<br/>e approved_at dentro de 24h?"}
+    C -->|sim| D[approved · pré-aprovação vale]
+    C -->|não| E{"entry_mode"}
+    E -->|open| E1[approved · pela regra da sala]
+    E -->|approval| E2[pending · precisa de aprovação nova]
+    F["sai da sala"] --> G["leave_room apaga a linha<br/>voltar é primeira entrada"]
+```
+
+| Situação | `pre_approval_24h` ON (padrão) | `pre_approval_24h` OFF |
+|---|---|---|
+| Autenticado aprovado há < 24h, reconecta | **aprovado** (pré-aprovação) | regra da sala (com entrada livre OFF, **pendente**) |
+| Autenticado aprovado há > 24h, reconecta | regra da sala (pendente) | regra da sala (pendente) |
+| Anônimo (sem conta), qualquer idade | **nunca** pré-aprovado | nunca pré-aprovado |
+| Saiu da sala e voltou | **pendente** (a linha foi apagada) | pendente |
+
+> **Na UI o toggle é sempre ligado e travado** (`RoomSettings` → "Aprovação vale por 24h", com cadeado e o aviso de que sair da sala volta a exigir aprovação): decisão de produto de 2026-09-27, registrada no `CHANGELOG` e no `TODO.md`. O banco e a action aceitam os dois valores — desligado existe para teste e para dado legado, e é por update direto que os smokes rodaram a matriz.
+
+**Recuperar/cancelar o pedido (2026-09-25; leitura pelo status efetivo desde 2026-09-27):** o `pending` **sobrevive à navegação** — `getEntryPreviewAction` pergunta o status **efetivo** a `member_entry_state` (RLS `room_members_select_self_or_host` por baixo) e devolve `membership`, de modo que `/entrar?code=…`, `/entrar?bar=…` e `/salas/[código]` renderizam a mesma tela de espera (`EntryApprovalWait`) sem pedir entrada de novo. `getMyEntryRequestsAction` lista os pedidos `pending` com bar/código/mesa para o dashboard e o `/entrar` sem token; como a RLS de `rooms` esconde a sala de quem não está `approved`, nome e código são resolvidos com o client de service role (**somente leitura**, nunca `youtube_api_key`). Cancelar é `cancelEntryRequestAction` (`DELETE` da própria linha com `status = 'pending'`, permitido pela RLS) — sem migration nova.
 
 **Raio de presença no painel do host (2026-09-25, editável em 2026-09-26):** `bars.raio_permitido_metros` tem default **500 m** (migration `20260925000024`, `check` 50..1000 mantida; bars existentes migrados para 500) e é o número que o gate valida em `checkPresence`/`requirePresence` — a tela lê o mesmo campo, então mapa e gate não podem divergir. O card `PresenceGateInfo` (abaixo dos toggles, só para o host) mostra: o aviso de que o gate vale nos dois modos de entrada e de que o raio vale para **todas as salas do bar**, o mapa com o círculo do raio em metros (`PresenceRadiusMap` = Leaflet + tiles do OpenStreetMap, sem chave de API), links para Google Maps/OpenStreetMap e o campo "Raio de presença" (**input numérico + slider**, 50–1000 m de 50 em 50) com status de gravação, "Restaurar 500 m" e botão de reenvio em caso de erro. **Prévia antes de gravar:** mover o controle redesenha o círculo e reescreve o texto do aviso com o valor local; a gravação acontece no **commit** (soltar o slider, sair do campo, Enter ou debounce de 500 ms). Bar sem coordenadas: o gate cai em `geo-unavailable` e bloqueia todo participante (o host entra).
 
@@ -398,6 +427,43 @@ A correção é o item **que terminou** viajar no pedido: `claim_next_song(p_roo
 | Invariante | trigger `rooms_sync_playback` | `current_item_id` só aponta para item `playing`; sem item, sala `idle` e âncora nula |
 
 > Fora do escopo entregue: pré-carregar o próximo vídeo e os eventos `queueUpdated`/`reorder` no canal do player (a TV relê por poll). Ver `TODO.md`.
+
+### 4.3 A segunda porta do player e a pré-aprovação de 24h (Fase 8a — 2026-09-27)
+
+O player nasceu como tela **da TV**: a única autorização era o token de capacidade, que só existe na página do host. No uso real apareceu o furo correspondente: quem pede uma música precisa ver a watch party **da sala dele**, e não tinha porta nenhuma — o caminho terminava em "pedi a música, recebi um toast e fiquei na tela de busca".
+
+A autorização ficou com **duas portas**, decididas dentro de `player_room_id` (nunca no client):
+
+```mermaid
+flowchart TD
+    A["rota publica do player"] --> B{token na URL?}
+    B -->|sim| C["confere rooms.player_token<br/>e a TV nao tem sessao"]
+    B -->|nao| D["auth.uid() lido dentro da funcao"]
+    D --> E{dono da sala?}
+    E -->|sim| F[abre o player]
+    E -->|nao| G{membro approved?}
+    G -->|sim| F
+    G -->|nao| H[aviso de nao autorizado]
+    I["token errado"] --> H
+```
+
+| Porta | Quem é | O que o banco exige |
+|---|---|---|
+| `p_token` preenchido | a TV (anônima, sem membership) | `rooms.player_token` da sala |
+| `p_token` nulo | participante logado ou host | `auth.uid() = rooms.host_id` **ou** `room_members.status = 'approved'` |
+
+Três regras que vieram junto, para não abrir brecha:
+
+- **Token errado não cai para a sessão.** Se caísse, um link velho da TV deixaria de avisar que morreu — e o quiosque abriria o player de outra sala para quem estivesse logado no mesmo navegador.
+- **`auth.uid()` é lido dentro da função.** Um `p_user` vindo do client seria forjável; o argumento opcional existe para o service role dos smokes e para o próprio usuário.
+- **Membro `pending` não entra.** Pré-aprovação de 24h vale para a entrada e para o player: só entra quem está `approved` de verdade.
+
+No app, `getPlayerStateAction` e o quiosque aceitam token **ausente** (`null` = sessão) e **adicionar música redireciona** para o player da sala; a troca de música continua voltando para a busca. O token da TV nunca é enviado ao navegador do participante.
+
+Dois consertos de comportamento que o mesmo levantamento trouxe (os detalhes estão no `CHANGELOG` e no `TODO.md` da Fase 8a):
+
+- **A TV acorda tocando.** O quiosque só pedia a próxima faixa no `onStateChange(ENDED)`; quem acordasse, recarregasse ou perdesse o broadcast com a sala ociosa ficava parado no QR para sempre. Agora qualquer leitura de estado que encontra **sala ociosa com fila aprovada** pede música (`shouldClaimFromIdle`), e aprovar/rejeitar/remover/reordenar emite broadcast — o poll de 5s virou só a rede de segurança.
+- **O painel do host aprovava nada.** O embed `rooms(...)` das actions de fila virou ambíguo quando `rooms.current_item_id` passou a apontar para `queue_items` (PGRST201), e o erro era reportado como "música não encontrada". Corrigido com o hint explícito da FK, com o erro real chegando ao `toast`, e com `npm run diagnose:queue` no repositório para o próximo bug de RPC/PostgREST.
 
 ---
 

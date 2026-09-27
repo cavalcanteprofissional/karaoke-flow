@@ -15,7 +15,13 @@ const VIDEO: YouTubeVideo = {
 const mocks = vi.hoisted(() => ({
   addSongToQueueAction: vi.fn(),
   replaceQueueSongAction: vi.fn(),
+  announceQueueChange: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
+  push: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: (...args: unknown[]) => mocks.push(...args) }),
 }));
 
 vi.mock("sonner", () => ({
@@ -35,6 +41,12 @@ vi.mock("@/lib/rooms/queue-actions", () => ({
 vi.mock("@/lib/consent/geo", () => ({
   captureGeolocation: vi.fn(),
   writeGeoCookie: vi.fn(),
+}));
+
+// Pedir/trocar música tem que aparecer na lista dos outros aparelhos da sala
+// na hora (2026-09-27) — daí o aviso por broadcast.
+vi.mock("@/lib/rooms/room-channel", () => ({
+  announceQueueChange: (...args: unknown[]) => mocks.announceQueueChange(...args) as unknown,
 }));
 
 function renderSearch(props: Partial<React.ComponentProps<typeof SongSearch>> = {}) {
@@ -64,6 +76,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   mocks.replaceQueueSongAction.mockResolvedValue({ ok: true });
   mocks.addSongToQueueAction.mockResolvedValue({ ok: true, item: { status: "pending" } });
+  mocks.announceQueueChange.mockClear();
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
@@ -195,5 +208,65 @@ describe("SongSearch — modo troca (Bloco D)", () => {
     });
     expect(mocks.replaceQueueSongAction).not.toHaveBeenCalled();
     expect(screen.getByPlaceholderText("Buscar música no YouTube…")).toBeInTheDocument();
+  });
+
+  it("leva o participante para o player da sala depois de pedir a música", async () => {
+    renderSearch();
+
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: `Adicionar ${VIDEO.title} à fila` })
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Sem token na URL: o player abre pela sessão do participante.
+    expect(mocks.push).toHaveBeenCalledWith("/player/KARAOKE");
+    // E a sala é avisada: era o aviso que não existia, e a lista alheia não
+    // atualizava quando alguém pedia/trocava uma música.
+    expect(mocks.announceQueueChange).toHaveBeenCalledWith("KARAOKE");
+  });
+
+  it("não manda para o player quando a música não entrou na fila", async () => {
+    mocks.addSongToQueueAction.mockResolvedValue({
+      ok: false,
+      error: "Você já tem 3 pedidos aguardando.",
+    });
+    renderSearch();
+
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: `Adicionar ${VIDEO.title} à fila` })
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("na troca de música continua na tela de busca (não é hora de watch party)", async () => {
+    renderSearch({ replaceItemId: "item-1", replaceItemTitle: "Evidências" });
+
+    fireEvent.click(await searchAndGetReplaceButton());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Trocar" }));
+    });
+
+    expect(mocks.replaceQueueSongAction).toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    // A troca muda o título/duração que a sala inteira vê: avisa também.
+    expect(mocks.announceQueueChange).toHaveBeenCalledWith("KARAOKE");
   });
 });

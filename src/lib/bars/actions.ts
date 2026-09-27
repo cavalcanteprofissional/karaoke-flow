@@ -9,6 +9,7 @@ import { createBarSchema, barRadiusSchema, type CreateBarInput } from "@/lib/bar
 import { requirePresence } from "@/lib/bars/presence";
 import { geocodeAddress, type PresenceDecision } from "@/lib/bars/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
+import { getMemberEntryState } from "@/lib/rooms/entry-state";
 import type { EntryBarPreview } from "@/types/bar";
 import type { EntryMembership, MemberStatus } from "@/types/room";
 
@@ -210,14 +211,12 @@ export async function getEntryPreviewAction(
 
   let membership: EntryMembership | undefined;
   if (user) {
-    const { data: membershipRow } = await supabase
-      .from("room_members")
-      .select("status, mesa_numero")
-      .eq("room_id", first.room_id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    const currentMembership = readMembership(membershipRow);
-    if (currentMembership) membership = currentMembership;
+    // Status EFETIVO (com a regra das 24h), não a linha crua: quem foi aprovado
+    // há mais de 24h precisa ver a tela de entrada de novo, não entrar direto.
+    const entry = await getMemberEntryState(first.room_id);
+    if (entry.ok && entry.state) {
+      membership = { status: entry.state.status, mesa_numero: entry.state.mesa_numero };
+    }
   }
 
   return {
@@ -268,15 +267,14 @@ export async function getEntryRequestStateAction(
   }
   if (room.status === "closed") return { state: "closed" };
 
-  const { data: membership } = await supabase
-    .from("room_members")
-    .select("status")
-    .eq("room_id", room.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!membership) return { state: "cancelled" };
+  // Mesma fonte da preview: o status efetivo. Uma pré-aprovação vencida precisa
+  // devolver `pending` aqui também, senão a tela de espera pularia direto para
+  // a sala com um status que o banco já não considera.
+  const entry = await getMemberEntryState(room.id);
+  if (!entry.ok) return { state: "none" };
+  if (!entry.state) return { state: "cancelled" };
 
-  return { state: membership.status as MemberStatus };
+  return { state: entry.state.status };
 }
 
 /** Entra na sala do bar. `roomCode` é o código da sala resolvida na preview. */

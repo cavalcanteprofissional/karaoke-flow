@@ -2,7 +2,7 @@
 
 Aplicação **mobile-first** para karaokê ao vivo em bares e restaurantes: o público adiciona músicas na fila **pelo próprio celular** (escaneando o QR da mesa) e a playlist toca numa tela compartilhada (TV/projetor), controlada pelo dono da casa pelo celular — sem tocar no dispositivo da TV.
 
-> **Estado atual (2026-09-23):** Fase 4 (**busca YouTube + fila end-to-end**) entregue e endurecida — busca com cache/rate-limit/cadeia de credenciais (chave do bar → OAuth do host → OAuth do app → dev, OAuth via `Authorization: Bearer`), adicionar à fila com gate de presença física (dono sempre auto-aprovado), OAuth por-host conectado/revogável na UI, lista da fila em tempo real, **encerrar sala** (só o dono: cancela a fila e expulsa todos), **152 testes** (inclui MSW) verdes. Próxima: Fase 5 (realtime completo, aprovação/reorder da fila e modal de confirmação). Detalhes no [`TODO.md`](./TODO.md) e no [`CHANGELOG.md`](./CHANGELOG.md) (versão atual `0.1.0`).
+> **Estado atual (2026-09-27):** Fases 0–8a concluídas — busca YouTube com cadeia de credenciais, fila em tempo real com aprovação/reordenação/troca de música, **player da TV por token de capacidade** (`/player/[codigo]`) com controle pelo celular do host, player acessível também pela **sessão do participante**, **pré-aprovação de 24h** e encerramento de sala. **379 testes** verdes. A Fase 8b acabou de corrigir três defeitos que só apareceram na TV/celular de verdade (teardown do player, CTA repetida, lista do participante parada) — **falta a validação manual** descrita em [`TESTING.md`](./TESTING.md) §3.9·ter. Detalhes no [`TODO.md`](./TODO.md) e no [`CHANGELOG.md`](./CHANGELOG.md) (versão atual `0.1.0`).
 
 ## Índice
 
@@ -41,9 +41,13 @@ O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é di
 - **Busca no YouTube com cota do dono** — cadeia chave do bar → OAuth da conta Google do host (cota do projeto dele; **Bearer** no backend) → OAuth do app → chave dev; cache compartilhado, rate limit e gate de presença física.
 - **OAuth por-host gerenciável** — o host conecta a conta Google pelo `RoomSettings` e vê **"conectado à conta Google · desde …"** com botão **Remover conexão** (revoga o token na Google e apaga a linha).
 - **Fila com dono sempre aprovado** — música pedida pelo **dono** da sala entra direto (mesmo em fila manual); participantes seguem o modo da sala.
+- **Painel da fila do host** — aprovar/rejeitar/ remover pendências, reordenar (⬆/⬇ e drag-and-drop) e trocar a música de alguém mantendo posição e aprovação, tudo na própria página da sala.
+- **Player da TV com token de capacidade** — `/player/<código>?token=…` **sem login**, com fila em fonte grande, QR quando não há nada tocando e avanço automático; o host controla play/pause/pular pelo celular (broadcast + poll de 5s como rede de segurança) e pode rotacionar o link da TV.
+- **Player pelo celular, sem token** — participante e host entram em `/player/<código>` só com a sessão (host ou membro aprovado); adicionar música leva direto para lá. O token da TV **nunca** é exposto ao navegador do participante.
+- **Pré-aprovação de 24h** — quem foi aprovado pelo host e é **autenticado** volta aprovado por 24h ao reconectar; usuário anônimo nunca é pré-aprovado; sair da sala volta a exigir aprovação. Toggle "Aprovação vale por 24h" aparece **ligado e travado** na config da sala (decisão de produto).
 - **Encerrar sala (só o dono)** — RPC atômica: fecha a sala, **cancela/interrompe a fila** (estado `cancelled`) e **expulsa todos** os participantes; quem era membro vê "sala encerrada".
 
-**Em construção / a seguir:** fila completa — realtime, aprovação/modal de confirmação/reorder (Fase 5) e player kiosk controlado pelo celular (Fases 6 e 7). A **busca no YouTube** (cache compartilhado, rate limit, cadeia de credenciais, adicionar à fila com gate de presença) **já está entregue** (Fase 4). Ver [Roadmap](#-roadmap).
+**Em construção / a seguir:** a auditoria de RLS e os não-funcionais da Fase 8 (rate limiting, retenção/LGPD, limpeza de itens antigos, latência realtime validada) e o roadmap de produto das Fases 9–15 ([`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md)). Ver [Roadmap](#-roadmap).
 
 ## 🧱 Stack
 
@@ -124,8 +128,16 @@ Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start`
 | `npm run lint`                     | ESLint                                                                     |
 | `npm run typecheck`                | `tsc --noEmit`                                                             |
 | `npm test`                         | Vitest (unit)                                                              |
-| `npm run seed`                     | seed de dev no Supabase Cloud                                              |
+| `npm run seed`                     | seed de dev no Supabase Cloud (⚠️ **apaga e recria** as salas de dev)      |
+| `npm run diagnose:queue`           | diagnostica as actions de moderação da fila e mostra o erro cru do banco  |
 | `node scripts/apply-sql.mjs <sql>` | aplica migration manualmente (padrão do time; veja `README` do `scripts/`) |
+
+**Smokes de banco** (rodam contra o projeto do `.env.local`, pelo Management API — cada um tem o próprio roteiro e sai no relatório):
+
+| Script                                                                                | O que fixa                                                                                                                                   | Mexe nos dados de dev?                                    |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000`                         | contrato do playback (Fases 6/7): token, claim, pausa, skip, rotação de token, sala encerrada                                             | **sim** — precisa de `npm run seed` antes e depois       |
+| `node scripts/apply-sql.mjs scripts/smoke-player-session.sql 100000`                    | Fase 8a: token × sessão × anônimo × pré-aprovação de 24h, matriz do toggle, limpeza                                                      | não — cria e apaga a sala `SMOKE8`                        |
 
 ## 🔑 Login e acesso
 
@@ -147,10 +159,10 @@ Enquanto não há provedor, use a seção **"Acesso de desenvolvimento"** (somen
 
 Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./TESTING.md).
 
-- **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **152 testes** verdes — inclui `src/lib/bars/qr.test.ts`, `src/lib/youtube/*`, a fila com a matriz de presença, o roundtrip OAuth authorize→callback e os Bearer de OAuth na rota de busca).
+- **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **379 testes** verdes em 32 arquivos — inclui `src/lib/bars/qr.test.ts`, `src/lib/youtube/*`, a fila com a matriz de presença, o roundtrip OAuth authorize→callback, os Bearer de OAuth na rota de busca, as actions de moderação da fila e o player/pré-aprovação de 24h, o teardown do player e a resiliência da lista do participante). O duplo do YouTube (`src/test/fake-youtube.ts`) segue o **ciclo de vida real** da IFrame API — é o que pegou o crash de prontidão que 333 testes não pegaram.
 - **Mock de rede:** **MSW** instalado (Fase 4) — mocka a YouTube Data API nas provas da rota `/api/youtube/search`; serviços externos nunca são chamados em teste.
 - **E2E:** Playwright no pós-MVP-stable (player kiosk com YouTube IFrame Player API mockada).
-- **Banco/RLS:** validado via smoke e e2e, não em unit.
+- **Banco/RLS:** validado via **smoke SQL** (`scripts/smoke-playback.sql`, `scripts/smoke-player-session.sql`) e e2e, não em unit; `npm run diagnose:queue` reproduz o erro cru de uma action de fila quando o sintoma é um botão que não faz nada.
 
 > ⚠️ O pool do Vitest usa `threads` (não `forks`) por causa do caminho do workspace (`D:\BACK UP\...`) — ver CHANGELOG.
 
@@ -163,10 +175,12 @@ Plano detalhado por fases (com checklist) no [`TODO.md`](./TODO.md). Linha do te
 | Fase 0 — Fundação / 1 — Banco+RLS / 2 — Auth / 3 — Salas                                                                           | ✅ Concluídas                                                                                                                                               |
 | **3.5 — Bar/mesas/karaokês + acesso anônimo**                                                                                      | ✅ **Concluída (2026-09-23)**                                                                                                                               |
 | **Fase 4 — Busca YouTube + fila end-to-end**                                                                                       | ✅ **Concluída (2026-09-23)**                                                                                                                               |
-| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música                                                                     | ⏳ **Próxima**                                                                                                                                              |
-| Fase 6 — Player kiosk                                                                                                              | ⏳ Planejada                                                                                                                                                |
-| Fase 7 — Controle do host pelo celular                                                                                             | ⏳ Planejada                                                                                                                                                |
-| Fase 8 — Não-funcionais, segurança, LGPD                                                                                           | ⏳ Planejada                                                                                                                                                |
+| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música                                                                     | ✅ **Concluída (2026-09-26)**                                                                                                                               |
+| Fase 6 — Player kiosk                                                                                                              | ✅ **Concluída (2026-09-27)**                                                                                                                               |
+| Fase 7 — Controle do host pelo celular                                                                                             | ✅ **Concluída (2026-09-27)**                                                                                                                               |
+| **Fase 8a — Fila/player no uso real + player por sessão + pré-aprovação de 24h**                                                  | ✅ **Concluída (2026-09-27)** — diagnose + 4 correções, segunda porta de autorização, toggle travado ON |
+| **Fase 8b — Defeitos achados na TV/celular de verdade**                                                                            | 🧪 **Correções prontas (2026-09-27), aguardando validação manual** — teardown do player, CTA repetida, lista do participante ao vivo, participante tira o próprio pedido; falta o roteiro em [`TESTING.md`](./TESTING.md) §3.9·ter e a semântica do "Parar" (`rooms.playback_held`) |
+| Fase 8 — Não-funcionais, segurança, LGPD                                                                                           | ⏳ Próxima                                                                                                                                                  |
 | **Fases 9–15 — Entrada fora do raio, tela da mesa, perfil de karaokê, tempo/teste grátis, recompensas, pagamento + pedido no bar** | 📋 **Planejadas (registro 2026-09-25, sem implementação)** — detalhamento em [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md) |
 
 Pendência aberta conhecida: **diagramas Mermaid de `docs/flows/*`** já foram sanitizados e validados em mermaid v10/v11 — falta confirmar a renderização no seu renderizador/preview. Registrado no `TODO.md`.
@@ -177,7 +191,7 @@ Pendência aberta conhecida: **diagramas Mermaid de `docs/flows/*`** já foram s
 - [`MANIFEST.md`](./MANIFEST.md) — manifesto do produto: visão, princípios e a camada social futura (inclui a seção de Belas Artes construída a partir do histórico musical real).
 - [`questionario-donos-estabelecimento.md`](./questionario-donos-estabelecimento.md) — questionário de validação (18 perguntas) com donos de estabelecimentos.
 - [`karaoke-pesquisa-academica.md`](./karaoke-pesquisa-academica.md) — pesquisa acadêmica e de mercado que fundamenta o produto.
-- [`TODO.md`](./TODO.md) — plano de implementação por fase (**estado recente**: Fase 3.5 e Fase 4 concluídas; Fase 5 em seguida).
+- [`TODO.md`](./TODO.md) — plano de implementação por fase (**estado recente**: Fases 3.5 a 8a concluídas, correções da 8b prontas aguardando validação manual; Fase 8 em seguida).
 - [`CHANGELOG.md`](./CHANGELOG.md) — histórico por release (**versão atual `0.1.0`**).
 - [`TESTING.md`](./TESTING.md) — estratégia de testes, checklist funcional e DoD.
 
@@ -199,7 +213,7 @@ _Nota de manutenção:_ todo diagrama reflete o **código real** (migrations, `s
 
 ### Engenharia (post-mortems e playbooks)
 
-- [`docs/engenharia/pos-mortem-smoke-playback.md`](./docs/engenharia/pos-mortem-smoke-playback.md) — **post-mortem da validação da Fase 6/7 (player da TV)**: por que a verificação do playback contra o Supabase remoto custou ~8 rodadas, as **6 armadilhas** de SQL/plumbing que quase mandaram a validação por água abaixo (ordem de avaliação de `jsonb_build_object`, `DO` que aborta inteiro, saída truncada do `apply-sql.mjs`, estado não previsível do banco de dev, material insuficiente no roteiro, smoke que suja os dados) e o **checklist para o próximo smoke**. Lê antes de escrever verificação por script.
+- [`docs/engenharia/pos-mortem-smoke-playback.md`](./docs/engenharia/pos-mortem-smoke-playback.md) — **post-mortem da validação do playback (Fases 6/7)**: por que a verificação do playback contra o Supabase remoto custou ~8 rodadas, as **6 armadilhas** de SQL/plumbing que quase mandaram a validação por água abaixo (ordem de avaliação de `jsonb_build_object`, `DO` que aborta inteiro, saída truncada do `apply-sql.mjs`, estado não previsível do banco de dev, material insuficiente no roteiro, smoke que suja os dados) e o **checklist para o próximo smoke**. Depois virou registro dos defeitos de **browser real** (§3.7 o duplo de teste mais permissivo que a IFrame API; §3.8 `destroy()` em cleanup passivo, com dois gatilhos; §3.9 CTA rearmada pelo poll; §3.10 lista do participante parada por `replica identity` + WebSocket dormindo). Lê antes de escrever verificação por script.
 
 ### Ciência de dados (roadmap)
 

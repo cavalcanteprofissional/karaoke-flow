@@ -8,6 +8,7 @@ import {
   playerPanel,
   playbackControls,
   shouldAutoAdvance,
+  shouldClaimFromIdle,
 } from "./playback";
 import type { PlayerState } from "./playback";
 
@@ -227,6 +228,48 @@ describe("shouldAutoAdvance", () => {
         playbackStatus: "playing",
         currentVideoId: "abc123",
         endedVideoId: "outro",
+        queueLength: 2,
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldClaimFromIdle (Fase 8a)", () => {
+  it("puxa a música aprovada que apareceu com a TV já aberta", () => {
+    expect(
+      shouldClaimFromIdle({
+        playbackStatus: "idle",
+        currentItemId: null,
+        queueLength: 1,
+      })
+    ).toBe(true);
+  });
+
+  it("não puxa nada quando já tem música no ar", () => {
+    expect(
+      shouldClaimFromIdle({
+        playbackStatus: "playing",
+        currentItemId: "11111111-1111-4111-8111-111111111111",
+        queueLength: 3,
+      })
+    ).toBe(false);
+  });
+
+  it("não puxa nada com a fila vazia (a TV mostra o QR)", () => {
+    expect(
+      shouldClaimFromIdle({
+        playbackStatus: "idle",
+        currentItemId: null,
+        queueLength: 0,
+      })
+    ).toBe(false);
+  });
+
+  it("pausado não puxa: quem segura é o host", () => {
+    expect(
+      shouldClaimFromIdle({
+        playbackStatus: "paused",
+        currentItemId: null,
         queueLength: 2,
       })
     ).toBe(false);

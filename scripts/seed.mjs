@@ -211,26 +211,41 @@ async function main() {
   );
 
   // ---- Fila (só na sala do Karaokê do Zé) ----
-  const { error: queueErr } = await admin.from("queue_items").insert([
-    {
-      room_id: ROOM1,
-      added_by_user_id: ana,
-      youtube_video_id: "dQw4w9WgXcQ",
-      title: "Never Gonna Give You Up (cover karaokê)",
-      duration_seconds: 212,
-      status: "approved",
-    },
-    {
-      room_id: ROOM1,
-      added_by_user_id: bruno,
-      youtube_video_id: "9bZkp7q19f0",
-      title: "Como Fazer Melhor (karaokê)",
-      duration_seconds: 240,
-      status: "pending",
-    },
-  ]);
+  // O `status` do INSERT é sobrescrito pelo trigger `queue_items_initial_status`
+  // (20260923000018): em sala com `queue_approval_mode = 'manual'` (a KARAOKE),
+  // tudo nasce `pending` — é o comportamento certo, senão a fila de dev não
+  // exercita o botão de aprovar. Por isso o primeiro item é aprovado num UPDATE
+  // logo depois, e não no INSERT.
+  const { data: queueRows, error: queueErr } = await admin
+    .from("queue_items")
+    .insert([
+      {
+        room_id: ROOM1,
+        added_by_user_id: ana,
+        youtube_video_id: "dQw4w9WgXcQ",
+        title: "Never Gonna Give You Up (cover karaokê)",
+        duration_seconds: 212,
+      },
+      {
+        room_id: ROOM1,
+        added_by_user_id: bruno,
+        youtube_video_id: "9bZkp7q19f0",
+        title: "Como Fazer Melhor (karaokê)",
+        duration_seconds: 240,
+      },
+    ])
+    .select("id");
   if (queueErr) throw new Error("queue_items: " + queueErr.message);
-  console.log("fila criada na KARAOKE: 2 itens (approved + pending)");
+
+  const firstSong = queueRows?.[0]?.id;
+  if (firstSong) {
+    const { error: approveErr } = await admin
+      .from("queue_items")
+      .update({ status: "approved" })
+      .eq("id", firstSong);
+    if (approveErr) throw new Error("queue_items (aprovar): " + approveErr.message);
+  }
+  console.log("fila criada na KARAOKE: 1 approved + 1 pending");
 
   console.log(
     "\nSeed concluído. Login dev: dono@exemplo.com | betania@exemplo.com | ana@exemplo.com | bruno@exemplo.com (senha123)"

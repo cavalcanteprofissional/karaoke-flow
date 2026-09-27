@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Link2, LoaderCircle, PlugZap, Video } from "lucide-react";
+import { KeyRound, Link2, LoaderCircle, Lock, PlugZap, Video } from "lucide-react";
 import { toast } from "sonner";
 
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,7 @@ type RoomSettingsProps = {
     entry_mode: RoomEntryMode;
     queue_approval_mode: RoomQueueApprovalMode;
     require_song_confirmation: boolean;
+    pre_approval_24h: boolean;
     youtube_api_key: string | null;
   };
   /** updated_at de youtube_oauth_tokens quando o host conectou a conta Google. */
@@ -86,6 +87,7 @@ export function RoomSettings({
       entry_mode: next.entry_mode,
       queue_approval_mode: next.queue_approval_mode,
       require_song_confirmation: next.require_song_confirmation,
+      pre_approval_24h: next.pre_approval_24h,
     });
     if (!result.ok) {
       optimistic.current = initial;
@@ -206,6 +208,34 @@ export function RoomSettings({
                 commit({ ...optimistic.current, require_song_confirmation: checked })
               }
             />
+          </div>
+
+          {/* Pré-aprovação de 24h: o toggle é funcional (o estado OFF existe,
+              está no banco e a regra respeita), mas fica TRAVADO em ON por
+              decisão do PO — com "Entrada livre" desligada, quem foi aprovado
+              há mais de 24h volta a pedir aprovação. Para liberar, basta
+              remover o `disabled` e o `onCheckedChange` abaixo. */}
+          <div className="flex items-start justify-between gap-3 opacity-60">
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="toggle-pre-approval" className="flex items-center gap-1.5">
+                <Lock className="size-3.5" />
+                Aprovação vale por 24h
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                Quem tem login e foi aprovado nas últimas 24h entra direto ao voltar para
+                a sala. Usuário sem login nunca é pré-aprovado.
+              </p>
+            </div>
+            <Switch
+              id="toggle-pre-approval"
+              checked={settings.pre_approval_24h}
+              disabled
+              aria-describedby="toggle-pre-approval-desc"
+            />
+            <span id="toggle-pre-approval-desc" className="sr-only">
+              Padrão do app: pré-aprovação de 24h para usuários autenticados. O host não
+              pode desligar esta opção.
+            </span>
           </div>
         </CardContent>
       </Card>

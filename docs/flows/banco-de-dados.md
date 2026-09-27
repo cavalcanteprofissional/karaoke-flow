@@ -108,6 +108,10 @@ erDiagram
 > `bars`/`mesas` (migrations `20260923000010`/`20260923000011`): o bar é o perfil-personificação do host (1:1 `host_id` único); mesas são etiquetas do bar (playlist = a da sala/karaokê). `rooms.bar_id` e `room_members.mesa_numero` são adicionados pela migration `20260923000012`; coords + raio de presença por `20260923000015`.
 >
 > **Código da sala configurável (migration `20260924000022`):** `rooms.code` aceita **3–12 alfanuméricos maiúsculos** (constraint), padrão por bar `KARAOKE`/`BAR2FO`; helpers RPC `unique_room_code`/`default_room_code`/`room_code_available` (checam colisão com `rooms.code` e `bars.code`); `create_bar` ganha `p_codigo` (default = nome do bar normalizado, fallback `KARAOKE`+sufixo); `join_room` tem `p_mesa` **opcional** (entrada por código entra sem mesa) e a nova RPC **`pick_mesa`** grava a mesa depois (só membro `approved` de sala `active`). A migration `20260924000021` corrige a ambiguidade `bar_id` no `get_entry_preview`. Seed: `KARAOK` → **`KARAOKE`**.
+>
+> **Fases 6/7 (playback — migrations `20260926000027`/`00028`):** `rooms.playback_status`, `rooms.current_item_id`, `rooms.current_item_started_at` e `rooms.player_token`; o estado do player é colunado, nunca adivinhado pelo cliente.
+>
+> **Fase 8a (migrations `20260927000029`/`00030`):** `rooms.pre_approval_24h` (boolean, **default true**) e `room_members.approved_at` (timestamptz, base da janela de 24h, mantida por trigger `room_members_sync_approved_at_trg`); funções `current_user_is_anonymous()`, `member_entry_state(p_room_id, p_user_id)` e as duas portas de `player_room_id(p_room_code, p_token)` — `get_player_state` e `claim_next_song` passam a aceitar `p_token` nulo (autorização pela sessão).
 
 ---
 
@@ -131,10 +135,12 @@ flowchart LR
     end
     subgraph INSERT room_members
         K[insert direto] --> L["sempre pending"]
-        L --> M["authorizado? via RPC join_room"]
-        M --> N{entry_mode}
-        N -->|open| O[approved]
-        N -->|approval| P[pending]
+        L --> M["join_room: grava o status efetivo"]
+        M --> N{pré-aprovação de 24h vale?}
+        N -->|sim| Q[approved]
+        N -->|não| O{entry_mode}
+        O -->|open| P[approved]
+        O -->|approval| R[pending]
     end
 ```
 
@@ -153,9 +159,11 @@ flowchart LR
 | `consents`     | só o próprio usuário                                                    | próprio usuário (ou service role)                    | próprio usuário (ou service role)                                | —                              |
 | `song_cache`   | sem política                                                            | sem política                                         | sem política                                                     | sem política (só service role) |
 
-> **Anônimo (`is_anonymous`)**: lê `bars`/`mesas` (precisa ver código/QR e escolher mesa) — mas a RPC `create_bar` recusa sessão anônima; o anfitrião começa com sessão real.
+> **Anônimo (`is_anonymous`)**: lê `bars`/`mesas` (precisa ver código/QR e escolher mesa) — mas a RPC `create_bar` recusa sessão anônima; o anfitrião começa com sessão real. **Nunca é pré-aprovado** por `member_entry_state`, mesmo aprovado por outro host antes (Fase 8a).
 >
 > **A TV não é participante**: o player da TV é um `anon` **sem nenhuma linha em `room_members`** e lê playback só por `get_player_state`/`claim_next_song` com o token de capacidade. Quem não tem o token não enxerga nem o título da fila.
+>
+> **O player tem duas portas** (Fase 8a, migration `00029`): com `p_token` é a TV; **sem token** é a sessão de quem está chamando (`auth.uid()` dentro da função = host da sala ou membro `approved`). O token errado **não** cai para a sessão — o quiosque precisa continuar avisando que o link morreu.
 
 ### Pontos de atenção (segurança)
 
@@ -168,6 +176,7 @@ flowchart LR
 - **A entrada em `playing` tem dono único: `claim_next_song`** (chamada pelo player, com a **mesma chave de advisory lock** de `next_queue_position`), e ela **exige que o item esteja `approved`**. `set_playback('play')` também promove, mas só quando não há item tocando — nunca troca o que está no ar. O `rooms.playback_status`/`current_item_id` é a fonte da verdade do que está tocando, e o trigger `rooms_sync_playback` mantém a invariante (item atual tem que estar `playing`; sem item, sala `idle` e âncora nula) — inclusive quando o item sai da fila pelo `on delete set null`.
 - **`claim_next_song` é idempotente por item** (migration `20260926000028`): o player manda o id do item que acabou; o banco só terminaliza se ainda for o item atual e devolve `already_advanced: true` quando for outro. Sem esse terceiro argumento, dois claims simultâneos (evento `ENDED` do player + poll) pulavam a música em reprodução.
 - **Aprovação de entrada** só via RPC `join_room` (`security definer`) — INSERT direto sempre vira `pending`.
+- **Pré-aprovação de 24h é regra do banco, não da UI** (migration `20260927000030`): `member_entry_state` devolve o status efetivo (`status`, `mesa_numero`, `pre_approval`, `approved_at`) e é a **única** cópia da regra — o `join_room` grava o que ela devolve e o app lê a mesma função (preview, tela de espera, página da sala). A janela nasce em `room_members.approved_at`, escrita por trigger **só quando o status muda para `approved`** (reaprovar não renova; sair de `approved` zera). Toggle da sala: `rooms.pre_approval_24h` (**default ON**; a UI o mostra ligado e travado, decisão de produto, mas o banco respeita ON e OFF). **Anônimo nunca é pré-aprovado** (`current_user_is_anonymous`). `p_user` só é aceito para o próprio usuário ou pelo service role.
 - **Preview / entrada e criação de bar são RPCs `security definer`** (`get_entry_preview`, `join_room`, `create_bar`) — o leitor não-membro não acessa `rooms`/`bars` por SELECT.
 - **Multi-tenancy**: toda tabela de domínio tem `room_id`/`bar_id`; nada de assumir bar/sala única.
 
@@ -215,6 +224,29 @@ stateDiagram-v2
 ```
 
 > `playback_status` é **derivado do item atual**, não do contrário: o trigger `rooms_sync_playback` é quem reconcilia, e o painel do host nunca escreve `rooms.playback_status` direto.
+
+---
+
+## 4.2 Estado efetivo de entrada (Fase 8a — implementado)
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> pending: entrada livre OFF
+    [*] --> approved: entrada livre ON
+    pending --> approved: host aprova
+    pending --> rejected: host rejeita
+    rejected --> pending: pede de novo
+    approved --> approved: reconecta com a pré-aprovação de 24h vale
+    approved --> pending: reconecta com a janela vencida ou com o toggle OFF
+    approved --> pending: sai da sala e volta
+```
+
+> `room_members.status` é o que o banco gravou da última vez; o que vale **agora** é o retorno de `member_entry_state`. Os dois divergem de propósito quando a janela de 24h vence: a linha continua `approved` (ninguém apaga linha por tempo) e o acesso efetivo volta a ser o da regra da sala. Com **entrada livre ON**, o vencimento não muda nada — a sala já aprova todo mundo.
+>
+> `approved --> pending: sai da sala e volta` acontece porque `leave_room` **apaga** a linha: quem volta é tratado como primeira entrada, e pré-aprovação exige linha. O ciclo de reconectar (sem sair) é o que a janela de 24h cobre.
+>
+> A self-loop `approved --> approved` **não renova** `approved_at`: a janela nasce na transição para `approved` e o trigger zera quando o status sai. Se renovasse a cada entrada, a pré-aprovação seria eternal.
 
 ---
 

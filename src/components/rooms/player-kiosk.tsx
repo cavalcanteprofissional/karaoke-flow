@@ -9,26 +9,32 @@ import type { YouTubeStageHandle } from "@/components/rooms/youtube-stage";
 import { Button } from "@/components/ui/button";
 import { getPlayerStateAction, claimNextSongAction } from "@/lib/rooms/playback-actions";
 import { subscribeToPlaybackChanges } from "@/lib/rooms/player-channel";
-import { playerHeadline, playerPanel, shouldAutoAdvance } from "@/lib/rooms/playback";
+import {
+  playerHeadline,
+  playerPanel,
+  shouldAutoAdvance,
+  shouldClaimFromIdle,
+} from "@/lib/rooms/playback";
 import type { PlayerState } from "@/lib/rooms/playback";
 import { roomJoinUrl } from "@/lib/rooms/utils";
 import { formatDurationSeconds } from "@/lib/youtube/format";
 
 /**
- * Tela do player (Fase 6) — a TV do bar, aberta em modo quiosque, SEM sessão:
- * a autorização é o `token` na URL (`/player/<codigo>?token=...`).
- *
- * Quem manda é o banco: o quiosque nunca decide o que toca, ele pergunta
- * (`get_player_state`), toca o que vier, e quando a faixa termina pede a próxima
- * (`claim_next_song`, que roda sob advisory lock). O poll de 5s é a rede de
- * segurança para a TV ficar de pé por horas; o canal realtime do host é o
- * caminho rápido (ver `usePlaybackChannel`).
+ * Tela do player (Fase 6/8a) — a TV do bar, aberta em modo quiosque, pode
+ * entrar de duas formas: SEM sessão e com o `token` na URL
+ * (`/player/<codigo>?token=...`, a TV), ou COM a sessão de um participante
+ * aprovado / do dono (`token = null`). Quem manda é o banco: o quiosque nunca
+ * decide o que toca, ele pergunta (`get_player_state`), toca o que vier, e
+ * pede a próxima quando a sala está ociosa com fila aprovada
+ * (`claim_next_song`, sob advisory lock). O poll de 5s é a rede de segurança
+ * para a TV ficar de pé por horas; o canal realtime do host é o caminho rápido.
  */
 const POLL_MS = 5000;
 
 export type PlayerKioskProps = {
   roomCode: string;
-  token: string;
+  /** `null` = player por sessão (participante aprovado / host). A TV traz o token. */
+  token: string | null;
   initialState: PlayerState;
   onInvalid?: (error: string) => void;
 };
@@ -42,10 +48,13 @@ export function PlayerKiosk({
   const [state, setState] = useState<PlayerState>(initialState);
   const [needsGesture, setNeedsGesture] = useState(false);
   const [playerError, setPlayerError] = useState(false);
-  // O player do YouTube nasce assíncrono: o estado do banco só pode ser
-  // aplicado (load/play) depois que a instância existir, senão a primeira
-  // música da sessão nunca carrega.
-  const [playerReady, setPlayerReady] = useState(false);
+  // O player do YouTube nasce assíncrono: o estado do banco só pode ser aplicado
+  // (load/play) depois que o player estiver reproduzível, senão a primeira
+  // música da sessão nunca carrega. Este contador NÃO é a verdade sobre o player
+  // — ele só existe para reexecutar o efeito de aplicação a cada `onReady` (um
+  // por montagem do stage). Quem sabe se dá para tocar é o próprio stage, em
+  // `stageRef.current.isPlayable()`.
+  const [playerGeneration, setPlayerGeneration] = useState(0);
   const stageRef = useRef<YouTubeStageHandle>(null);
   const stateRef = useRef(state);
   const loadedRef = useRef<string | null>(null);
@@ -101,42 +110,49 @@ export function PlayerKiosk({
   // O estado do banco manda no player: troca de música recarrega, pausar
   // segura, e nada de recarregar a mesma faixa (recarregar=zera o vídeo).
   useEffect(() => {
-    // Sem instância do player ainda não dá para carregar nada — e marcar como
-    // "carregado" aqui perderia a primeira música da sessão.
-    if (!playerReady) return;
     const item = current;
+    const stage = stageRef.current;
     if (!item) {
+      // A fila esvaziou e o stage desmontou: a próxima música monta um player
+      // novo, que ainda não está reproduzível. `loadedRef` zera aqui; a
+      // readiness não precisa (e não pode) ser zerada por setState dentro do
+      // efeito — quem responde é `stage.isPlayable()` do stage que está na tela.
       loadedRef.current = null;
-      stageRef.current?.stop();
+      stage?.stop();
       return;
     }
+    // Sem player reproduzível ainda não dá para carregar nada — o stage guarda a
+    // intenção e aplica no `onReady`. Marcar como "carregado" aqui perderia a
+    // primeira música da sessão.
+    if (!stage?.isPlayable()) return;
     if (loadedRef.current !== item.youtube_video_id) {
       loadedRef.current = item.youtube_video_id;
-      stageRef.current?.load(item.youtube_video_id, item.elapsed_seconds ?? 0);
+      stage.load(item.youtube_video_id, item.elapsed_seconds ?? 0);
     }
     if (playbackStatus === "paused") {
-      stageRef.current?.pause();
+      stage.pause();
     } else {
-      stageRef.current?.play();
+      stage.play();
     }
-  }, [current, playbackStatus, playerReady]);
+  }, [current, playbackStatus, playerGeneration]);
 
-  // Boot: se a sala está ociosa com música aprovada, o quiosque pede a primeira.
-  const bootRef = useRef(false);
+  // Claim por motivo de ESTADO, não de vídeo: sempre que o quiosque relê o
+  // banco (boot, poll de 5s, broadcast do host) e encontra a sala ociosa com
+  // música aprovada, pede a próxima. Antes isso só_existia no mount, então
+  // aprovar uma música com a TV já aberta não iniciava nada — a TV ficava no
+  // "Escaneie para adicionar" e o claim só voltaria a existir no fim de uma
+  // faixa (ou nunca, se não havia nenhuma tocando).
   useEffect(() => {
-    if (bootRef.current) return;
-    bootRef.current = true;
     if (
-      shouldAutoAdvance({
-        playbackStatus: initialState.room.playback_status,
-        currentVideoId: initialState.current?.youtube_video_id ?? null,
-        endedVideoId: null,
-        queueLength: initialState.queue.length,
+      shouldClaimFromIdle({
+        playbackStatus: state.room.playback_status,
+        currentItemId: state.current?.id ?? null,
+        queueLength: state.queue.length,
       })
     ) {
       void claimNext();
     }
-  }, [initialState, claimNext]);
+  }, [state, claimNext]);
 
   const handleEnded = useCallback(
     (videoId: string) => {
@@ -165,9 +181,17 @@ export function PlayerKiosk({
     setNeedsGesture(true);
   }, []);
 
+  // O CTA só sai com o vídeo tocando: até lá, quem chega é o erro 150 ou o
+  // probe de autoplay bloqueado do stage.
+  const handlePlaying = useCallback(() => {
+    setNeedsGesture(false);
+  }, []);
+
   const startWithGesture = useCallback(() => {
     setNeedsGesture(false);
-    stageRef.current?.play();
+    // `userGesture` é o que distingue este play dos `play()` do poll de 5s —
+    // é o único lugar onde o stage pode rearmar o pedido de gesto.
+    stageRef.current?.play({ userGesture: true });
   }, []);
 
   const panel = playerPanel(state);
@@ -180,8 +204,17 @@ export function PlayerKiosk({
           <YouTubeStage
             ref={stageRef}
             className="size-full"
-            onReady={() => setPlayerReady(true)}
+            onReady={() => {
+              // Contador, não booleano: cada montagem do stage avisa uma vez, e
+              // um stage novo precisa reexecutar o efeito mesmo que o anterior
+              // já tivesse avisado.
+              setPlayerGeneration((generation) => generation + 1);
+              // Boot lento dá timeout; se o player ficou pronto depois, o aviso
+              // some.
+              setPlayerError(false);
+            }}
             onEnded={handleEnded}
+            onPlaying={handlePlaying}
             onBlocked={handleBlocked}
             onError={() => setPlayerError(true)}
           />

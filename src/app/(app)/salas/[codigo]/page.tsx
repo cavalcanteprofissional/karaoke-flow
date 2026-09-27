@@ -28,6 +28,7 @@ import { getEntryPreviewAction } from "@/lib/bars/actions";
 import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
+import { getMemberEntryState } from "@/lib/rooms/entry-state";
 import type { Bar } from "@/types/bar";
 
 type RoomPageProps = {
@@ -136,15 +137,14 @@ export default async function RoomPage({ params }: RoomPageProps) {
   }
 
   let myMembership:
-    { status?: string | null; mesa_numero?: number | null } | null | undefined;
+    | { status?: string | null; mesa_numero?: number | null }
+    | null
+    | undefined;
   if (!isHost) {
-    const { data: membership } = await supabase
-      .from("room_members")
-      .select("status, mesa_numero")
-      .eq("room_id", room.id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    myMembership = membership;
+    // Status efetivo (regra das 24h), não a linha crua: aprovada há mais de 24h
+    // volta a ser `pending` e a pessoa vê a tela de aprovação outra vez.
+    const entry = await getMemberEntryState(room.id);
+    myMembership = entry.ok ? entry.state : null;
   }
   const myMesa = myMembership?.mesa_numero ?? null;
   const isPendingMember = myMembership?.status === "pending";
@@ -305,6 +305,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
             entry_mode: room.entry_mode,
             queue_approval_mode: room.queue_approval_mode,
             require_song_confirmation: room.require_song_confirmation,
+            pre_approval_24h: room.pre_approval_24h,
             youtube_api_key: room.youtube_api_key ?? null,
           }}
           youtubeConnectedAt={youtubeConnectedAt}

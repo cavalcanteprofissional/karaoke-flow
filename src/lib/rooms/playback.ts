@@ -155,6 +155,32 @@ export function shouldAutoAdvance(input: AutoAdvanceInput): boolean {
   return input.endedVideoId !== null && input.endedVideoId === input.currentVideoId;
 }
 
+export type ClaimFromIdleInput = {
+  playbackStatus: PlaybackStatus;
+  /** Item em reprodução (`current.id`); `null` = sala ociosa. */
+  currentItemId: string | null;
+  queueLength: number;
+};
+
+/**
+ * A sala está ociosa e tem música aprovada esperando? Então a TV pede a próxima
+ * sozinha.
+ *
+ * É a mesma pergunta que `shouldAutoAdvance` responde no boot e no fim da faixa,
+ * mas pelos MOTIVOS de estado (não de vídeo): uma música aprovada DEPOIS que a
+ * TV abriu precisa começar sem ninguém tocar em nada. Sem isso, o quiosque ficava
+ * parado em "Escaneie para adicionar" enquanto o host via a lista aprovada e a
+ * TV não — o claim só existia no mount e no `onEnded`.
+ *
+ * Com `paused` nunca: quem segura é o host. `queueLength` é a fila aprovada que
+ * `get_player_state` devolve (o que a TV pode tocar agora).
+ */
+export function shouldClaimFromIdle(input: ClaimFromIdleInput): boolean {
+  if (input.playbackStatus === "paused") return false;
+  if (input.currentItemId) return false;
+  return input.queueLength > 0;
+}
+
 export type PlayerPanelRow = {
   item: PlayerItem;
   /** `now` = tocando, `next` = próxima (destaque forte na TV), `upcoming`. */

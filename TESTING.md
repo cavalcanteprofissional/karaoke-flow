@@ -211,7 +211,56 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [x] Estado `playing`/item atual persistem na sala (`rooms.playback_status`/`current_item_id`, com trigger de invariante).
 - [x] Não-host não controla: `set_playback` devolve `false` e `rotate_player_token` não devolve token (provado no smoke e no smoke de participante).
 
-### 3.8 Segurança / LGPD / NFR (Fase 8)
+### 3.8 Roteiro de teste manual — Fase 6/7 (TV + celular)
+
+> Esta é a parte que **ninguém automatizou ainda**: o player real do YouTube num navegador de TV nunca rodou. O smoke garante o contrato do banco; o que falta é o browser.
+
+**Antes de começar**
+
+1. `npm run seed` **primeiro**. O seed recria as salas, e `rooms.player_token` é sorteado no insert — **qualquer link copiado antes do seed está morto** (a tela mostra "link não serve mais", que é o comportamento esperado, não bug).
+2. Entre como host (`dono@exemplo.com` / `senha123`, ou o login de dev) e abra `/salas/KARAOKE`.
+3. No card **"Player da TV"** (só host), clique em **"Abrir player na TV"** ou **"Copiar link"**. O link é `/player/KARAOKE?token=…` — token por sala, o mesmo link serve para quantas TVs quiserem.
+4. Aprovete pelo menos **duas** músicas (o player só toca o que está `approved`), senão a TV fica no QR.
+
+**Na TV**
+
+- [ ] Abre sem login e sem erro de página; o vídeo ocupa a tela **sem nada por cima** (restrição de TOS).
+- [ ] Na primeira vez aparece **"Toque para começar"** — é o autoplay com som sendo bloqueado, esperado em TV/celular.
+- [ ] Toca a primeira aprovada e a faixa mostra "tocando agora" com **quem pediu**.
+- [ ] A próxima música fica destacada logo abaixo.
+- [ ] Ao acabar a faixa, **avança sozinha** para a próxima aprovada (não precisa tocar em nada).
+- [ ] Chega na última e a sala fica parada (sem item tocando) em vez de recarregar a página.
+- [ ] Deixa a TV ligada alguns minutos: o host mexendo no celular reflete **sem recarregar** a página (broadcast), e um celular com a tela apagada não para a TV (poll de 5s).
+
+**No celular do host (com a TV aberta)**
+
+- [ ] Pausar → a TV para; Retomar → **continua de onde parou** (o player do YouTube guarda a posição).
+- [ ] Pular → a atual vira "pulada" e a próxima entra.
+- [ ] Parar → a sala para; "Tocar" de novo entra na próxima aprovada que sobrou.
+- [ ] Aprovar uma música nova pelo painel → ela aparece na TV em até ~5s (é o poll; o broadcast ainda não cobre `queueUpdated`).
+- [ ] Reordenar a fila → a TV reflete em até ~5s (mesma razão).
+- [ ] "Gerar novo link" → o link velho passa a mostrar aviso, e o novo funciona.
+- [ ] participante no celular: **não** vê o card "Player da TV".
+
+**Cuidados com o smoke** (e por que ele demora)
+
+Cada execução é um round-trip ao Management API contra um banco cujo estado não é previsível, e o smoke mexe nos dados de verdade. Planeje a sequência inteira antes de rodar (quantos itens, o que cada passo deixa para o próximo) — o `DO` inteiro aborta no primeiro passo que levanta exceção, então um erro no meio faz o relatório inteiro sumir e custa um `seed` + uma aplicação para cada ajuste.
+
+**Cuidados com o smoke**
+
+`scripts/smoke-playback.sql` **mexe nos dados de verdade**: cria itens "Smoke 1..3" com vídeo falso, marca itens como `played`/`skipped` e apaga um. Rode `npm run seed` antes (ele precisa de uma sala com itens) e **de novo depois**. Para ver o relatório inteiro: `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000` (o segundo argumento é o limite de caracteres; o padrão 2000 corta o JSON).
+
+**Limitações conhecidas (não são bug do teste manual)**
+
+| Comportamento | Por quê |
+|---|---|
+| TV recarrega enquanto está **pausada** → música volta do zero | a âncora de tempo é zerada no pause de propósito (decisão P6 da migration `00027`); o cronômetro de verdade é da Fase 13 |
+| Não pré-carrega a próxima faixa | fora do escopo entregue; pode dar um piscar preto na virada |
+| Fila/reordenação chegam por poll de 5s, não por push | o canal do player cobre só `playback_status` |
+| Uma TV mostrando aviso de link invalidado | é o token rotacionado; pegue o link novo no card do host |
+| Vídeo que o YouTube não deixa embutir | erro 101/150 do player; a TV mostra o aviso de autoplay, mas vídeo bloqueado para embedding é caso do conteúdo da música |
+
+### 3.9 Segurança / LGPD / NFR (Fase 8)
 
 - [ ] RLS: participante aprovado de sala A **não** lê a fila da sala B (comprovar via API direta).
 - [ ] Ações de host rejeitadas no backend quando chamadas por não-host.

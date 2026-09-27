@@ -16,7 +16,15 @@
 --      aprovação é um UPDATE depois.
 --
 -- Requer o seed: `npm run seed` antes (a sala precisa ter itens) e de novo
--- depois, para devolver o estado de dev.
+-- depois, para devolver o estado de dev. Rodar: `npm run seed` ->
+-- `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000` ->
+-- `npm run seed`.
+--
+-- Custo deste arquivo: cada execução é um round-trip ao Management API contra
+-- um banco cujo estado NÃO é previsível, e o smoke mexe nos dados — então
+-- planeje a sequência inteira (quantos itens, o que cada passo deixa para o
+-- próximo) antes de rodar, senão cada rodada de adjustment custa um seed + uma
+-- aplicação. As duas vezes que isso aconteceu estão comentadas no topo.
 create temporary table playback_smoke (
   passo text primary key,
   detalhe jsonb not null

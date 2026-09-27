@@ -2,7 +2,9 @@
  * Aplica um arquivo de migração SQL no banco remoto via Management API
  * (POST /v1/projects/{ref}/database/query — Status 201 `[]` em DDL).
  *
- * Uso: npm run db:apply -- supabase/migrations/<arquivo>.sql
+ * Uso: npm run db:apply -- supabase/migrations/<arquivo>.sql [max_chars]
+ * O segundo argumento é o limite de caracteres da resposta (padrão 2000; use um
+ * número alto para relatórios grandes, como scripts/smoke-playback.sql).
  * Requer SUPABASE_ACCESS_TOKEN e NEXT_PUBLIC_SUPABASE_URL em .env.local.
  */
 import fs from "node:fs";
@@ -47,6 +49,7 @@ if (!fs.existsSync(filePath)) {
   process.exit(1);
 }
 const sql = fs.readFileSync(filePath, "utf8");
+const maxChars = Number(process.argv[3]) || 2000;
 
 console.log(`Aplicando ${fileArg} em ${ref}...`);
 const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
@@ -61,7 +64,7 @@ const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/qu
 const text = await res.text();
 if (res.ok) {
   console.log(`OK (${res.status})`);
-  if (text && text !== "[]") console.log(text.slice(0, 2000));
+  if (text && text !== "[]") console.log(text.slice(0, maxChars));
 } else {
   console.error(`FALHA (${res.status}):`);
   console.error(text);

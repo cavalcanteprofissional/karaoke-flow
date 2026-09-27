@@ -32,7 +32,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] **Fase 3.5 (Etapa 2):** regras de domínio de bar/mesa/karaokê (parse/extração/rotas de QR, token de entrada) extraídas em `src/lib/bars/qr.ts` e cobertas em unit (**16 testes**); smoke HTTP do fluxo de entrada (anon/autenticado, 1 karaokê) validado manualmente. **Ainda falta:** testes de componentes das telas novas (`/entrar` reescrito, `CreateBarDialog`, dashboard "meus bares").
 - [x] **Fase 4 (Etapa 3):** **MSW** adicionado e mockando a YouTube Data API nas provas de rota — serviço de busca (parse de itens, cadeia de credenciais host→app→dev, cache miss/hit, rate-limit, geo gate, credencial fora do payload) e `addSongToQueueAction` (matriz de geolocalização unit). **Fica para a Fase 5:** unit da store de fila e smoke HTTP da rota `/salas/[codigo]/buscar`.
 - [x] **Fase 5:** testes de componentes do painel de aprovação/reorder da fila e do modal `requireSongConfirmation`; unit das actions de reorder/controle do player (fila vazia/pausada, dedupe) — painel, modal, reorder e troca cobertos em 26/09 (**266 testes**); o unit do controle do player (fila vazia/pausada, dedupe) fica para a Fase 7, junto das actions de play/pause/skip.
-- [ ] **Fase 6:** smoke HTTP da rota pública `/player/[codigo]` (sem sessão, modo quiosque).
+- [x] **Fase 6:** smoke HTTP da rota pública `/player/[codigo]` (sem sessão, modo quiosque) — contrato do banco coberto por `scripts/smoke-playback.sql` (20 passos, inclui token inválido, sala encerrada e rotação de token); o smoke HTTP de verdade fica para o e2e com Playwright.
 - [ ] **E2E transversal (Playwright):** instalar Playwright quando o MVP estiver estável (pós-Fase 6) e automatizar os fluxos principais — Tela 1 (aceite LGPD) → `/login` → dashboard à proteger, entrada em karaokê por código/QR, participante sem geo bloqueado de adicionar (e host não), player aberto em tela externa. Transformar o e2e RLS manual da Fase 3 em script replayável (`scripts/`).
 - [ ] **Rastreabilidade:** marcar no CHANGELOG quando MSW/Playwright entrarem; atualizar `TESTING.md` §2 ao longo das fases.
 
@@ -261,29 +261,35 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] Reordenar e remover itens (host) — mover ⬆/⬇ **e drag-and-drop com `@dnd-kit` (ambos, decidido em 26/09)** e gravação em **uma RPC atômica `reorder_queue`** (`security definer`, `row_number()` reescrevendo `position`; nada de N updates client-side) — Bloco C **entregue em 26/09**: migration `20260926000025` (advisory lock na chave de `next_queue_position` + contrato "fila inteira"), `reorderQueueAction`, helpers puros `composeQueueOrder`/`moveQueueItem`/`reorderSchema`, `DndContext`/`SortableContext` só nas aprovadas (handle `⠿`, `PointerSensor` com `distance: 8`, `KeyboardSensor`, `restrictToVerticalAxis`) e ordem otimista com rollback + refetch; remover já tinha vindo no Bloco A
 - [x] **Trocar a própria música mantendo a posição na fila** (RPC `replace_queue_song` — dashboard caso A; regras fechadas com o PO em `docs/flows/fluxos-do-sistema.md` §5/§5.2: quem troca = autor+host; status preservado; estados `pending`+`approved`) — Bloco D **entregue em 26/09**: migration `20260926000026` (UPDATE in place das colunas de conteúdo, `position`/`status` intocados, erro "esta música já saiu da fila" fora de `pending`/`approved`), `replaceQueueSongAction`, regra pura `buildQueueSongReplacement`, botão ↻ no `QueueList` (autor da música ou host) e `/salas/[codigo]/buscar?trocar=<itemId>` reutilizando `SongSearch`/`SongConfirmDialog` com confirmação **sempre** exigida no modo troca
 - [x] Feedback visual claro por estado: `pendente de aprovação` vs `na fila` vs `tocando agora` (+ "quem pediu") — Bloco E **entregue em 26/09** (`queueStatusView` + badge por estado, destaque no item tocando, linha "4:05 · pedido por Ana" com "você" no próprio pedido; nome via `profiles_public` em 2ª query)
-- [ ] Indicador "quem está cantando agora" e "próximo da fila" sempre visíveis, mesmo rolando — depende de playback (Fase 6/7)
+- [x] Indicador "quem está cantando agora" e "próximo da fila" sempre visíveis, mesmo rolando — no quiosque (Fase 6/7); falta no painel do host, que ainda mostra a fila em lista
 
 ## Fase 6 — Player device (tela `/player/[codigo]`)
 
-- [ ] Rota pública (`/player/[codigo]` — código do **karaokê**) **sem login**, para navegador em modo quiosque (TV Box/Fire Stick/notebook via HDMI)
-- [ ] Integração YouTube IFrame Player API (lib/componente player)
-- [ ] Destrave de autoplay: primeira reprodução exige toque inicial (restrição de navegadores mobile)
-- [ ] Consumir eventos Realtime escopados por `roomId` (`play`, `pause`, `skip`, `queueUpdated`, `reorder`) manipulando o objeto do player já carregado, sem reload de página
+> **Entregue em 27/09 (vertical slice)**: rota pública com token de capacidade, player no estado do banco (`rooms.playback_status`/`current_item_id`/`current_item_started_at`/`player_token`), quiosque com auto-avanço, broadcast `player-{CODE}` + poll de 5s de fallback e o painel do host. Migrations `00027`/`00028` aplicadas no remoto e `scripts/smoke-playback.sql` verde nos 20 passos. **Ficou de fora de propósito**: pré-carregar o próximo vídeo, eventos `queueUpdated`/`reorder` no player (a TV relê por poll), e Playwright (continua adiado).
+
+- [x] Rota pública (`/player/[codigo]` — código do **karaokê**) **sem login**, para navegador em modo quiosque (TV Box/Fire Stick/notebook via HDMI)
+- [x] Integração YouTube IFrame Player API (lib/componente player)
+- [x] Destrave de autoplay: primeira reprodução exige toque inicial (restrição de navegadores mobile)
+- [x] Consumir eventos Realtime escopados por `roomId` (`play`, `pause`, `skip`, `queueUpdated`, `reorder`) manipulando o objeto do player já carregado, sem reload de página — `play`/`pause`/`skip`/`stop` por broadcast; `queueUpdated`/`reorder` caem no poll
 - [ ] Pré-carregar o próximo vídeo enquanto o atual toca (transições sem tela preta/loading)
-- [ ] UI kiosk: vídeo ocupando a maior parte da tela, **sem overlays sobre o player** (restrição TOS YouTube)
-- [ ] Faixa lateral/inferior fixa com a fila: fonte grande/legível a distância, posição + título + quem pediu (sem thumbnails pequenas)
-- [ ] Destaque visual forte para a "próxima música"
-- [ ] Estado vazio: QR code grande do karaokê + "escaneie para adicionar uma música" (CTA em vez de tela em branco)
-- [ ] Estabilidade de sessão por horas: reconexão do canal Realtime, sem exigir refresh manual
-- [ ] Latência alvo < 2s entre ação no controller e reflexo na tela
+- [x] UI kiosk: vídeo ocupando a maior parte da tela, **sem overlays sobre o player** (restrição TOS YouTube)
+- [x] Faixa lateral/inferior fixa com a fila: fonte grande/legível a distância, posição + título + quem pediu (sem thumbnails pequenas)
+- [x] Destaque visual forte para a "próxima música"
+- [x] Estado vazio: QR code grande do karaokê + "escaneie para adicionar uma música" (CTA em vez de tela em branco)
+- [x] Estabilidade de sessão por horas: reconexão do canal Realtime, sem exigir refresh manual — poll de 5s cobre canal caído
+- [x] Latência alvo < 2s entre ação no controller e reflexo na tela (broadcast; o poll é só o piso)
 - [ ] Instalar/configurar Playwright (e2e) — player kiosk com YouTube IFrame Player API mockada (estratégia em `TESTING.md`)
+- [x] Smoke HTTP da rota pública `/player/[codigo]` (sem sessão, modo quiosque) — o que dá para automatizar sem browser é o contrato do banco (`scripts/smoke-playback.sql`); o HTTP fica para o e2e
 
 ## Fase 7 — Controle de playback (host, pelo celular)
 
-- [ ] Controles play/pause/skip/next no celular do host
-- [ ] Publicar eventos no canal `room:{id}` (play, pause, skip, next, reorder)
-- [ ] Sincronizar estado `playing`/item atual na fila (persistido na `room`/`queue_items`)
-- [ ] Controle do host sem tocar no dispositivo da TV
+> **Entregue em 27/09 junto com a Fase 6** (o estado do player é o mesmo dado, então os dois blocos nasceram juntos). Autorização no banco (`set_playback` exige `auth.uid() = rooms.host_id`), não na UI.
+
+- [x] Controles play/pause/skip/next no celular do host — card "Player da TV" em `/salas/[codigo]`, só para o host
+- [x] Publicar eventos no canal `room:{id}` (play, pause, skip, next, reorder) — `player-{CODE}` com o evento `playback-changed`; `reorder` fica para quando o canal da fila existir
+- [x] Sincronizar estado `playing`/item atual na fila (persistido na `room`/`queue_items`) — `rooms.playback_status` + `current_item_id`, invariante garantida por trigger
+- [x] Controle do host sem tocar no dispositivo da TV
+- [x] Link da TV com token de capacidade + "gerar novo link" (rotaciona e invalida o link antigo)
 
 ## Fase 8 — Não-funcionais, segurança, LGPD e polimento
 

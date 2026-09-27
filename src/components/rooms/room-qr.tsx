@@ -10,15 +10,25 @@ type RoomQrProps = {
   value: string;
   alt?: string;
   fileName?: string;
+  /** Lado da imagem em pixels (a tela do player usa um QR grande). */
+  size?: number;
+  /** O quiosque da TV não mostra download. */
+  showDownload?: boolean;
 };
 
-export function RoomQr({ value, alt = "QR da sala", fileName = "qr-sala.png" }: RoomQrProps) {
+export function RoomQr({
+  value,
+  alt = "QR da sala",
+  fileName = "qr-sala.png",
+  size = 192,
+  showDownload = true,
+}: RoomQrProps) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     QRCode.toDataURL(value, {
-      width: 640,
+      width: size * 2,
       margin: 1,
       errorCorrectionLevel: "M",
     })
@@ -31,9 +41,10 @@ export function RoomQr({ value, alt = "QR da sala", fileName = "qr-sala.png" }: 
     return () => {
       active = false;
     };
-  }, [value]);
+  }, [value, size]);
 
-  if (!dataUrl) return <Skeleton className="size-48 rounded-xl" />;
+  if (!dataUrl)
+    return <Skeleton className="rounded-xl" style={{ width: size, height: size }} />;
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -41,18 +52,21 @@ export function RoomQr({ value, alt = "QR da sala", fileName = "qr-sala.png" }: 
       <img
         src={dataUrl}
         alt={alt}
-        className="size-48 rounded-xl bg-white p-2"
-        width={192}
-        height={192}
+        className="rounded-xl bg-white p-2"
+        style={{ width: size, height: size }}
+        width={size}
+        height={size}
       />
-      <a
-        href={dataUrl}
-        download={fileName}
-        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2"
-      >
-        <Download className="size-3.5" />
-        Baixar QR
-      </a>
+      {showDownload && (
+        <a
+          href={dataUrl}
+          download={fileName}
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2"
+        >
+          <Download className="size-3.5" />
+          Baixar QR
+        </a>
+      )}
     </div>
   );
 }

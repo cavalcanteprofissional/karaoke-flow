@@ -7,6 +7,7 @@ import { MesaPicker } from "@/components/rooms/mesa-picker";
 import { PendingEntries } from "@/components/rooms/pending-entries";
 import type { PendingEntry } from "@/components/rooms/pending-entries";
 import { QueueList } from "@/components/rooms/queue-list";
+import { PlaybackControls } from "@/components/rooms/playback-controls";
 import type { QueueItem } from "@/components/rooms/queue-list";
 import { QUEUE_VISIBLE_STATUSES } from "@/lib/rooms/queue";
 import { RoomQr } from "@/components/rooms/room-qr";
@@ -337,6 +338,18 @@ export default async function RoomPage({ params }: RoomPageProps) {
 
       {!isHost && needsMesa && bar && (
         <MesaPicker roomId={room.id} quantidadeMesas={bar.quantidade_mesas} />
+      )}
+
+      {isHost && (
+        <PlaybackControls
+          roomId={room.id}
+          roomCode={code}
+          playerToken={room.player_token}
+          status={room.playback_status}
+          hasCurrent={Boolean(room.current_item_id)}
+          queueLength={queueInitial.filter((item) => item.status === "approved").length}
+          isHost={isHost}
+        />
       )}
 
       {(isHost ? true : !isPendingMember && !needsMesa) && (

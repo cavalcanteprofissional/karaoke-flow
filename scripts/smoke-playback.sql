@@ -1,0 +1,300 @@
+-- Smoke de transição do playback (Fase 6/7) contra o banco remoto.
+--
+-- Roda como postgres e simula a sessão com `set_config('request.jwt.claim.sub')`
+-- para exercitar `auth.uid()`: assim o caminho do HOST (set_playback,
+-- rotate_player_token) e o do PLAYER (token) são testados no mesmo lugar, em
+-- ordem, num único statement final.
+--
+-- Duas armadilhas que o próprio smoke pagou (e que valem para qualquer
+-- verificação por jsonb aqui dentro):
+--   1. a ordem de avaliação dos argumentos de `jsonb_build_object` não é
+--      garantida — ler a sala dentro do mesmo comando que chama a RPC devolve o
+--      valor ANTES da chamada. Por isso toda RPC vai para uma variável antes
+--      do insert no relatório;
+--   2. `queue_items_initial_status` decide o status no INSERT, então um item
+--      criado já com 'approved' volta como 'pending' em sala manual — a
+--      aprovação é um UPDATE depois.
+--
+-- Requer o seed: `npm run seed` antes (a sala precisa ter itens) e de novo
+-- depois, para devolver o estado de dev.
+create temporary table playback_smoke (
+  passo text primary key,
+  detalhe jsonb not null
+) on commit drop;
+
+do $$
+declare
+  v_room_id uuid;
+  v_code text;
+  v_token uuid;
+  v_host uuid;
+  v_novo uuid;
+  v_a uuid;
+  v_b uuid;
+  v_out jsonb;
+  v_ok boolean;
+  v_playing integer;
+begin
+  -- Sala com fila (o seed dá created_at igual para as duas salas, então
+  -- "primeira por created_at" seria sorteio).
+  select r.id, r.code, r.player_token, r.host_id
+  into v_room_id, v_code, v_token, v_host
+  from public.rooms r
+  where exists (
+    select 1 from public.queue_items q
+    where q.room_id = r.id and q.status in ('approved', 'pending')
+  )
+  order by r.code
+  limit 1;
+
+  perform set_config('request.jwt.claim.sub', v_host::text, true);
+
+  -- Fila determinística para o roteiro inteiro: 5 itens aprovados (o seed traz
+  -- 1 aprovado + 1 pending; o resto é criado aqui para ter material depois
+  -- dos advances).
+  insert into public.queue_items (
+    room_id, added_by_user_id, youtube_video_id, title, duration_seconds, position
+  )
+  select v_room_id, donor.added_by_user_id, 'smoke' || g, 'Smoke ' || g, 180, 10 + g
+  from generate_series(
+    1,
+    greatest(0, 5 - (select count(*) from public.queue_items where room_id = v_room_id))
+  ) as g,
+  lateral (
+    select added_by_user_id from public.queue_items
+    where room_id = v_room_id
+    order by position
+    limit 1
+  ) as donor;
+
+  update public.queue_items
+  set status = 'approved'
+  where room_id = v_room_id and status in ('pending', 'approved');
+
+  insert into playback_smoke values
+    ('00 preparo', jsonb_build_object(
+      'sala', v_code,
+      'fila', (
+        select jsonb_agg(jsonb_build_object('pos', position, 'status', status))
+        from (
+          select position, status from public.queue_items
+          where room_id = v_room_id order by position
+        ) as fila
+      )
+    ));
+
+  -- 1. token errado não abre nada (nem leitura nem avanço)
+  insert into playback_smoke values
+    ('01 token invalido', jsonb_build_object(
+      'leitura', public.get_player_state(v_code, gen_random_uuid()),
+      'avanco', public.claim_next_song(v_code, gen_random_uuid(), null)
+    ));
+
+  -- 2. sala inexistente
+  insert into playback_smoke values
+    ('02 sala inexistente', public.get_player_state('ZZZZZZ', gen_random_uuid()));
+
+  -- 3. leitura com o token certo: só o que a TV pode mostrar
+  insert into playback_smoke values
+    ('03 leitura publica', jsonb_build_object(
+      'sem_uuid_de_usuario', not (
+        public.get_player_state(v_code, v_token)::text like '%added_by%'
+      ),
+      'tem_fila', jsonb_array_length(public.get_player_state(v_code, v_token) -> 'queue'),
+      'estado', public.get_player_state(v_code, v_token) -> 'room',
+      'primeiro_da_fila', public.get_player_state(v_code, v_token) -> 'queue' -> 0
+    ));
+
+  -- 4. boot: sala ociosa com fila aprovada entra a primeira
+  v_out := public.claim_next_song(v_code, v_token, null);
+  v_a := (v_out -> 'item' ->> 'id')::uuid;
+  insert into playback_smoke values
+    ('04 boot pega a fila', v_out || jsonb_build_object(
+      'sala_aponta_para_o_item', (
+        select current_item_id = v_a from public.rooms where id = v_room_id
+      ),
+      'item_esta_playing', (
+        select status = 'playing' from public.queue_items where id = v_a
+      )
+    ));
+
+  -- 5. terminou A: A vira played e B entra
+  v_out := public.claim_next_song(v_code, v_token, v_a);
+  v_b := (v_out -> 'item' ->> 'id')::uuid;
+  insert into playback_smoke values
+    ('05 avanco apos o fim', v_out || jsonb_build_object(
+      'anterior_virou_played', (
+        select status = 'played' from public.queue_items where id = v_a
+      ),
+      'trocou_de_item', v_b is distinct from v_a
+    ));
+
+  -- 6. claim repetido com o MESMO item terminado é no-op (migration 00028)
+  v_out := public.claim_next_song(v_code, v_token, v_a);
+  select count(*) into v_playing
+  from public.queue_items where room_id = v_room_id and status = 'playing';
+  insert into playback_smoke values
+    ('06 claim repetido e no-op', v_out || jsonb_build_object(
+      'tocando', v_playing,
+      'continua_no_b', (v_out -> 'item' ->> 'id')::uuid = v_b
+    ));
+
+  -- 7. set_playback sem host => false
+  perform set_config('request.jwt.claim.sub', gen_random_uuid()::text, true);
+  v_ok := public.set_playback(v_room_id, 'pause');
+  insert into playback_smoke values
+    ('07 participante nao controla', jsonb_build_object('resultado', v_ok));
+
+  -- 8. host segura (a âncora some: paused não acumula tempo)
+  perform set_config('request.jwt.claim.sub', v_host::text, true);
+  v_ok := public.set_playback(v_room_id, 'pause');
+  insert into playback_smoke values
+    ('08 host pausa', jsonb_build_object(
+      'ok', v_ok,
+      'playback', (select playback_status from public.rooms where id = v_room_id),
+      'ancora_zerada', (
+        select current_item_started_at is null from public.rooms where id = v_room_id
+      ),
+      'item_continua_playing', (
+        select status = 'playing' from public.queue_items where id = v_b
+      )
+    ));
+
+  -- 9. player não pula enquanto o host segura
+  v_out := public.claim_next_song(v_code, v_token, v_b);
+  insert into playback_smoke values
+    ('09 player nao pula em pausa', v_out);
+
+  -- 10. host retoma
+  v_ok := public.set_playback(v_room_id, 'play');
+  insert into playback_smoke values
+    ('10 host retoma', jsonb_build_object(
+      'ok', v_ok,
+      'playback', (select playback_status from public.rooms where id = v_room_id),
+      'ancora_volta', (
+        select current_item_started_at is not null from public.rooms where id = v_room_id
+      )
+    ));
+
+  -- 11. comando inválido
+  begin
+    v_ok := public.set_playback(v_room_id, 'rewind');
+    insert into playback_smoke values
+      ('11 comando invalido', jsonb_build_object('resultado', v_ok, 'obs', 'deveria ter levantado erro'));
+  exception when others then
+    insert into playback_smoke values
+      ('11 comando invalido', jsonb_build_object('erro', sqlerrm));
+  end;
+
+  -- 12. host pula: a atual vai para skipped e a próxima entra
+  v_b := (select current_item_id from public.rooms where id = v_room_id);
+  begin
+    v_ok := public.set_playback(v_room_id, 'skip');
+    insert into playback_smoke values
+      ('12 host pula', jsonb_build_object(
+        'ok', v_ok,
+        'anterior_virou_skipped', (
+          select status = 'skipped' from public.queue_items where id = v_b
+        ),
+        'playback', (select playback_status from public.rooms where id = v_room_id),
+        'tocando', (
+          select count(*) from public.queue_items
+          where room_id = v_room_id and status = 'playing'
+        )
+      ));
+  exception when others then
+    insert into playback_smoke values
+      ('12 host pula', jsonb_build_object('erro', sqlerrm));
+  end;
+
+  -- 13. host para: sala ociosa, sem item atual
+  begin
+    v_ok := public.set_playback(v_room_id, 'stop');
+    insert into playback_smoke values
+      ('13 host para', jsonb_build_object(
+        'ok', v_ok,
+        'playback', (select playback_status from public.rooms where id = v_room_id),
+        'current_item_id', (
+          select case when current_item_id is null then 'null' else 'pointer' end
+          from public.rooms where id = v_room_id
+        )
+      ));
+  exception when others then
+    insert into playback_smoke values
+      ('13 host para', jsonb_build_object('erro', sqlerrm));
+  end;
+
+  -- 14. depois do stop, play entra na próxima aprovada (o stop não esvazia a
+  -- fila, só desliga a sala)
+  begin
+    v_ok := public.set_playback(v_room_id, 'play');
+    insert into playback_smoke values
+      ('14 play reentra na fila', jsonb_build_object(
+        'ok', v_ok,
+        'playback', (select playback_status from public.rooms where id = v_room_id),
+        'tocando', (
+          select count(*) from public.queue_items
+          where room_id = v_room_id and status = 'playing'
+        )
+      ));
+  exception when others then
+    insert into playback_smoke values
+      ('14 play reentra na fila', jsonb_build_object('erro', sqlerrm));
+  end;
+
+  -- 15. rotacionar o token mata o link antigo
+  v_novo := public.rotate_player_token(v_room_id);
+  insert into playback_smoke values
+    ('15 token rotacionado', jsonb_build_object(
+      'token_novo', v_novo is not null,
+      'token_antigo_morreu', public.get_player_state(v_code, v_token) ->> 'ok' = 'false',
+      'token_novo_funca', public.get_player_state(v_code, v_novo) ->> 'ok' = 'true'
+    ));
+  update public.rooms set player_token = v_token where id = v_room_id;
+
+  -- 16. participante não rotaciona
+  perform set_config('request.jwt.claim.sub', gen_random_uuid()::text, true);
+  v_novo := public.rotate_player_token(v_room_id);
+  insert into playback_smoke values
+    ('16 participante nao rotaciona', jsonb_build_object('resultado', v_novo));
+
+  -- 17. o item que está tocando sair da fila deixa a sala ociosa
+  -- (é o caminho real do app: remover da fila é DELETE, e o
+  -- on delete set null da FK passa pelo trigger de rooms)
+  perform set_config('request.jwt.claim.sub', v_host::text, true);
+  v_b := (select current_item_id from public.rooms where id = v_room_id);
+  delete from public.queue_items where id = v_b;
+  insert into playback_smoke values
+    ('17 item saiu da fila', jsonb_build_object(
+      'sala_aponta_para_algo', (
+        select current_item_id is not null from public.rooms where id = v_room_id
+      ),
+      'playback', (select playback_status from public.rooms where id = v_room_id),
+      'ancora_zerada', (
+        select current_item_started_at is null from public.rooms where id = v_room_id
+      )
+    ));
+
+  -- 18. fila sem nada aprovado => play recusa
+  update public.queue_items
+  set status = 'skipped'
+  where room_id = v_room_id and status in ('approved', 'pending');
+  begin
+    v_ok := public.set_playback(v_room_id, 'play');
+    insert into playback_smoke values
+      ('18 tocar sem fila', jsonb_build_object('ok', v_ok, 'obs', 'deveria ter levantado erro'));
+  exception when others then
+    insert into playback_smoke values
+      ('18 tocar sem fila', jsonb_build_object('erro', sqlerrm));
+  end;
+
+  -- 19. sala encerrada não deixa o player avançar
+  update public.rooms set status = 'closed' where id = v_room_id;
+  v_out := public.claim_next_song(v_code, v_token, null);
+  insert into playback_smoke values ('19 sala encerrada', v_out);
+  update public.rooms set status = 'active' where id = v_room_id;
+end;
+$$;
+
+select jsonb_object_agg(passo, detalhe order by passo) as relatorio
+from playback_smoke;

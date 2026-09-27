@@ -353,30 +353,51 @@ stateDiagram-v2
 
 > A operação de **trocar música** (ver §5) mantém o item no mesmo estado de status em que está (com re-regra opcional conforme decisão de produto) — não cria um estado novo.
 
+> **Quem promove `approved → playing` agora (entregue em 27/09):** a RPC `claim_next_song`, chamada pelo **player**, e não pelo painel. Ela é a única porta de entrada em `playing` (o painel do host não tem "tocar"), garante a **mesma chave de advisory lock** da fila e marca o item anterior como `played` **só se o player mandar o id dele** (ver §4.1).
+
 ---
 
-## 4. Player device (tela `/player/[codigoDaSala]`)
+## 4. Player device (tela `/player/[codigoDaSala]`) — entregue em 2026-09-27 (Fases 6 e 7)
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor T as Tela kiosk (TV/Projetor)
-    participant P as /player/[code] (público, sem login)
+    participant P as /player/[code]?token= (público, sem login)
     participant YT as YouTube IFrame Player
-    participant RT as Realtime (canal room:{id})
-    participant C as Controller (celular host/participante)
+    participant RT as Realtime (canal player:{CODE})
+    participant C as Controller (celular do host)
 
-    T->>P: abre a URL pública
-    P->>P: carrega a sala (bypass RLS via código)
+    T->>P: abre o link com o token de capacidade
+    P->>P: get_player_state(code, token) — sem sessão, token no lugar dela
     P->>YT: carrega o player (não-embutido, sem overlays)
     T->>T: 1º toque p/ destravar autoplay
-    P->>RT: subscribe room:{id}
-    C-->>RT: publica play/pause/skip/reorder
-    RT-->>P: evento → manipula player carregado (sem reload)
-    P-->>C: estado no banco persiste (queue_items/status)
+    P->>RT: subscribe player:{CODE} (+ poll de 5s de rede de segurança)
+    C->>C: set_playback(play|pause|skip|stop) — banco exige host
+    C-->>RT: broadcast playback-changed
+    RT-->>P: evento → relê o estado (sem reload)
+    YT-->>P: ended → claim_next_song(code, token, id-do-item-que-acabou)
 ```
 
-> Latência alvo < 2s entre ação no controller e reflexo na tela (Fase 6).
+> Latência alvo < 2s entre ação no controller e reflexo na tela: o caminho rápido é o broadcast; o poll de 5s existe para canal caído (TV ligada o dia todo).
+
+### 4.1 A corrida do avanço automático (e a migration que a fechou)
+
+O player descobre que a música acabou de duas formas ao mesmo tempo: o `onStateChange(ENDED)` do YouTube e o poll de 5s que acabou de passar. Se as duas chamassem `claim_next_song` com a sala "ociosa", a segunda chamada veria a sala ocupada e simplesmente devolveria o estado novo — mas como o player **avançava** ao ser chamado, uma delas pulava a música que estava tocando.
+
+A correção é o item **que terminou** viajar no pedido: `claim_next_song(p_room_code, p_token, p_finished_item_id)`. O banco só terminaliza (`playing → played`) se esse id ainda for o `rooms.current_item_id`; se for outro, a chamada é **no-op** e devolve `already_advanced: true` com o estado atual. O `onEnded` do client é o único que manda o id, então o poll (que manda `null`) nunca atrapalha.
+
+### 4.2 O que é estado do playback e onde mora
+
+| Dado | Onde | Por quê |
+|---|---|---|
+| Tocando agora / pausado / parado | `rooms.playback_status` | O painel do host e a TV leem o mesmo dado; a UI não adivinha pelo `queue_items` |
+| Item atual | `rooms.current_item_id` (FK `on delete set null`) | Referência única para "tocando agora"; remover o item da fila esvazia a sala sozinha |
+| Âncora de tempo | `rooms.current_item_started_at` | Base da Fase 13 (tempo de música, alarme, minutagem) |
+| Link da TV | `rooms.player_token` | Token de capacidade: sem ele a rota pública não abre nada, e "gerar novo link" invalida a TV velha |
+| Invariante | trigger `rooms_sync_playback` | `current_item_id` só aponta para item `playing`; sem item, sala `idle` e âncora nula |
+
+> Fora do escopo entregue: pré-carregar o próximo vídeo e os eventos `queueUpdated`/`reorder` no canal do player (a TV relê por poll). Ver `TODO.md`.
 
 ---
 

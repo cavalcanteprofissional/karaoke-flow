@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-26):** suite com **266 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — o **roundtrip authorize→callback** com 4 provas do estado, e a **entrada com aprovação**: `src/components/bars/entry-approval-wait.test.tsx` (11) + `src/components/bars/pending-entry-requests.test.tsx` (5) e `src/components/rooms/presence-gate-info.test.tsx` (14) e a **fila** (regras de aprovação/reordenação/troca em `src/lib/rooms/queue.test.ts` +50, `queue-list.test.tsx` 23, `song-search.test.tsx` 6 e `song-confirm-dialog.test.tsx` 9)). Playwright (e2e) entra na Fase 6. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-27):** suite com **308 testes** (rooms/utils + `deriveRoomCodeFromName`, `src/lib/bars/qr.test.ts` 21, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 31, `queue` com a matriz de presença, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **18 provas via MSW** — incl. credencial OAuth via **Bearer** host/app — o **roundtrip authorize→callback** com 4 provas do estado, e a **entrada com aprovação**: `src/components/bars/entry-approval-wait.test.tsx` (11) + `src/components/bars/pending-entry-requests.test.tsx` (5) e `src/components/rooms/presence-gate-info.test.tsx` (14) e a **fila** (regras de aprovação/reordenação/troca em `src/lib/rooms/queue.test.ts` +50, `queue-list.test.tsx` 23, `song-search.test.tsx` 6 e `song-confirm-dialog.test.tsx` 9), e o **player** (`src/lib/rooms/playback.test.ts` 20 de regras puras, `player-kiosk.test.tsx` 10 com a **YouTube IFrame Player API mockada** disparando `onStateChange`/`onError`, e `playback-controls.test.tsx` 12 do painel do host)). O contrato do playback no banco remoto tem smoke próprio em `scripts/smoke-playback.sql`. Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -193,19 +193,23 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 
 ### 3.6 Player device (Fase 6)
 
-- [ ] `/player/[code]` acessível **sem login**.
-- [ ] Primeira reprodução exige um toque (autoplay).
-- [ ] Eventos `play/pause/skip/queueUpdated/reorder` refletem na tela sem reload (< 2s).
-- [ ] Pré-carregamento do próximo vídeo (transição sem tela preta).
-- [ ] Nenhum overlay sobre o player do YouTube (restrição da TOS).
-- [ ] Fila legível a distância, com destaque na "próxima música".
-- [ ] Estado vazio: QR grande + CTA "escaneie para adicionar uma música".
-- [ ] Sessão estável por horas (reconexão do Realtime automática).
+> **O que dá para automatizar sem browser (entregue):** o contrato do banco, com `scripts/smoke-playback.sql` rodando contra o remoto (20 passos, verde). Ele fixa as regras que o player consome: token inválido não abre nada, sala encerrada não avança, só `approved` entra em `playing`, o player não pula em pausa, o item que sai da fila deixa a sala `idle` e o link antigo morre na rotação. **Rodar:** `npm run seed` → `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000` → `npm run seed` (o smoke mexe nos dados). Os itens de browser ficam para o Playwright.
+
+- [x] `/player/[code]` acessível **sem login** — e **com** token: link sem token ou com token velho mostra aviso, não player.
+- [x] Primeira reprodução exige um toque (autoplay) — botão "Toque para começar" e aviso quando o player trava.
+- [x] Eventos `play/pause/skip/queueUpdated/reorder` refletem na tela sem reload (< 2s) — `play/pause/skip/stop` por broadcast; `queueUpdated/reorder` por poll de 5s.
+- [ ] Pré-carregamento do próximo vídeo (transição sem tela preta) — fora do escopo entregue.
+- [x] Nenhum overlay sobre o player do YouTube (restrição da TOS).
+- [x] Fila legível a distância, com destaque na "próxima música".
+- [x] Estado vazio: QR grande + CTA "escaneie para adicionar uma música".
+- [x] Sessão estável por horas (reconexão do Realtime automática) — o poll cobre canal caído; reconexão fina do canal ainda é do e2e.
+- [ ] Smoke HTTP da rota pública (a página carregando, o `noindex`) — depende do Playwright.
 
 ### 3.7 Controle do host (Fase 7)
 
-- [ ] Play/pause/skip/next do celular refletem na tela.
-- [ ] Estado `playing`/item atual persistem na sala.
+- [x] Play/pause/skip/next do celular refletem na tela (broadcast + poll de rede de segurança).
+- [x] Estado `playing`/item atual persistem na sala (`rooms.playback_status`/`current_item_id`, com trigger de invariante).
+- [x] Não-host não controla: `set_playback` devolve `false` e `rotate_player_token` não devolve token (provado no smoke e no smoke de participante).
 
 ### 3.8 Segurança / LGPD / NFR (Fase 8)
 

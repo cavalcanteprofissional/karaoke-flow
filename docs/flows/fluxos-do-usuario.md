@@ -149,28 +149,39 @@ flowchart TD
 
 ---
 
-## 5. Tela kiosk — do vazio ao show
+## 5. Tela kiosk — do vazio ao show — entregue em 2026-09-27 (Fase 6)
 
 ```mermaid
 flowchart TD
     A["Estado vazio: QR grande + 'escaneie para adicionar'"] --> B["1º participante entra/adiciona (open ou após aprovação)"]
     B --> C["1º toque destrava autoplay (restrição mobile)"]
     C --> D["Toca; fila lateral legível a distância; destaque para 'próxima'"]
-    D --> E["Eventos realtime sem reload: play/pause/skip/reorder"]
-    E --> F["Fim da noite: dono encerra → fila cancelada, participantes expulsos,<br/>tela de encerramento (participantes) / volta ao CTA de QR"]
+    D --> E["Eventos realtime sem reload: play/pause/skip/stop"]
+    E --> E2["Acabou a música → TV avança sozinha (o banco decide se é o item atual)"]
+    E2 --> F["Fim da noite: dono encerra → fila cancelada, participantes expulsos,<br/>tela de encerramento (participantes) / volta ao CTA de QR"]
 ```
+
+> **Quem está cantando, na TV:** a faixa fixa mostra posição, título e quem pediu, com "tocando agora" em destaque e a próxima destacada logo abaixo. Nenhum overlay sobre o vídeo (restrição de TOS do YouTube).
+>
+> **A TV é anonima**: ela abre um link com um **token** (`/player/KARAOKE?token=…`). Sem token — ou com um link já rotacionado — a tela explica que o link não serve mais, em vez de mostrar fila errada. O link fica no card "Player da TV" do painel, com **copiar** e **gerar novo link**.
 
 ---
 
-## 6. Controle de playback (host, pelo celular)
+## 6. Controle de playback (host, pelo celular) — entregue em 2026-09-27 (Fase 7)
 
 ```mermaid
 flowchart LR
-    A["Host no celular (qualquer lugar da casa)"] --> B["Botões play/pause/skip/next"]
-    B --> C["Publica evento no canal room:{id}"]
-    C --> D["Player kiosk reage (vídeo muda/para/pula)"]
-    D --> E["Fila persistida reflete o estado atual (backend)"]
+    A["Host no celular (qualquer lugar da casa)"] --> B["Card 'Player da TV': tocar/pausar/pular/parar"]
+    B --> C["set_playback — o banco exige host, a UI é só conveniência"]
+    C --> D["Broadcast em player:{CODE}"]
+    D --> E["Player kiosk relê o estado e mexe no vídeo carregado (sem reload)"]
+    E --> F["Fila persistida reflete o estado atual (rooms.playback_status + current_item_id)"]
+    B --> G["Gerar novo link → token rotacionado, a TV velha para na hora"]
 ```
+
+> **Quem não é host não vê o card** — e, se chamar a API direto, recebe `false`: a autorização é `auth.uid() = rooms.host_id` no banco.
+>
+> **Sem música aprovada, os botões de tocar/pausar somem** e o painel diz "Nenhuma música aprovada na fila" — melhor que um botão morto.
 
 ---
 

@@ -11,6 +11,7 @@ import {
   shouldClaimFromIdle,
 } from "./playback";
 import type { PlayerState } from "./playback";
+import { FAKE_PLAYER_TOKEN } from "@/test/fake-player-token";
 
 const ITEM = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -105,7 +106,7 @@ describe("parsePlayerState", () => {
 });
 
 describe("parsePlayerToken", () => {
-  const TOKEN = "3f2a9c1e-7b4d-4c58-9e11-0a2b3c4d5e6f";
+  const TOKEN = FAKE_PLAYER_TOKEN;
 
   it("aceita a query string e array do Next", () => {
     expect(parsePlayerToken(TOKEN)).toBe(TOKEN);

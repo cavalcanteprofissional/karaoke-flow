@@ -347,6 +347,16 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] **D2 — "Parar" segura a sala (decidido com o usuário):** coluna aditiva `rooms.playback_held` (`20260927000032_playback_hold.sql`), sem novo enum. Hoje `set_playback('stop')` deixa a sala `idle` e `shouldClaimFromIdle` **puxa a próxima sozinho**; com o hold, a TV fica no QR e nada entra em `playing` até o host apertar "Tocar". O crash já foi corrigido (B), a semântica é esta
 - [ ] **Regra permanente:** cleanup que fala com API que remove o próprio DOM é `useLayoutEffect`; listar os gatilhos de desmontagem antes de fechar a task; efeito que reexecuta por poll precisa de teste com temporizador
 
+### Fase 8b·bis — o link da TV é credencial, e o repo é público (2026-09-27)
+
+> **O que aconteceu:** verificação de rotina perguntou se o token de player escrito nos testes (`const TOKEN = "3f2a9c1e-…"`) tinha sido exposto. O valor era **falso** — conferido no banco: 2 salas, nenhuma com aquele `player_token` — mas o repositório é **PÚBLICO** e a forma é idêntica à de um link real (`/player/<código>?token=…` lê o estado da sala e a fila sem login). Duas falhas de processo: (a) o literal estava digitado em 3 arquivos, sem nenhuma marca de "isto é fixture"; (b) a revisão confiou no argumento "é só teste". Lição em `docs/engenharia/pos-mortem-smoke-playback.md` §3.11.
+
+- [x] **Fonte única de token falso** — `src/test/fake-player-token.ts` (`FAKE_PLAYER_TOKEN` e `FAKE_ROTATED_PLAYER_TOKEN`, valores obviamente artificiais); os 3 testes passaram a importar em vez de digitar, e o UUID antigo saiu do código
+- [x] **Scanner no repositório** — `scripts/scan-secrets.mjs` + `npm run scan:secrets` (e `-- --staged`): falha em UUID fora de fixture, em `?token=<uuid>`/link de TV montado, em formato de chave conhecida (`sbp_`, `AIza`, `GOCSPX-`, chave privada) e em variável `*_KEY|SECRET|TOKEN|PASSWORD` com valor; aponta `arquivo:linha` e diz o que fazer. Validado com link de TV e chave `sbp_` **plantados** — ambos sinalizados
+- [x] **Item no DoD e no checklist de segurança** do `TESTING.md`, mais a lição §3.11 e as regras no checklist do pós-mortem
+- [ ] **Regra permanente (manual):** link da TV nunca vai para issue, chat, print ou doc. Se for, rotacionar na hora com "gerar novo link" do host (`rotate_player_token`, host-only) — apagar o texto **depois** do push não desfaz nada, o histórico é público
+- [ ] **Ligar o scanner ao commit** (opcional, ainda não feito): `core.hooksPath` com `pre-commit` chamando `npm run scan:secrets -- --staged`, para o guarda não depender de lembrar
+
 
 ## Fase 8 — Não-funcionais, segurança, LGPD e polimento
 

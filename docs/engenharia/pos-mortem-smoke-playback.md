@@ -217,6 +217,39 @@ assinatura**: realtime que falha é silencioso por natureza, e sem log o próxim
 "não atualiza" é caça ao tesouro. Vale conferir `replica identity` sempre que
 houver filtro em `postgres_changes` sobre coluna que não é a PK.
 
+### 3.11 O link da TV é uma **credencial**, e o repositório é público
+
+Achado de verificação, não de sintoma: o token de player estava escrito à mão em
+três arquivos de teste (`const TOKEN = "3f2a9c1e-…"`). O valor era **falso** —
+conferido no banco: duas salas existem, e nenhuma tem aquele `player_token` — ou
+seja, nada foi exposto. O problema é outro: **a forma é idêntica à de um link
+real**, e o link da TV (`/player/<código>?token=…`) é credencial de verdade —
+quem tem o link lê o estado da sala e a fila, sem login. Bastava alguém colar o
+link num bug report, num chat ou numa captura de tela para vazar.
+
+Dois erros de processo, vale registrar os dois:
+
+1. **valor de teste digitado em vez de importado.** Cada arquivo repetia o
+   literal; nada no código dizia "isto aqui é fixture, não é credencial". Agora
+   existe **uma fonte só** — `src/test/fake-player-token.ts` (`FAKE_PLAYER_TOKEN`,
+   `FAKE_ROTATED_PLAYER_TOKEN`) — e o valor é obviamente falso.
+2. **a revisão confiou no Argumento "é só teste".** O commit passou porque a
+   pessoa que escreveu lembrava que era fixture. Nenhum automatismo questionou.
+   Um repo público precisa da pergunta feita por máquina.
+
+**Regra:** segredo de teste não é menos segredo — é segredo com sorte. Duas
+coisas, sempre: (a) **fonte única** de valores falsos, com nome que grita
+(`FAKE_*`), para nenhum arquivo inventar credencial; (b) **scanner no repositório**
+(`npm run scan:secrets`, `scripts/scan-secrets.mjs`) que falha em UUID fora dos
+fixtures e em formato de chave conhecida, rodando com `-- --staged` antes do
+commit. O scanner foi testado com um link de TV plantado e com uma chave `sbp_`
+plantada — ambos sinalizados, com arquivo e linha.
+
+E o que fazer se um token real entrar: **rotacionar**, não apagar. O botão "gerar
+novo link" do host chama `rotate_player_token` (host-only) e invalida o anterior
+na hora; a partir daí o link vazado não abre mais nada. Apagar do arquivo depois
+do push é só faxina — o histórico é público.
+
 ---
 
 ## 4. Checklist antes de rodar o próximo smoke
@@ -233,6 +266,8 @@ houver filtro em `postgres_changes` sobre coluna que não é a PK.
 - [ ] Se a tela escuta `postgres_changes` **com filtro**, a tabela tem `replica identity full` quando algum evento é `DELETE`.
 - [ ] Se a lista é "ao vivo" para o celular do participante, existe poll de segurança e relê em `visibilitychange`/`focus` — e o estado da assinatura é logado.
 - [ ] Avisos de "a fila mudou" são enviados para **todos** os públicos (TV + sala), não só para quem já estava sincronizando.
+- [ ] `npm run scan:secrets -- --staged` passou **antes** do commit (o repo é público e o link da TV é credencial). Nenhum UUID escrito à mão fora de `src/test/fake-player-token.ts`.
+- [ ] Ao colar link da TV em bug/chat/captura: avisar e mandar o host **rotacionar** ("gerar novo link"), não confiar em apagar o texto depois.
 
 ---
 

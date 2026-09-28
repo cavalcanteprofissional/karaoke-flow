@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { PlaybackControls } from "./playback-controls";
+import { FAKE_PLAYER_TOKEN, FAKE_ROTATED_PLAYER_TOKEN } from "@/test/fake-player-token";
 
 /**
  * Painel de playback do host. O banco é a autoridade (a UI só convenience), mas
@@ -35,8 +36,8 @@ vi.mock("sonner", () => ({
 
 const ROOM_ID = "room-1";
 const ROOM_CODE = "KARAOKE";
-const TOKEN = "3f2a9c1e-7b4d-4c58-9e11-0a2b3c4d5e6f";
-const NEW_TOKEN = "9c8d7e6f-5a4b-4c3d-8e2f-1a0b9c8d7e6f";
+const TOKEN = FAKE_PLAYER_TOKEN;
+const NEW_TOKEN = FAKE_ROTATED_PLAYER_TOKEN;
 
 const baseProps = {
   roomId: ROOM_ID,

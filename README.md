@@ -155,6 +155,8 @@ Enquanto não há provedor, use a seção **"Acesso de desenvolvimento"** (somen
 
 > **Credenciais de integração (dev):** a chave de busca `YOUTUBE_API_KEY` é **só de dev e não vai para produção** — ver `karaoke-watch-party-spec.md` §12/§13 e a tabela completa no fim deste arquivo.
 
+> ⚠️ **O link da TV é uma credencial.** `/player/<código>?token=…` lê o estado da sala e a fila **sem login** — quem tiver o link, tem. Trate como senha: **nunca** cole em issue, chat, print ou documentação, e se precisar invalidar, use o botão **"gerar novo link"** do host (`rotate_player_token`, host-only), que troca o token na hora. Este repositório é público, e o histórico de commits também é: apagar o texto depois do push não desfaz nada. Guardado por `npm run scan:secrets` (ver [Testes](#-testes)) e pela lição em [`docs/engenharia/pos-mortem-smoke-playback.md`](./docs/engenharia/pos-mortem-smoke-playback.md) §3.11.
+
 ## 🧪 Testes
 
 Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./TESTING.md).
@@ -162,6 +164,7 @@ Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./T
 - **Unitário / Integração:** Vitest + React Testing Library + jsdom (hoje **379 testes** verdes em 32 arquivos — inclui `src/lib/bars/qr.test.ts`, `src/lib/youtube/*`, a fila com a matriz de presença, o roundtrip OAuth authorize→callback, os Bearer de OAuth na rota de busca, as actions de moderação da fila e o player/pré-aprovação de 24h, o teardown do player e a resiliência da lista do participante). O duplo do YouTube (`src/test/fake-youtube.ts`) segue o **ciclo de vida real** da IFrame API — é o que pegou o crash de prontidão que 333 testes não pegaram.
 - **Mock de rede:** **MSW** instalado (Fase 4) — mocka a YouTube Data API nas provas da rota `/api/youtube/search`; serviços externos nunca são chamados em teste.
 - **E2E:** Playwright no pós-MVP-stable (player kiosk com YouTube IFrame Player API mockada).
+- **Guarda de segredo:** `npm run scan:secrets` (e `-- --staged` antes do commit) falha se aparecer UUID fora dos arquivos de fixture, link de TV com `?token=…` ou formato de chave conhecida — o link da TV é credencial e o repo é público. Tokens de teste saem de `src/test/fake-player-token.ts`, nunca digitados no arquivo.
 - **Banco/RLS:** validado via **smoke SQL** (`scripts/smoke-playback.sql`, `scripts/smoke-player-session.sql`) e e2e, não em unit; `npm run diagnose:queue` reproduz o erro cru de uma action de fila quando o sintoma é um botão que não faz nada.
 
 > ⚠️ O pool do Vitest usa `threads` (não `forks`) por causa do caminho do workspace (`D:\BACK UP\...`) — ver CHANGELOG.

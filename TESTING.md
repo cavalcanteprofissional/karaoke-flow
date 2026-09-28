@@ -337,6 +337,8 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [ ] Ações de host rejeitadas no backend quando chamadas por não-host.
 - [ ] Rate limit nas rotas sensíveis.
 - [ ] Caminho de exclusão de conta/dados funcionando.
+- [ ] Latgebras de segurança e o DoD exigem **`npm run scan:secrets`** (o repo é público e o link da TV é credencial)
+- [ ] Rotação de link da TV: host clica "gerar novo link" e o link anterior deixa de abrir a sala (o token é UUID, nunca reaproveitar)
 - [ ] Larvas de limpeza de `played`/`rejected` antigos.
 - [ ] Alvos de toque ≥ 44px no controller.
 - [ ] Tema escuro consistente no controller e na tela.
@@ -350,6 +352,7 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 Uma fase/feature só é considerada pronta quando:
 
 - [ ] Lint + typecheck + build passam.
+- [ ] `npm run scan:secrets` passa (link da TV é credencial, e o repositório é público — ver `docs/engenharia/pos-mortem-smoke-playback.md` §3.11).
 - [ ] Testes unitários/integração da feature existem e passam (Vitest).
 - [ ] Fluxo validado manualmente conforme checklist funcional da fase.
 - [ ] Casos RLS/segurança da feature têm cobertura (teste ou validação manual documentada).

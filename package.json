@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "seed": "node scripts/seed.mjs",
-    "diagnose:queue": "node scripts/diagnose-queue-actions.mjs"
+    "diagnose:queue": "node scripts/diagnose-queue-actions.mjs",
+    "scan:secrets": "node scripts/scan-secrets.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

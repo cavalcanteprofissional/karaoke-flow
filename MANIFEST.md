@@ -8,7 +8,7 @@
 
 ## 1. Preâmbulo
 
-**Não perca a sua voz — é ela que escolhe o sentir da noite.**[^transistor] Há uma casa em que a voz é
+**Não perca a sua voz — é ela que escolhe o sentir da noite.** Há uma casa em que a voz é
 hóspede de honra. Nela, quem canta é aplaudido pelo garfo que pousa, o copo que espera e o olhar
 que se vira. Nela, o dono não é caixa nem porteiro: é quem segura a luz para o palco alheio arder.
 Esta casa já existe — a música em si é sua. O que falta a esta geração é o *elo discreto*: a fila,
@@ -152,6 +152,15 @@ grande e o coração aberto**. E há as partituras de jogo (**Yu-Peng Chen**, 28
 77), que lembram que música também é universo paralelo: a trilha que cabe numa espada, num
 porto, numa cidade que só existe enquanto você escuta.
 
+De todo esse universo paralelo, porém, há uma casa que guardo em cômodo próprio: a da
+**Supergiant Games**, estúdio cujas trilhas sonoras são sempre um personagem a mais nos jogos —
+*Bastion*, *Pyre*, *Hades*, *Hades II*. O xodó é **Transistor** (2014), em que a protagonista
+**Red** é cantora e a história rouba dela justamente a voz: a cidade a silencia antes do
+primeiro verso. Uma cantora sem voz, abrindo um manifesto de karaokê — a casa admira o trabalho
+e repete a lição: **não perca a sua voz; e, se um dia perder, que ao menos a música que a fez
+cantar continue tocando.** (A trilha — *The Spine*, *Paper Boats*, *In Circles* — toca aqui até
+hoje.)
+
 Não vou mentir sobre a estação. Tudo o que o meu ouvido escolheu nos últimos dois anos nasceu
 na **década de 2020** — inteira (100%). Talvez seja o tempo em que a melancolia ficou mais
 bonita ou em que eu finalmente soube o nome dela. O pico foi **2025-Q4**: 2.112 escutas numa
@@ -225,11 +234,3 @@ ainda hoje só assina embaixo do que é belo.
 reformada — desde que a reforma preserve a voz, o bolso e o ânimo desta gente.*
 
 — Karakê Watch Party, 2026
-
-[^transistor]: Homenagem à **Supergiant Games** — um estúdio cujas trilhas sonoras são sempre um
-  personagem a mais nos jogos (*Bastion*, *Pyre*, *Hades*, *Hades II*). Em **Transistor** (2014), a
-  protagonista **Red** é cantora, e a história rouba dela justamente a voz — a cidade a silencia
-  antes do primeiro verso. Uma cantora sem voz, então, abre este manifesto de karaokê. A casa
-  admira esse trabalho e repete a lição: **não perca a sua voz — e, se um dia perder, que ao menos
-  a música que a fez cantar continue tocando.** (A trilha — *The Spine*, *Paper Boats*, *In
-  Circles* — toca na casa até hoje; ver §6.)

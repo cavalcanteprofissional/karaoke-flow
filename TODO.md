@@ -23,6 +23,36 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-09-28)
+
+> O que está em pé quando a máquina voltar. Para se pôr a par: estes três commits —
+> `21667d3` (seed por env + cruzamento + Advisor 0010), `8fd31f2` e `fe7efec` (MANIFEST).
+
+**Estado atual — Fase 8b·ter (código + Cloud) pronta, tudo aplicado no projeto `kskoipyzqcacccepcqpc`:**
+
+- `security_manual_linking_enabled=true` via Management API (chave **plana** `security_manual_linking_enabled` — o corpo aninhado legado `security:{…}` retorna 200 mas não aplica; `scripts/enable-manual-linking.mjs` foi corrigido para a forma plana).
+- `sync:seed-users` rotacionou a senha privada nas 4 contas (`auth.admin.updateUserById`, idempotente, sem tocar em domínio): dono→`multimalakoi@gmail.com`; ana/bruno `@exemplo.com`; **betania mantém `betania@exemplo.com`** (o outlook pessoal pertence à conta GitHub `e3580e25…` da Vercel — sem merge, decisão do usuário).
+- Identidades `email` presentes nas 4 contas; GitHub só entra pelo botão **"Vincular GitHub"** (validação manual — ver item 2 abaixo).
+- Advisor 0010: migration `20260928000033_profiles_public_invoker.sql` **aplicada** + `smoke-profiles-public.sql` **8/8 ok** (view `security_invoker=true`, `email` com permission denied para `anon`/`authenticated`, grants por coluna `id/name/avatar_url`, policy `profiles_select_public`).
+- MANIFEST: voz/clima/o sentir como produto; homenagem à Supergiant Games/Transistor acomodada em §6 (sem nota de rodapé).
+- `SUPABASE_ACCESS_TOKEN` válido no `.env.local` (`sbp_fcb5…`); scripts leem token, anon key e service role de `.env.local`.
+- Testes: 379/379 (32 arquivos), typecheck, lint e scan de segredos verdes.
+
+**Falta (lado do usuário, sem código):**
+
+1. **Vercel:** espelhar as envs (SEED_HOST_EMAIL, SEED_USER_EMAIL, SEED_USER2_EMAIL, SEED_PASSWORD, NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1; SEED_HOST2_EMAIL fica no default) e revalidar no remoto.
+2. **Validar §3.1 (TESTING):** senha→dono→"Vincular GitHub"→sair→GitHub→mesmas salas. Quando o usuário fizer o link, rodar o check de `auth.identities` do id `…0001` (deve ter `email` + `github`).
+3. Depois: reavaliar `security_manual_linking_enabled` (desligar ou migrar para staging antes de uso real).
+
+**Próxima fase de desenvolvimento (decisão em aberto — recomendado: Fase 9):**
+
+- **Fase 9:** entrada **fora do raio** (toggle por sala, `checkPresence` em 3 estados, lista do host com distância/tag "fora do bar") + **link de convidado do dono** (`rooms.link_convidado`, expiração/uso máximo). Decisões D1–D5 já fechadas com o PO em 2026-09-25. Sequência 9→10→11; o player (Fase 6/7) pronto destrava 12/13.
+- **Alternativa:** itens de hardening da **Fase 8** (auditoria completa de RLS, rate limiting em rotas sensíveis, teste de concorrência da fila, limites do Realtime, LGPD retenção/exclusão, limpeza de `played`/`rejected`, polimento mobile, latência realtime).
+
+**Ferramental que se aplica:** migrations via `node scripts/apply-sql.mjs supabase/migrations/<arquivo>.sql`; smokes em `scripts/*.sql`; smoke **por catálogo** quando `set role` não vale no contexto da Management API; validação manual no checklist do TESTING.
+
+---
+
 ## Plano de testes por fase (ampliação da bateria)
 
 > **Situação atual (2026-09-27):** Vitest + RTL + jsdom com **353 testes** (32 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 55, `queue` matriçada (39), rota `/api/youtube/search` **16 via MSW** — incl. Bearer de OAuth host/app —, **roundtrip OAuth authorize→callback 4**, entrada com aprovação (`entry-approval-wait` 10, `pending-entry-requests` 5) e o gate de presença (`presence-gate-info` 14), fila (`queue-list` 23, `song-search` 9, `song-confirm-dialog` 9), player (`playback` 24 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 18 com a IFrame Player API mockada **fiel ao ciclo de vida real**, `playback-controls` 12), e a **Fase 8a** (`queue-actions` 7, `entry-state` 5, `room-settings` 3). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada — o banco é coberto por **smoke SQL** (`scripts/smoke-playback.sql`, `scripts/smoke-player-session.sql`). Detalhamento por área em `TESTING.md` §3.2.
@@ -365,7 +395,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] **Botão "Vincular GitHub"** no menu do usuário (`user-menu.tsx`): só para contas com identidade `email`, sem identidade `github`, não anônimas; chama `linkIdentity` com redirect para o callback existente (que troca o code — sem mudança na rota)
 - [x] **`diagnose-queue-actions.mjs`** e **`smoke-player-session.sql`** lendo o host por `SEED_*`/id fixo (sobrevivem à renomeação dos e-mails)
 - [x] **Scanner tolera `.env.example`** com default público (`SEED_PASSWORD=senha123` — regra `variavel-de-segredo-com-valor` ganhou `envExampleOk`)
-- [ ] **Aplicar no projeto Cloud** (`kskoipyzqcacccepcqpc`): `security_manual_linking_enabled=true` (Management API) + renomear `dono …0001` → e-mail pessoal + senha privada, `betania …0004` idem, `ana`/`bruno` senha privada; conferir `auth.identities` do provedor `email` após cada mudança
+- [x] **Aplicar no projeto Cloud** (`kskoipyzqcacccepcqpc`): `security_manual_linking_enabled=true` (Management API, chave plana) + rotacionar senha privada nas 4 contas (`sync:seed-users`) + renomear `dono …0001`→`multimalakoi@gmail.com`; betania **mantém** `betania@exemplo.com` (outlook reservado à conta GitHub `e3580e25…`); identidades `email` confirmadas nas 4 (GitHub só após "Vincular GitHub" manual)
 - [ ] **Vercel:** envs = `.env.local` (mesmas vars) + `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`
 - [ ] **Validar o cruzamento** (§3.1 TESTING): senha→dono→"Vincular GitHub"→sair→GitHub→mesma sala; form e-mail/senha na Vercel com as 4 contas e senha privada; `senha123` rejeitada no Cloud
 - [ ] **Depois:** reavaliar `security_manual_linking_enabled` (desligar ou migrar para staging antes de uso real)

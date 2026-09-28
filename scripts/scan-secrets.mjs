@@ -21,7 +21,9 @@
  *  - `src/test/fake-player-token.ts` (fonte única dos tokens de teste),
  *  - `*.test.ts` / `*.test.tsx` (id de fila/sala/membro de teste),
  *  - `scripts/seed.mjs` e `scripts/smoke-*.sql` (UUIDs determinísticos de dev),
- *  - `.env.example` (só nomes de variável, sem valor).
+ *  - `.env.example` (só nomes de variável — a exceção é `SEED_PASSWORD=senha123`,
+ *    default PÚBLICO documentado de propósito; o valor privado vive no
+ *    `.env.local`, que é gitignored).
  *
  * Uso: npm run scan:secrets          (verifica os arquivos versionados)
  *      npm run scan:secrets -- --staged   (só o que entraria no commit)
@@ -73,6 +75,7 @@ const RULES = [
     id: "variavel-de-segredo-com-valor",
     re: /^\s*[A-Z0-9_]*(KEY|SECRET|TOKEN|PASSWORD|PASSWD)[A-Z0-9_]*\s*=\s*\S{8,}/,
     skipFixtures: false,
+    envExampleOk: true,
     why: "variável de segredo com valor embutido",
   },
 ];
@@ -120,6 +123,13 @@ for (const rel of trackedFiles()) {
   lines.forEach((line, i) => {
     for (const rule of RULES) {
       if (rule.skipFixtures && fixture) continue;
+      // `.env.example` documenta defaults públicos (ex.: SEED_PASSWORD=senha123)
+      // de propósito — o valor que importa é o do .env.local, que é gitignored.
+      if (
+        rule.envExampleOk &&
+        /^(\.env\.example|\.env\.default\.example|\.[\w-]+\.env\.example)$/i.test(rel)
+      )
+        continue;
       // docs descrevem o padrão do link de propósito: só o valor colado incomoda
       const pattern = new RegExp(rule.re.source, rule.re.flags.replace("g", ""));
       if (pattern.test(line)) {

@@ -46,8 +46,11 @@ for (const k of [url, anonKey]) {
 }
 
 const ROOM_CODE = process.argv[2] ?? "KARAOKE";
-const HOST_EMAIL = process.argv[3] ?? "dono@exemplo.com";
-const HOST_PASSWORD = process.argv[4] ?? "senha123";
+const SEED_HOST = g("SEED_HOST_EMAIL") ?? "dono@exemplo.com";
+const SEED_PASS = g("SEED_PASSWORD") ?? "senha123";
+// Argumento explícito vence o .env.local (que pode ter credencial personalizada).
+const HOST_EMAIL = process.argv[3] ?? SEED_HOST;
+const HOST_PASSWORD = process.argv[4] ?? SEED_PASS;
 
 function show(label, { data, error }) {
   console.log(`\n--- ${label}`);

@@ -332,7 +332,6 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] **Confirmar em TV de verdade** (o que o browser não prova): autoplay com som, troca de faixa sem piscar preto, e o aviso de erro aparecendo na tela grande
 - [ ] **Regra permanente:** API de terceiro no client entra com o duplo fiel ao contrato documentado, na mesma task do código — suíte verde não substitui browser real (checklist em `TESTING.md` §3.6)
 
-
 ### Fase 8b — 2º round de defeitos no uso real (2026-09-27)
 
 > **O que aconteceu:** três defeitos achados testando a TV e o celular de verdade, **todos passando com 353 testes verdes**. (a) `Console NotFoundError` / `removeChild` ao trocar de fase: a IFrame API remove o iframe e o `destroy()` estava no cleanup do `useEffect`, que roda **depois** do React mexer no DOM — e o mesmo crash tinha **dois gatilhos** (fim da última música **e** o botão "Parar"), ambos montando o stage de novo. (b) "Toque para começar" reaparecia sozinho por cima do vídeo tocando: o probe era armado em todo `play()`, e o quiosque chama `play()` a cada leitura de estado (poll de 5s). (c) a lista do participante parava de atualizar: `postgres_changes` com filtro em `room_id` **não entrega `DELETE`** sem `replica identity full`, celular dormindo não reconecta sozinho, e ninguém avisava a sala além da TV. `npm test` agora com **379 testes** (32 arquivos), typecheck, lint e build verdes; lições em `docs/engenharia/pos-mortem-smoke-playback.md` §3.8–3.10.
@@ -357,10 +356,24 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] **Regra permanente (manual):** link da TV nunca vai para issue, chat, print ou doc. Se for, rotacionar na hora com "gerar novo link" do host (`rotate_player_token`, host-only) — apagar o texto **depois** do push não desfaz nada, o histórico é público
 - [ ] **Ligar o scanner ao commit** (opcional, ainda não feito): `core.hooksPath` com `pre-commit` chamando `npm run scan:secrets -- --staged`, para o guarda não depender de lembrar
 
+### Fase 8b·ter — contas do seed por env e cruzamento e-mail/senha ↔ GitHub (2026-09-28)
+
+> **Por que:** o dono quer testar as salas semeadas no **remoto**, usando a mesma conta por **senha (local)** e por **GitHub (Vercel)** — sem habilitar o form de e-mail/senha em produção _para o dono_. O GitHub está com _"Keep my email addresses private"_ **ON**, então o auto-link por e-mail verificado não dispararia; o caminho é o **`linkIdentity` manual** (botão "Vincular GitHub"), que exige a config do projeto `security_manual_linking_enabled=true`. Alerta (transparência): ligar a flag amplia a superfície de ataque (advisory da Supabase sobre SSO/email) — aceito para o projeto de dev; desligar (ou migrar para projeto de staging) antes de qualquer uso real. A `senha123` pública **deixa de valer** no projeto Cloud: todas as contas ganham senha privada do `.env.local`/Vercel.
+
+- [x] **Seed resolve usuários por ID fixo** (`scripts/seed.mjs`): e-mails/senha vêm de `SEED_HOST_EMAIL`/`SEED_HOST2_EMAIL`/`SEED_USER_EMAIL`/`SEED_USER2_EMAIL`/`SEED_PASSWORD` (defaults públicos em `.env.example` e README; valores pessoais no `.env.local`); senha **só na criação** (usuário existente mantém a rotacionada); nunca cria `dono@exemplo.com` órfão quando o dono usa outro e-mail
+- [x] **Gate do form e-mail/senha** (`login/page.tsx`): `devLoginEnabled` = dev **ou** `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1` — em produção OUT; a conta do dono entra por GitHub, as demais por senha privada
+- [x] **Botão "Vincular GitHub"** no menu do usuário (`user-menu.tsx`): só para contas com identidade `email`, sem identidade `github`, não anônimas; chama `linkIdentity` com redirect para o callback existente (que troca o code — sem mudança na rota)
+- [x] **`diagnose-queue-actions.mjs`** e **`smoke-player-session.sql`** lendo o host por `SEED_*`/id fixo (sobrevivem à renomeação dos e-mails)
+- [x] **Scanner tolera `.env.example`** com default público (`SEED_PASSWORD=senha123` — regra `variavel-de-segredo-com-valor` ganhou `envExampleOk`)
+- [ ] **Aplicar no projeto Cloud** (`kskoipyzqcacccepcqpc`): `security_manual_linking_enabled=true` (Management API) + renomear `dono …0001` → e-mail pessoal + senha privada, `betania …0004` idem, `ana`/`bruno` senha privada; conferir `auth.identities` do provedor `email` após cada mudança
+- [ ] **Vercel:** envs = `.env.local` (mesmas vars) + `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`
+- [ ] **Validar o cruzamento** (§3.1 TESTING): senha→dono→"Vincular GitHub"→sair→GitHub→mesma sala; form e-mail/senha na Vercel com as 4 contas e senha privada; `senha123` rejeitada no Cloud
+- [ ] **Depois:** reavaliar `security_manual_linking_enabled` (desligar ou migrar para staging antes de uso real)
 
 ## Fase 8 — Não-funcionais, segurança, LGPD e polimento
 
 - [x] Estratégia de testes documentada: `TESTING.md` (Vitest + RTL + MSW + Playwright, checklist funcional por fase, DoD)
+- [x] **Advisor 0010 — `profiles_public` sem `security definer`** (2026-09-28): migration `20260928000033` virou a view para `security_invoker=true`, revogou o SELECT genérico de `anon`/`authenticated` em `profiles` e concedeu só `id/name/avatar_url` (`email` > permission denied pela API); policy `profiles_select_public` (`using true`) mantém o comportamento externo. Smoke `scripts/smoke-profiles-public.sql` valida por catálogo. **Aplicada e smoke verde no projeto Cloud (28/09).**
 - [ ] Auditoria completa de RLS — isolar salas; threads/admin; host actions autorizadas no backend
 - [ ] Rate limiting em rotas sensíveis (busca, entrada, ações de host)
 - [ ] Validação de limites do free tier Supabase Realtime (mensagens/eventos por segundo, conexões simultâneas) — Firebase como plano B anotado

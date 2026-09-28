@@ -148,22 +148,24 @@ flowchart LR
 
 ## 3. Matriz de RLS
 
-| Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                                                           | DELETE                         |
-| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------ |
-| `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                                                             | host                           |
-| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                                                                | —                              |
-| `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                                                             | host                           |
-| `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar)                                          | self **ou** host               |
+| Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                                                                                        | DELETE                         |
+| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------ |
+| `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                                                                                          | host                           |
+| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                                                                                             | —                              |
+| `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                                                                                          | host                           |
+| `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar)                                                                       | self **ou** host               |
 | `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only** (a troca de música é via RPC `replace_queue_song`; o playback também é via RPC) | host only                      |
-| `profiles`     | via view `profiles_public` (id/name/avatar_url, sem email)              | trigger `handle_new_user` (ninguém insere direto)    | próprio profile                                                  | —                              |
-| `consents`     | só o próprio usuário                                                    | próprio usuário (ou service role)                    | próprio usuário (ou service role)                                | —                              |
-| `song_cache`   | sem política                                                            | sem política                                         | sem política                                                     | sem política (só service role) |
+| `profiles`     | via view `profiles_public` (invoker: anon/authenticated leem `id/name/avatar_url`, nunca email) | trigger `handle_new_user` (ninguém insere direto)    | próprio profile                                                                               | —                              |
+| `consents`     | só o próprio usuário                                                    | próprio usuário (ou service role)                    | próprio usuário (ou service role)                                                             | —                              |
+| `song_cache`   | sem política                                                            | sem política                                         | sem política                                                                                  | sem política (só service role) |
 
 > **Anônimo (`is_anonymous`)**: lê `bars`/`mesas` (precisa ver código/QR e escolher mesa) — mas a RPC `create_bar` recusa sessão anônima; o anfitrião começa com sessão real. **Nunca é pré-aprovado** por `member_entry_state`, mesmo aprovado por outro host antes (Fase 8a).
 >
 > **A TV não é participante**: o player da TV é um `anon` **sem nenhuma linha em `room_members`** e lê playback só por `get_player_state`/`claim_next_song` com o token de capacidade. Quem não tem o token não enxerga nem o título da fila.
 >
 > **O player tem duas portas** (Fase 8a, migration `00029`): com `p_token` é a TV; **sem token** é a sessão de quem está chamando (`auth.uid()` dentro da função = host da sala ou membro `approved`). O token errado **não** cai para a sessão — o quiosque precisa continuar avisando que o link morreu.
+>
+> **`profiles_public` é `security invoker`** (migration `00033`, Advisor lint 0010): as roles da API têm SELECT só nas colunas `id/name/avatar_url` de `profiles` — `email` é permission denied para `anon`/`authenticated`; a policy `profiles_select_public` (`using true`) mantém o comportamento antigo (nome/avatar de qualquer usuário), sem o bypass do owner que a view definer tinha. As RPCs `security definer` que leem a view rodam como postgres e não mudam.
 
 ### Pontos de atenção (segurança)
 
@@ -317,9 +319,11 @@ flowchart TD
     B --> C["trigger handle_new_user cria profiles"]
     C --> D["INSERT 2 bares + mesas + rooms + members + queue (idempotente)"]
     D --> E["Bar1 ZEHBAR (12 mesas) / Bar2 BARSEG (6 mesas) / salas KARAOKE·BAR2FO"]
-    E --> F["Login dev: dono/ana/bruno/betania @exemplo.com · senha123"]
+    E --> F["Login dev: usuários do seed · e-mails/senha de SEED_* no .env.local (defaults públicos @exemplo.com · senha123)"]
 ```
 
 > Usuários **não** são criados por SQL raw em `auth.users` (deixa o serviço Auth instável) — sempre Auth Admin API.
+
+> Os usuários são resolvidos **pelo ID fixo**, não pelo e-mail (que pode ter sido personalizado via `SEED_*`); a senha (default `senha123`) só vale na **criação**. Cruzamento de identidade (senha local + GitHub na nuvem = mesma conta): ver README "Login e acesso" e TESTING §3.1 — exige `linkIdentity` e `security_manual_linking_enabled=true`.
 
 > O Bar 2 tem host próprio (`betania`, id `...0004`) porque **1 host = 1 bar** (`bars.host_id` único) — dono já é host do Bar 1.

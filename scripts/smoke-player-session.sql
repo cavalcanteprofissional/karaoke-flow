@@ -9,7 +9,8 @@
 -- Diferente do `smoke-playback.sql`, este é AUTOSSUFICIENTE: cria a sala SMOKE8,
 -- roda o roteiro nela e apaga no fim. Não precisa de `npm run seed` antes nem
 -- depois e não encosta na fila das salas reais. Precisa apenas dos USUÁRIOS do
--- seed (lidos de auth.users por e-mail).
+-- seed (identificados pelo ID FIXO — o e-mail deles pode ter sido personalizado
+-- via SEED_* no .env.local).
 --
 -- Rodar: `node scripts/apply-sql.mjs scripts/smoke-player-session.sql`
 -- (o relatório sai em `relatorio`).
@@ -44,9 +45,10 @@ declare
   v_membro_row public.room_members;
   v_approved_at timestamptz;
 begin
-  select id into v_host from auth.users where email = 'dono@exemplo.com';
-  select id into v_membro from auth.users where email = 'ana@exemplo.com';
-  select id into v_forasteiro from auth.users where email = 'bruno@exemplo.com';
+  -- IDs fixos do seed (stable): 001 dono, 002 ana, 003 bruno.
+  select id into v_host from auth.users where id = '00000000-0000-0000-0000-000000000001';
+  select id into v_membro from auth.users where id = '00000000-0000-0000-0000-000000000002';
+  select id into v_forasteiro from auth.users where id = '00000000-0000-0000-0000-000000000003';
   if v_host is null or v_membro is null or v_forasteiro is null then
     insert into smoke8a values
       ('00 setup', jsonb_build_object('erro', 'usuarios do seed ausentes: rode npm run seed'));

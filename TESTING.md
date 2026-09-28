@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-27):** suite com **353 testes** (32 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 55, `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **16 provas via MSW** — incl. credencial OAuth via **Bearer** host/app —, o **roundtrip authorize→callback** com 4 provas do estado, a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 23, `song-search` 9, `song-confirm-dialog` 9), o **player** (`playback` 24 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 18 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host) e a **Fase 8a** (`queue-actions` 7, `entry-state` 5, `room-settings` 3). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-09-28):** suite com **379 testes** (32 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 55, `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **16 provas via MSW** — incl. credencial OAuth via **Bearer** host/app —, o **roundtrip authorize→callback** com 4 provas do estado, a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 23, `song-search` 9, `song-confirm-dialog` 9), o **player** (`playback` 24 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 18 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host) e a **Fase 8a** (`queue-actions` 7, `entry-state` 5, `room-settings` 3). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -85,6 +85,11 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Logout limpa sessão e redireciona para `/`.
 - [ ] Rota protegida redireciona para login quando não autenticado.
 - [ ] Recarregar a página mantém a sessão (SSR + cookie).
+- [ ] **Login dev por e-mail/senha** em `npm run dev` entra com as contas do seed (e-mails de `SEED_HOST_*`/`SEED_USER_*`; senha = `SEED_PASSWORD` — defaults públicos documentados no `.env.example`/README, valores pessoais no `.env.local`).
+- [ ] **Cruzamento (uma conta, dois métodos):** logado por e-mail/senha como o **dono**, menu do usuário → **"Vincular GitHub"** → autoriza e volta para o painel na mesma sessão; conferir em `auth.identities` duas linhas (`email` **e** `github`) no mesmo `user_id` — o do dono é o id fixo do seed 00000000-0000-0000-0000-000000000001.
+- [ ] **Sair e entrar com GitHub** (na Vercel ou local) → cai nas **mesmas** salas de dev (mesmo id do passo anterior, o host do `KARAOKE`).
+- [ ] **Form e-mail/senha em produção:** só aparece com `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`; com a flag desligada, o `/login` da Vercel não mostra a seção "Acesso de desenvolvimento" e o GitHub continua entrando normalmente.
+- [ ] **`senha123` pública deixa de funcionar** no projeto Cloud depois da rotação de 28/09 — valem as credenciais do `.env.local`/Vercel (se algum login remoto usar a senha padrão, é bug).
 
 ### 3.2 Bares/mesas + acesso anônimo (Fase 3.5)
 
@@ -225,7 +230,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 **Antes de começar**
 
 1. `npm run seed` **primeiro**. O seed recria as salas, e `rooms.player_token` é sorteado no insert — **qualquer link copiado antes do seed está morto** (a tela mostra "link não serve mais", que é o comportamento esperado, não bug).
-2. Entre como host (`dono@exemplo.com` / `senha123`, ou o login de dev) e abra `/salas/KARAOKE`.
+2. Entre como host — via o form **"Acesso de desenvolvimento"** (`dono@exemplo.com`/`senha123` no default; **no projeto Cloud valem as credenciais do `.env.local`/Vercel**, ver §3.1) — e abra `/salas/KARAOKE`.
 3. No card **"Player da TV"** (só host), clique em **"Abrir player na TV"** ou **"Copiar link"**. O link é `/player/KARAOKE?token=…` — token por sala, o mesmo link serve para quantas TVs quiserem.
 4. Aprovete pelo menos **duas** músicas (o player só toca o que está `approved`), senão a TV fica no QR.
 
@@ -270,14 +275,14 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 
 **Limitações conhecidas (não são bug do teste manual)**
 
-| Comportamento | Por quê |
-|---|---|
-| TV recarrega enquanto está **pausada** → música volta do zero | a âncora de tempo é zerada no pause de propósito (decisão P6 da migration `00027`); o cronômetro de verdade é da Fase 13 |
-| Não pré-carrega a próxima faixa | fora do escopo entregue; pode dar um piscar preto na virada |
-| Reordenar a fila chega à TV por poll de 5s, não por push | o canal do player cobre só `playback_status`; aprovar/rejeitar/remover já vão por broadcast (Fase 8a) |
-| Uma TV mostrando aviso de link invalidado | é o token rotacionado; pegue o link novo no card do host |
-| Vídeo que o YouTube não deixa embutir | erro 101/150 do player; a TV mostra o aviso de autoplay, mas vídeo bloqueado para embedding é caso do conteúdo da música |
-| Participante aprovado que voltou depois de 24h precisa de aprovação nova | é a pré-aprovação de 24h funcionando (`pre_approval_24h` ON, travado na UI) |
+| Comportamento                                                            | Por quê                                                                                                                  |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| TV recarrega enquanto está **pausada** → música volta do zero            | a âncora de tempo é zerada no pause de propósito (decisão P6 da migration `00027`); o cronômetro de verdade é da Fase 13 |
+| Não pré-carrega a próxima faixa                                          | fora do escopo entregue; pode dar um piscar preto na virada                                                              |
+| Reordenar a fila chega à TV por poll de 5s, não por push                 | o canal do player cobre só `playback_status`; aprovar/rejeitar/remover já vão por broadcast (Fase 8a)                    |
+| Uma TV mostrando aviso de link invalidado                                | é o token rotacionado; pegue o link novo no card do host                                                                 |
+| Vídeo que o YouTube não deixa embutir                                    | erro 101/150 do player; a TV mostra o aviso de autoplay, mas vídeo bloqueado para embedding é caso do conteúdo da música |
+| Participante aprovado que voltou depois de 24h precisa de aprovação nova | é a pré-aprovação de 24h funcionando (`pre_approval_24h` ON, travado na UI)                                              |
 
 ### 3.9 Fase 8a — fila/player no uso real, player por sessão e pré-aprovação de 24h
 

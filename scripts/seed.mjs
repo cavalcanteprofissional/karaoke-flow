@@ -4,10 +4,18 @@
  * - Usuários são criados via Auth Admin API (service role) com IDs fixos —
  *   raw SQL em auth.users deixa o serviço Auth instável (validação OK: todos
  *   os fluxos de login funcionam após).
+ * - Os usuários são identificados SEMPRE pelo ID fixo, nunca pelo e-mail:
+ *   o e-mail pode ter sido personalizado via SEED_HOST_EMAIL/SEED_PASSWORD
+ *   no .env.local (ver .env.example), e trocar o critério impediria criar um
+ *   `dono@exemplo.com` órfão quando o dono usa outro e-mail. A senha só é
+ *   aplicada na criação — usuários existentes mantêm a senha rotacionada.
  * - O trigger handle_new_user cria os profiles automaticamente.
  * - Dados de domínio (bares/mesas/salas/membros/fila) são inseridos via
  *   service role, de forma idempotente (re-executável): este script faz reset
  *   COMPLETO do domínio (bares, mesas, rooms, membros, fila) antes de inserir.
+ *
+ * Credenciais (defaults públicos em .env.example, personalizáveis no .env.local):
+ *   SEED_HOST_EMAIL / SEED_HOST2_EMAIL / SEED_USER_EMAIL / SEED_USER2_EMAIL / SEED_PASSWORD
  *
  * Uso: npm run seed
  * Requer credenciais válidas em .env.local.
@@ -44,26 +52,27 @@ for (const k of [url, serviceRole]) {
 const USERS = [
   {
     id: "00000000-0000-0000-0000-000000000001",
-    email: "dono@exemplo.com",
+    email: g("SEED_HOST_EMAIL") ?? "dono@exemplo.com",
     name: "Dono do Bar",
   },
   {
     id: "00000000-0000-0000-0000-000000000002",
-    email: "ana@exemplo.com",
+    email: g("SEED_USER_EMAIL") ?? "ana@exemplo.com",
     name: "Participante Ana",
   },
   {
     id: "00000000-0000-0000-0000-000000000003",
-    email: "bruno@exemplo.com",
+    email: g("SEED_USER2_EMAIL") ?? "bruno@exemplo.com",
     name: "Participante Bruno",
   },
   {
     id: "00000000-0000-0000-0000-000000000004",
-    email: "betania@exemplo.com",
+    email: g("SEED_HOST2_EMAIL") ?? "betania@exemplo.com",
     name: "Dona Betânia (host)",
   },
 ];
-const PASSWORD = "senha123";
+// Senha APENAS na criação (usuário existente não tem senha resetada por seed).
+const PASSWORD = g("SEED_PASSWORD") ?? "senha123";
 
 // IDs fixos do domínio.
 const BAR1 = "20000000-0000-0000-0000-000000000001"; // Karaokê do Zé
@@ -77,10 +86,17 @@ async function ensureUsers(admin) {
 
   const ids = [];
   for (const u of USERS) {
-    const found = byEmail.get(u.email);
+    // ID fixo primeiro: o e-mail pode ter sido personalizado (SEED_*), e o ID
+    // é o contrato estável do domínio. Só cai para e-mail se o ID não existe.
+    const { data: byId } = await admin.auth.admin.getUserById(u.id);
+    const found = byId?.user ?? byEmail.get(u.email);
     if (found) {
       ids.push(found.id);
-      console.log("usuário já existe:", u.email, "→", found.id);
+      const info =
+        found.email === u.email
+          ? u.email
+          : `${u.email} → e-mail real '${found.email}' (personalizado, mantido)`;
+      console.log("usuário já existe:", info, "→", found.id);
     } else {
       const { data, error } = await admin.auth.admin.createUser({
         id: u.id,
@@ -248,7 +264,12 @@ async function main() {
   console.log("fila criada na KARAOKE: 1 approved + 1 pending");
 
   console.log(
-    "\nSeed concluído. Login dev: dono@exemplo.com | betania@exemplo.com | ana@exemplo.com | bruno@exemplo.com (senha123)"
+    "\nSeed concluído. Login dev: " +
+      USERS.map((u) => u.email).join(" | ") +
+      " · senha: " +
+      (PASSWORD === "senha123"
+        ? "senha123 (default)"
+        : "SEED_PASSWORD personalizada no .env.local (nunca impressa)")
   );
 }
 

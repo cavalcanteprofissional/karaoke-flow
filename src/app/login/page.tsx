@@ -20,7 +20,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   const { error } = await searchParams;
-  const devLoginEnabled = process.env.NODE_ENV === "development";
+  // Form de e-mail/senha: sempre em dev; em produção só quando o dono liga
+  // explicitamente NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1 (com senhas PRIVADAS —
+  // a senha pública do repo deixa de valer no projeto Cloud).
+  const devLoginEnabled =
+    process.env.NODE_ENV === "development" ||
+    process.env.NEXT_PUBLIC_ENABLE_EMAIL_LOGIN === "1";
 
   return (
     <div className="bg-background flex min-h-dvh flex-col">

@@ -121,23 +121,25 @@ Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start`
 
 **Scripts disponíveis:**
 
-| Script                             | O que faz                                                                  |
-| ---------------------------------- | -------------------------------------------------------------------------- |
-| `npm run dev`                      | dev server (Next 16)                                                       |
-| `npm run build`                    | build de produção                                                          |
-| `npm run lint`                     | ESLint                                                                     |
-| `npm run typecheck`                | `tsc --noEmit`                                                             |
-| `npm test`                         | Vitest (unit)                                                              |
-| `npm run seed`                     | seed de dev no Supabase Cloud (⚠️ **apaga e recria** as salas de dev)      |
-| `npm run diagnose:queue`           | diagnostica as actions de moderação da fila e mostra o erro cru do banco  |
-| `node scripts/apply-sql.mjs <sql>` | aplica migration manualmente (padrão do time; veja `README` do `scripts/`) |
+| Script                             | O que faz                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| `npm run dev`                      | dev server (Next 16)                                                        |
+| `npm run build`                    | build de produção                                                           |
+| `npm run lint`                     | ESLint                                                                      |
+| `npm run typecheck`                | `tsc --noEmit`                                                              |
+| `npm test`                         | Vitest (unit)                                                               |
+| `npm run seed`                     | seed de dev no Supabase Cloud (⚠️ **apaga e recria** as salas de dev)       |
+| `npm run sync:seed-users`          | renomeia/rotaciona as contas do seed por **id fixo** (sem apagar domínio)   |
+| `npm run enable:manual-linking`    | liga `security.manual_linking_enabled` (pré-requisito do "Vincular GitHub") |
+| `npm run diagnose:queue`           | diagnostica as actions de moderação da fila e mostra o erro cru do banco    |
+| `node scripts/apply-sql.mjs <sql>` | aplica migration manualmente (padrão do time; veja `README` do `scripts/`)  |
 
 **Smokes de banco** (rodam contra o projeto do `.env.local`, pelo Management API — cada um tem o próprio roteiro e sai no relatório):
 
-| Script                                                                                | O que fixa                                                                                                                                   | Mexe nos dados de dev?                                    |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000`                         | contrato do playback (Fases 6/7): token, claim, pausa, skip, rotação de token, sala encerrada                                             | **sim** — precisa de `npm run seed` antes e depois       |
-| `node scripts/apply-sql.mjs scripts/smoke-player-session.sql 100000`                    | Fase 8a: token × sessão × anônimo × pré-aprovação de 24h, matriz do toggle, limpeza                                                      | não — cria e apaga a sala `SMOKE8`                        |
+| Script                                                               | O que fixa                                                                                    | Mexe nos dados de dev?                             |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000`       | contrato do playback (Fases 6/7): token, claim, pausa, skip, rotação de token, sala encerrada | **sim** — precisa de `npm run seed` antes e depois |
+| `node scripts/apply-sql.mjs scripts/smoke-player-session.sql 100000` | Fase 8a: token × sessão × anônimo × pré-aprovação de 24h, matriz do toggle, limpeza           | não — cria e apaga a sala `SMOKE8`                 |
 
 ## 🔑 Login e acesso
 
@@ -151,7 +153,19 @@ Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start`
 | **Spotify**                | 🔒 Desabilitado — Web API exige Spotify Premium     |
 | **Discord / Facebook / X** | 🔒 Em breve (sem credenciais; app review para FB/X) |
 
-Enquanto não há provedor, use a seção **"Acesso de desenvolvimento"** (somente dev) com os usuários do seed: `dono@exemplo.com`, `ana@exemplo.com`, `bruno@exemplo.com`, `betania@exemplo.com` — senha `senha123`.
+Os usuários do **seed** são resolvidos **por id fixo**; as credenciais saem de env vars — defaults **públicos** (abaixo) no [`.env.example`](./.env.example), valores **pessoais** no `.env.local` (gitignored) e, para a nuvem, nas mesmas vars da Vercel. `npm run seed` apenas **cria** usuários faltantes (a senha vale **só** na criação — usuários existentes nunca têm a senha resetada).
+
+| Variável                               | Default (documentado)                   | Função                                                             |
+| -------------------------------------- | --------------------------------------- | ------------------------------------------------------------------ |
+| `SEED_HOST_EMAIL`                      | `dono@exemplo.com`                      | conta do dono (host do `ZEHBAR` / `KARAOKE`)                       |
+| `SEED_HOST2_EMAIL`                     | `betania@exemplo.com`                   | conta Betânia (host do `BARSEG` / `BAR2FO`)                        |
+| `SEED_USER_EMAIL` / `SEED_USER2_EMAIL` | `ana@exemplo.com` / `bruno@exemplo.com` | participantes                                                      |
+| `SEED_PASSWORD`                        | `senha123` (**pública**)                | senha aplicada **só na criação** do usuário                        |
+| `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN`       | `0` (desligado)                         | habilita o form e-mail/senha **em produção** (com senhas privadas) |
+
+**Acesso de desenvolvimento** (seção "Acesso de desenvolvimento" no `/login`): aparece sempre em `npm run dev`; em produção **só** com `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`. Use **apenas** com `SEED_PASSWORD` **privada**: a URL da Vercel é pública e a anon key roda no bundle — a `senha123` documentada (ou senha padrão) viva no projeto Cloud permitiria a qualquer um autenticar como host. Por isso, aplicar a rotina de 2026-09-28 **rotaciona as senhas no projeto Cloud**: ali `senha123` deixa de funcionar; valem os valores do `.env.local` / das envs da Vercel.
+
+**Uma conta, local e na nuvem (e-mail/senha ↔ GitHub):** a conta de e-mail/senha aceita o **GitHub como segunda identidade** — a mesma conta por senha em dev **e** por GitHub na Vercel. Uma única vez: logado por e-mail/senha, abra o menu do usuário e clique **"Vincular GitHub"** → volta do GitHub com a identidade colada no mesmo `user_id` (`linkIdentity`; requer a config do projeto `security_manual_linking_enabled=true`). Depois, entrar com GitHub em qualquer dispositivo abre as **mesmas** salas. A conta do dono não precisa então do form e-mail/senha em produção; as demais contas de seed usam o form liberado por `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN` com senha privada.
 
 > **Credenciais de integração (dev):** a chave de busca `YOUTUBE_API_KEY` é **só de dev e não vai para produção** — ver `karaoke-watch-party-spec.md` §12/§13 e a tabela completa no fim deste arquivo.
 
@@ -173,18 +187,18 @@ Estratégia, boas práticas e checklist funcional por fase em [`TESTING.md`](./T
 
 Plano detalhado por fases (com checklist) no [`TODO.md`](./TODO.md). Linha do tempo atual:
 
-| Fase                                                                                                                               | Status                                                                                                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fase 0 — Fundação / 1 — Banco+RLS / 2 — Auth / 3 — Salas                                                                           | ✅ Concluídas                                                                                                                                               |
-| **3.5 — Bar/mesas/karaokês + acesso anônimo**                                                                                      | ✅ **Concluída (2026-09-23)**                                                                                                                               |
-| **Fase 4 — Busca YouTube + fila end-to-end**                                                                                       | ✅ **Concluída (2026-09-23)**                                                                                                                               |
-| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música                                                                     | ✅ **Concluída (2026-09-26)**                                                                                                                               |
-| Fase 6 — Player kiosk                                                                                                              | ✅ **Concluída (2026-09-27)**                                                                                                                               |
-| Fase 7 — Controle do host pelo celular                                                                                             | ✅ **Concluída (2026-09-27)**                                                                                                                               |
-| **Fase 8a — Fila/player no uso real + player por sessão + pré-aprovação de 24h**                                                  | ✅ **Concluída (2026-09-27)** — diagnose + 4 correções, segunda porta de autorização, toggle travado ON |
+| Fase                                                                                                                               | Status                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fase 0 — Fundação / 1 — Banco+RLS / 2 — Auth / 3 — Salas                                                                           | ✅ Concluídas                                                                                                                                                                                                                                                                       |
+| **3.5 — Bar/mesas/karaokês + acesso anônimo**                                                                                      | ✅ **Concluída (2026-09-23)**                                                                                                                                                                                                                                                       |
+| **Fase 4 — Busca YouTube + fila end-to-end**                                                                                       | ✅ **Concluída (2026-09-23)**                                                                                                                                                                                                                                                       |
+| Fase 5 — Fila: realtime, aprovação, confirmação, trocar música                                                                     | ✅ **Concluída (2026-09-26)**                                                                                                                                                                                                                                                       |
+| Fase 6 — Player kiosk                                                                                                              | ✅ **Concluída (2026-09-27)**                                                                                                                                                                                                                                                       |
+| Fase 7 — Controle do host pelo celular                                                                                             | ✅ **Concluída (2026-09-27)**                                                                                                                                                                                                                                                       |
+| **Fase 8a — Fila/player no uso real + player por sessão + pré-aprovação de 24h**                                                   | ✅ **Concluída (2026-09-27)** — diagnose + 4 correções, segunda porta de autorização, toggle travado ON                                                                                                                                                                             |
 | **Fase 8b — Defeitos achados na TV/celular de verdade**                                                                            | 🧪 **Correções prontas (2026-09-27), aguardando validação manual** — teardown do player, CTA repetida, lista do participante ao vivo, participante tira o próprio pedido; falta o roteiro em [`TESTING.md`](./TESTING.md) §3.9·ter e a semântica do "Parar" (`rooms.playback_held`) |
-| Fase 8 — Não-funcionais, segurança, LGPD                                                                                           | ⏳ Próxima                                                                                                                                                  |
-| **Fases 9–15 — Entrada fora do raio, tela da mesa, perfil de karaokê, tempo/teste grátis, recompensas, pagamento + pedido no bar** | 📋 **Planejadas (registro 2026-09-25, sem implementação)** — detalhamento em [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md) |
+| Fase 8 — Não-funcionais, segurança, LGPD                                                                                           | ⏳ Próxima                                                                                                                                                                                                                                                                          |
+| **Fases 9–15 — Entrada fora do raio, tela da mesa, perfil de karaokê, tempo/teste grátis, recompensas, pagamento + pedido no bar** | 📋 **Planejadas (registro 2026-09-25, sem implementação)** — detalhamento em [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md)                                                                                                                         |
 
 Pendência aberta conhecida: **diagramas Mermaid de `docs/flows/*`** já foram sanitizados e validados em mermaid v10/v11 — falta confirmar a renderização no seu renderizador/preview. Registrado no `TODO.md`.
 

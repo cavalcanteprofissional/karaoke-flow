@@ -263,7 +263,8 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ### Documentação
 
-- README.md atualizado com seção de versionamento e tópico dedicado a Testes.
+- **MANIFEST revisado — voz, clima e o sentir como produto (2026-09-28, commits `8fd31f2`/`fe7efec`):** de "A música não informa, ela espeta" para **"A música não informa — ela atravessa"**, abertura **"Não perca a sua voz — é ela que escolhe o sentir da noite."** e o manifesto passa a vender o **sentir** ("o cliente encomenda uma emoção, não um arquivo"). Nova crença **"Numa balada o clima é do DJ; na nossa casa o clima é da fila"** divide o controle com o cantor (quem pede também escolhe o ânimo — não só o dono), o §2.3 deixou o "obedece" para virar "regente de plantão", o §5 ganhou pós-escrito + bloco **"O sentir é o produto"** e o §6 acomodou como tópico das **Belas Artes** a homenagem à **Supergiant Games** (Transistor/Red, "não perca a sua voz"), que saiu da nota de rodapé.
+- **TODO — bloco "Retomada — contexto da próxima sessão" (2026-09-28, commit `2faf90d`):** registra o estado atual da Fase 8b·ter no Cloud (`security_manual_linking_enabled` plana aplicada, `sync:seed-users` com senha privada rotacionada, betania mantém `betania@exemplo.com`, identidades `email` confirmadas), o Advisor 0010 aplicado (migration `00033` + smoke 8/8), as pendências do lado do usuário (envs na Vercel + validação §3.1 do cruzamento) e a próxima fase **em aberto** (recomendação: Fase 9 contra o hardening da Fase 8). README.md atualizado com seção de versionamento e tópico dedicado a Testes.
 
 ### Decisões de projeto
 

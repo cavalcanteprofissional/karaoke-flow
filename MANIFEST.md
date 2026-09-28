@@ -8,11 +8,16 @@
 
 ## 1. Preâmbulo
 
-Há uma casa em que a voz é hóspede de honra. Nela, quem canta é aplaudido pelo garfo que pousa,
-o copo que espera e o olhar que se vira. Nela, o dono não é caixa nem porteiro: é quem segura a
-luz para o palco alheio arder. Esta casa já existe — a música em si é sua. O que falta a esta
-geração é o *elo discreto*: a fila, o pedido, o aplauso que atravessa a mesa sem atravessar o
-trabalho de quem atende.
+**Não perca a sua voz — é ela que escolhe o sentir da noite.**[^transistor] Há uma casa em que a voz é
+hóspede de honra. Nela, quem canta é aplaudido pelo garfo que pousa, o copo que espera e o olhar
+que se vira. Nela, o dono não é caixa nem porteiro: é quem segura a luz para o palco alheio arder.
+Esta casa já existe — a música em si é sua. O que falta a esta geração é o *elo discreto*: a fila,
+o pedido, o aplauso que atravessa a mesa sem atravessar o trabalho de quem atende.
+
+A música não informa — ela atravessa. A mesma nota que acalma a mesa um acende a mesa dois; quem
+já viu um bar inteiro virar numa ponte de guitarra sabe que não entra o som: sai o sentir. O
+cliente da casa não encomenda um arquivo: encomenda uma emoção — e o nosso trabalho é só não
+atrapalhar, e amplificar.
 
 **Karakê Watch Party** é esse elo. Não é mais um player. É a **fila da casa** que os celulares
 alcançam e o quiosque exibe, com a música sendo tocada onde o vídeo já toca: na televisão, de
@@ -29,19 +34,24 @@ Nós não construímos para o YouTube construir em nosso lugar. Construímos **p
 1. **A voz primeiro.** Uma noite de karaokê é uma sucessão de coragens particulares. Tudo na
    tela — a fila, o tempo de espera, o aviso do seu nome — deve tratar cada coragem como evento
    único, e não como número de uma fila.
-2. **O dono é a casa.** Sem saúde financeira do estabelecimento não há palco. O que for cobrado
+2. **Numa balada, o clima é do DJ; na nossa casa, o clima é da fila.** O cantor que pede uma
+   música não está encomendando um arquivo — está encomendando uma emoção. E a única piada que
+   levamos a sério é esta: **quem escolhe a música escolhe o sentir; aqui, quem senta manda um
+   pouco no clima — e isso é o melhor marketing da casa.**
+3. **O dono é a casa.** Sem saúde financeira do estabelecimento não há palco. O que for cobrado
    deve caber no bolso da casa e parecer nada ao cantor; o que for grátis deve caber na
-   generosidade de quem planta a noite. O dono comanda: aprova, reordena, pausa — e a casa
-   obedece.
-3. **A música é do cantor.** A fila é do cantor. Ela não morre quando ele vai ao banheiro nem
+   generosidade de quem planta a noite. O dono comanda: aprova, reordena, pausa — e, no mesmo
+   gesto, decide se a mesa esquenta, esfria ou se a noite resolve mudar de rumo. É regente de
+   plantão: não compõe a sinfonia, mas decide onde ela respira.
+4. **A música é do cantor.** A fila é do cantor. Ela não morre quando ele vai ao banheiro nem
    recomeça quando a conexão engasga. O sistema é *submisso* à pessoa que canta — a tecnologia é
    a mesa de apoio, nunca o artista principal.
-4. **O mínimo basta.** Fila, aprovação, rótulos de estilo e playback controlado. Tudo além disso
+5. **O mínimo basta.** Fila, aprovação, rótulos de estilo e playback controlado. Tudo além disso
    é enfeite que envelhece. Preferimos poucos recursos profundos a muitos superficiais.
-5. **Privacidade é parede.** Dados de quem entra numa sala são daquela noite — e ficam nela.
+6. **Privacidade é parede.** Dados de quem entra numa sala são daquela noite — e ficam nela.
    Sem tracking de perfil, sem publicidade dirigida, sem vazar a frequência de ninguém. O
    anonimato é arquitetural (ver Apêndice §7).
-6. **O palco é público, o custo é privado.** A cota do YouTube é da casa (via chave por host), e
+7. **O palco é público, o custo é privado.** A cota do YouTube é da casa (via chave por host), e
    é paga uma vez, sem assinatura por assento — assim a sala canta de graça e quem segura o
    custo contrata a graça.
 
@@ -98,6 +108,18 @@ Cada franquia desta casa é única — e o dono é o rei dela. O que o sistema f
   [`questionario-donos-estabelecimento.md`](./questionario-donos-estabelecimento.md) — e é
   preenchida por donos, para donos.
 
+O dono não é DJ do gosto alheio nem casmurro do gosto: é o regente do *quando*. A fila decide o
+*quê*; o seu dedo decide o *quando*; e a sala decide o clima — com sua gentileza de condução.
+(Com grande poder vem a responsabilidade de não deixar o clima desabar num raio de 500 metros da
+mesa.)
+
+> **O sentir é o produto.** Se esta casa tivesse um segredo de bar, seria este: **quem controla a
+> música, controla o sentir.** E a beleza do karaokê é que esse controle é a coisa mais democrática
+> do bairro: o dono decide o *quando*, o cantor decide o *quê*, a mesa dois esquenta com um forró e
+> a mesa sete, num acorde, desacelera o coração da sala. Ninguém manda em ninguém — todo mundo manda
+> um pouco. A fila é uma revolução chique: **a trilha sonora da noite é decidida por votação de
+> coragem.**
+
 ---
 
 ## 6. Acerca das Belas Artes
@@ -137,6 +159,11 @@ temporada só. O ano que era o mais escuro, ao que parece, foi o mais cantado.
 
 Se esta casa contempla a voz alheia, não é por indiferença — é por **convicção calibrada**:
 eu ouço bastante, escolho com carinho, e sei por que a mesa de apoio não deve roubar o palco.
+
+No meu fone, sou eu quem escolhe o ânimo; na casa, o ânimo é escolhido pela fila. Para quem tem
+mania de reger, entregar o controle do sentir a quem vai viver o momento é o exercício mais
+saudável do mundo.
+
 Quem me pedir uma música de madrugada, que não se envergonhe: os arquivos da casa são feitos
 de coragem alheia — 48.200 escolhas que viraram quase duas mil faixas — e o dono da casa
 ainda hoje só assina embaixo do que é belo.
@@ -198,3 +225,11 @@ ainda hoje só assina embaixo do que é belo.
 reformada — desde que a reforma preserve a voz, o bolso e o ânimo desta gente.*
 
 — Karakê Watch Party, 2026
+
+[^transistor]: Homenagem à **Supergiant Games** — um estúdio cujas trilhas sonoras são sempre um
+  personagem a mais nos jogos (*Bastion*, *Pyre*, *Hades*, *Hades II*). Em **Transistor** (2014), a
+  protagonista **Red** é cantora, e a história rouba dela justamente a voz — a cidade a silencia
+  antes do primeiro verso. Uma cantora sem voz, então, abre este manifesto de karaokê. A casa
+  admira esse trabalho e repete a lição: **não perca a sua voz — e, se um dia perder, que ao menos
+  a música que a fez cantar continue tocando.** (A trilha — *The Spine*, *Paper Boats*, *In
+  Circles* — toca na casa até hoje; ver §6.)

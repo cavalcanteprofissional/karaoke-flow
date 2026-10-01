@@ -95,6 +95,7 @@ declare
                      --  o teste de auto-aprovação usa o vínculo PENDENTE)
   v_estranho uuid;   -- logado, sem nenhum vínculo
   v_n integer;
+  v_rec record;
   v_ok boolean;
   v_err text;
   v_txt text;
@@ -325,23 +326,125 @@ begin
     case when v_err <> '' then v_err else v_n::text || ' linha(s) com token' end, v_ok);
 
   -- R6 LEGITIMO: o HOST precisa do `player_token` para montar o link da tela.
-  -- Hoje ele lê a coluna direto (a página da sala passa o token para o
-  -- componente de link). Quando o `F2` for corrigido, este caso passa a
-  -- exercise a RPC host-only e o esperado muda de "1 linha" para "1 valor da
-  -- RPC" — a troca é de propósito, não um esquecimento.
-  v_n := 0; v_err := '';
+  -- Depois do F2 ele não lê a coluna: a coluna saiu do alcance de
+  -- `authenticated` e o valor vem da RPC `admin_get_room_player_token`, que é
+  -- `security definer` e só obedece ao dono. A troca de "1 linha na tabela"
+  -- para "1 valor da RPC" é de propósito — o comentário original deste caso já
+  -- previa isso, e o RPC conferido aqui é o mesmo que a página da sala chama.
+  v_n := 0; v_err := ''; v_txt := '';
   begin
     set local role authenticated;
     perform set_config('request.jwt.claims',
       '{"sub":"' || v_host_a || '","role":"authenticated"}', true);
-    select count(*) into v_n from public.rooms
-      where id = v_room_a and player_token is not null;
+    select public.admin_get_room_player_token(v_room_a) into v_txt;
     set local role postgres;
   exception when others then
-    set local role postgres; v_err := 'bloqueado: ' || sqlerrm;
+    set local role postgres; v_err := 'erro: ' || sqlerrm;
   end;
-  insert into smoke_rls values ('R6 host le o player_token da propria sala', 'LEGITIMO', 'F2',
-    case when v_err <> '' then v_err else v_n::text || ' linha(s) com token' end, v_n = 1);
+  insert into smoke_rls values ('R6 host le o player_token pela RPC host-only', 'LEGITIMO', 'F2',
+    case when v_err <> '' then v_err else 'token de ' || length(coalesce(v_txt, '')) || ' chars' end,
+    v_err = '' and v_txt is not null);
+
+  -- R7 ATAQUE (F2): a RPC que devolve o token é host-only, e o participante
+  -- não vira host chamando ela. Este é o caso que fecha o F2 de verdade: sem
+  -- ele, bastaria a coluna sumir e a RPC virar um endpoint público com o
+  -- segredo atrás.
+  v_n := 0; v_err := ''; v_txt := null;
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    select public.admin_get_room_player_token(v_room_a) into v_txt;
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_err := 'recusado: ' || sqlerrm;
+  end;
+  insert into smoke_rls values ('R7 membro chama a RPC host-only do token', 'ATAQUE', 'F2',
+    case when v_err <> '' then v_err else 'PERMITIU: ' || length(coalesce(v_txt, '')) || ' chars' end,
+    v_err <> '' and v_txt is null);
+
+  -- R8 LEGITIMO: o participante CONTINUA lendo a própria sala — agora pela view
+  -- `rooms_public`, que é o que o app faz nos quatro pontos de leitura. Se este
+  -- caso quebrar, a correção do F1/F2 quebrou o produto.
+  v_n := 0; v_err := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    select count(*) into v_n from public.rooms_public where id = v_room_a;
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_err := 'erro: ' || sqlerrm;
+  end;
+  insert into smoke_rls values ('R8 membro le a propria sala pela view rooms_public', 'LEGITIMO', 'F1/F2',
+    case when v_err <> '' then v_err else v_n::text || ' linha(s)' end, v_n = 1);
+
+  -- R9 ATAQUE (F1/F2): com o privilégio em nível de COLUNA, um `select *` em
+  -- `rooms` passa a responder `permission denied` — o `*` cobre as colunas não
+  -- concedidas. É o que impede o segredo de vazar por um `select *` distraído,
+  -- e é também a razão de a view existir.
+  v_n := 0; v_err := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    for v_rec in select * from public.rooms loop null; end loop;
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_err := 'recusado: ' || sqlerrm;
+  end;
+  insert into smoke_rls values ('R9 select * em rooms nao traz o segredo', 'ATAQUE', 'F1/F2',
+    case when v_err <> '' then v_err else 'PERMITIU: leu a tabela inteira' end, v_err <> '');
+
+  -- R10 ATAQUE (F1): a escrita da chave é host-only, e recusar tem de ter
+  -- efeito — não basta a RPC reclamar, o valor no banco tem de continuar como
+  -- estava. KARAOKE não tem chave configurada no seed, então o teste grava uma,
+  -- tenta a reescrita por um não-dono, confere que não mudou e desfaz.
+  v_err := ''; v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_host_a || '","role":"authenticated"}', true);
+    perform public.admin_set_room_youtube_api_key(v_room_a, 'rlsAuditKeyOriginal');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_err := 'erro: ' || sqlerrm;
+  end;
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    perform public.admin_set_room_youtube_api_key(v_room_a, 'rlsAuditKeyInjected');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_err := 'recusado: ' || sqlerrm;
+  end;
+  select youtube_api_key into v_txt from public.rooms where id = v_room_a;
+  insert into smoke_rls values ('R10 membro nao reescreve a chave do YouTube', 'ATAQUE', 'F1',
+    'chave no banco: ' || coalesce(v_txt, '(null)'),
+    v_err <> '' and coalesce(v_txt = 'rlsAuditKeyOriginal', false));
+
+  -- R11 ATAQUE (F1): nem o dono de um bar mexe na chave da sala de outro bar —
+  -- o `is_host` é da SALVA, não do bar.
+  v_err := ''; v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_host_b || '","role":"authenticated"}', true);
+    perform public.admin_set_room_youtube_api_key(v_room_a, 'rlsAuditKeyCrossTenant');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_err := 'recusado: ' || sqlerrm;
+  end;
+  select youtube_api_key into v_txt from public.rooms where id = v_room_a;
+  insert into smoke_rls values ('R11 host de outro bar nao escreve a chave', 'ATAQUE', 'F1',
+    'chave no banco: ' || coalesce(v_txt, '(null)'),
+    v_err <> '' and coalesce(v_txt = 'rlsAuditKeyOriginal', false));
+
+  -- A chave que o R10 gravou era de mentira e precisa sair: o smoke roda em
+  -- `begin`/`rollback`, mas o resto do arquivo continua rodando na mesma
+  -- transação e não deve ver uma chave que não existe em produção.
+  update public.rooms set youtube_api_key = null where id = v_room_a;
 
   -- R7 ATAQUE: logado sem vínculo não vê sala nenhuma.
   v_n := 0; v_err := '';
@@ -578,12 +681,23 @@ begin
   -- queue_items — a fila e a moderação
   -- ===========================================================================
   -- Q1 LEGITIMO: participante aprovado lê a fila da própria sala.
+  --
+  -- O item é INSERIDO dentro do próprio caso (e some no rollback). A versão
+  -- anterior só contava a fila que o seed deixou, e isso transformou um caso
+  -- LEGITIMO vermelho sem nenhuma mudança de segurança: em 2026-10-02 a fila da
+  -- KARAOKE já estava vazia no projeto Cloud (a sessão consumiu os itens
+  -- APPROVED), e o smoke passou a acusar uma regressão que não existia. Um
+  -- instrumento que depende de estado que o mundo consome não é um instrumento.
   v_n := 0; v_err := '';
   begin
+    set local role postgres;
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+      values (v_room_a, v_membro, 'rlsAuditQ1', 'Smoke RLS Audit Q1');
     set local role authenticated;
     perform set_config('request.jwt.claims',
       '{"sub":"' || v_membro || '","role":"authenticated"}', true);
-    select count(*) into v_n from public.queue_items where room_id = v_room_a;
+    select count(*) into v_n from public.queue_items
+      where room_id = v_room_a and youtube_video_id = 'rlsAuditQ1';
     set local role postgres;
   exception when others then
     set local role postgres; v_err := 'erro: ' || sqlerrm;
@@ -870,19 +984,73 @@ begin
   insert into smoke_rls values ('H1 TRUNCATE/TRIGGER/REFERENCES concedidos a anon/authenticated',
     'ATAQUE', 'F5', v_n::text || ' concessao(oes)', v_n = 0);
 
-  -- H2 LEGITIMO: nenhuma das duas colunas de segredo de `rooms` pode ter
-  -- SELECT concedido em nível de tabela/coluna para a API. `attacl is null`
-  -- significa que herda o GRANT da tabela — ou seja, anybody lê.
+  -- H2 ATAQUE (F1/F2): as duas colunas de segredo de `rooms` não podem ter
+  -- SELECT/INSERT/UPDATE para nenhum dos dois papéis da Data API. Este caso
+  -- usava o proxy `attacl is null` (coluna sem ACL própria = herda o GRANT da
+  -- tabela = anybody lê), que é o que a auditoria encontrou. Depois da
+  -- `20260930000038` a verificação é o PRIVILÉGIO EFFECTIVO, não a ausência de
+  -- ACL: o caminho que fecha a coluna é revogar o SELECT de nível tabela e
+  -- conceder de volta coluna a coluna, e nesse desenho `attacl` deixa de ser null
+  -- justamente para as colunas inócuas. Conferir `attname` e `attacl` aqui
+  -- mediria a forma do remédio em vez do efeito.
   v_n := 0;
   select count(*) into v_n
-    from pg_attribute a
-    join pg_class c on c.oid = a.attrelid
-    join pg_namespace n on n.oid = c.relnamespace
-   where n.nspname = 'public' and c.relname = 'rooms'
-     and a.attname in ('youtube_api_key', 'player_token')
-     and a.attacl is null;
-  insert into smoke_rls values ('H2 rooms: colunas de segredo sem ACL de coluna',
-    'ATAQUE', 'F1/F2', v_n::text || ' coluna(s) sem ACL', v_n = 0);
+    from (select unnest(array['anon', 'authenticated']) as papel) g
+   where has_column_privilege(g.papel, 'public.rooms', 'youtube_api_key', 'SELECT')
+      or has_column_privilege(g.papel, 'public.rooms', 'player_token', 'SELECT')
+      or has_column_privilege(g.papel, 'public.rooms', 'youtube_api_key', 'UPDATE')
+      or has_column_privilege(g.papel, 'public.rooms', 'player_token', 'UPDATE')
+      or has_column_privilege(g.papel, 'public.rooms', 'youtube_api_key', 'INSERT')
+      or has_column_privilege(g.papel, 'public.rooms', 'player_token', 'INSERT');
+  insert into smoke_rls values ('H2 rooms: colunas de segredo sem privilegio para a API',
+    'ATAQUE', 'F1/F2', v_n::text || ' papel(es) com privilegio', v_n = 0);
+
+  -- H3 ATAQUE (F6): em `room_members` o papel `authenticated` só pode mexer no
+  -- `status`. A policy do host sem `with check` permitia reescrever o `user_id`
+  -- de um membro e transplantar a participação para outra conta; o conserto é
+  -- privilégio de coluna, então é aqui que se prova que `user_id` e `room_id`
+  -- ficaram fora.
+  v_n := 0;
+  select count(*) into v_n
+    from (select unnest(array['anon', 'authenticated']) as papel) g
+   where has_column_privilege(g.papel, 'public.room_members', 'user_id', 'UPDATE')
+      or has_column_privilege(g.papel, 'public.room_members', 'room_id', 'UPDATE')
+      or has_column_privilege(g.papel, 'public.room_members', 'mesa_numero', 'UPDATE');
+  insert into smoke_rls values ('H3 room_members: UPDATE so no status', 'ATAQUE', 'F6',
+    v_n::text || ' papel(es) com privilegio de UPDATE', v_n = 0);
+
+  -- H4 ATAQUE (F1/F2): as RPCs `admin_*` não podem ser EXECUTADAS por `anon`.
+  --
+  -- A 00038 fez `revoke execute ... from anon` e a medição seguinte mostrou
+  -- `anon` com EXECUTE = true: `CREATE FUNCTION` dá EXECUTE para `PUBLIC`, e
+  -- PUBLIC vale para todo papel, então revogar de `anon` tira o nominal e deixa
+  -- o efetivo. Hoje nada vaza porque as funções checam `is_host(...)` com
+  -- `auth.uid()` NULO, mas aí a proteção é o `if`, não a ACL — e uma `admin_*`
+  -- nova sem o `if` nasceria já aberta. A 00039 fecha.
+  v_n := 0;
+  select count(*) into v_n
+    from unnest(array[
+      'public.admin_get_room_player_token(uuid)',
+      'public.admin_get_room_youtube_api_key(uuid)',
+      'public.admin_set_room_youtube_api_key(uuid,text)'
+    ]) as f
+   where has_function_privilege('anon', f, 'execute');
+  insert into smoke_rls values ('H4 admin_*: anon nao executa a RPC host-only',
+    'ATAQUE', 'F1/F2', v_n::text || ' RPC(s) executaveis por anon', v_n = 0);
+
+  -- H5 ATAQUE (F1/F2): e o `authenticated` continua ALCANCANDO, senão o
+  -- conserto vira "todo mundo trancado fora" em vez de "só o host".
+  v_n := 0;
+  select count(*) into v_n
+    from unnest(array[
+      'public.admin_get_room_player_token(uuid)',
+      'public.admin_get_room_youtube_api_key(uuid)',
+      'public.admin_set_room_youtube_api_key(uuid,text)'
+    ]) as f
+   where not has_function_privilege('authenticated', f, 'execute');
+  insert into smoke_rls values ('H5 admin_*: authenticated ainda executa',
+    'LEGITIMO', 'F1/F2', v_n::text || ' RPC(s) bloqueadas para authenticated',
+    v_n = 0);
 end;
 $$;
 

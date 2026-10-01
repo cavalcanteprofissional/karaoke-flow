@@ -122,6 +122,16 @@ export async function reopenRoomAction(
   return { ok: true };
 }
 
+/**
+ * Grava (ou apaga) a chave de API do YouTube da sala.
+ *
+ * Desde a `20260930000038` isso NÃO é mais `update rooms set youtube_api_key`:
+ * a coluna saiu do alcance do papel `authenticated` por ACL de coluna (F1/F2 da
+ * auditoria de RLS), e a escrita passa pela RPC `admin_set_room_youtube_api_key`,
+ * que é `security definer` e só obedece ao dono da sala. O efeito colateral
+ * pretendido: a coluna deixa de ter qualquer caminho de escrita pelo cliente, e
+ * o erro de "não é o dono" volta em português de dentro do banco.
+ */
 export async function updateYoutubeKeyAction(
   roomId: string,
   apiKey: string | null
@@ -129,19 +139,21 @@ export async function updateYoutubeKeyAction(
   const supabase = await createClient();
   const trimmed = apiKey?.trim() || null;
 
-  const { data, error } = await supabase
-    .from("rooms")
-    .update({ youtube_api_key: trimmed })
-    .eq("id", roomId)
-    .select("id");
+  const { data, error } = await supabase.rpc("admin_set_room_youtube_api_key", {
+    p_room_id: roomId,
+    p_api_key: trimmed,
+  });
   if (error) {
     return {
       ok: false,
       error: friendlyError(error.message, "Não foi possível salvar a chave do YouTube."),
     };
   }
-  if (!data || data.length === 0) {
-    return { ok: false, error: "Só o dono pode configurar a chave do YouTube da sala." };
+  if (data !== true) {
+    return {
+      ok: false,
+      error: "Só o dono pode configurar a chave do YouTube da sala.",
+    };
   }
 
   revalidatePath("/salas/[codigo]", "page");

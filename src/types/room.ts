@@ -6,6 +6,17 @@ export type RoomStatus = "active" | "closed";
 
 export type MemberStatus = "pending" | "approved" | "rejected";
 
+/**
+ * A sala como o CLIENTE pode ler: as 14 colunas da view `rooms_public`.
+ *
+ * Desde a migration `20260930000038` (Fase 8c·C, fechando F1/F2 da auditoria
+ * de RLS) o tipo NÃO tem mais `youtube_api_key` nem `player_token`: as duas
+ * saíram do alcance do papel `authenticated` por ACL de coluna, e a leitura
+ * delas é por RPC `security definer` que só o dono da sala chama — o que também
+ * impede o `select *` de vazar segredo por acidente. E o tipo é a segunda
+ * defesa: se alguém reintroduzir um campo sensível aqui, o TypeScript reclama
+ * antes de o banco ver a query.
+ */
 export type Room = {
   id: string;
   code: string;
@@ -23,9 +34,23 @@ export type Room = {
    * levá-lo até lá.
    */
   pre_approval_24h: boolean;
-  youtube_api_key: string | null;
   status: RoomStatus;
   created_at: string;
+  /** Estado de reprodução (lê o quiosque; null em salas paradas). */
+  playback_status?: string | null;
+  current_item_id?: string | null;
+  current_item_started_at?: string | null;
+};
+
+/**
+ * Os dois segredos da sala, que NÃO moram em `Room` desde a `20260930000038`.
+ * Chegam por RPC `security definer` (host-only) e são usados só no servidor.
+ */
+export type RoomSecrets = {
+  /** Credencial do link da TV — o próprio repo trata como segredo. */
+  playerToken: string | null;
+  /** Chave de API do YouTube que o host configurou para a sala. */
+  youtubeApiKey: string | null;
 };
 
 export type RoomMember = {

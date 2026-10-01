@@ -52,11 +52,19 @@ rooms: [] as Row[],
                 : null,
           };
         }
+        // `rooms_public` (migration 20260930038) é a view sem as colunas
+        // sensíveis; nos fixtures ela resolve para as mesmas linhas de `rooms`,
+        // porque o que o teste observa aqui é a sala e a participação, não o shape.
+        // A chave é lida pelo client de service role, e o `select` da rota para
+        // `rooms_public` é o que impede o participante de pedi-la.
+        const key = table === "rooms_public" ? "rooms" : table;
         const rows =
           table === "room_members"
             ? state.tables.members
-            : (state.tables[table as keyof typeof state.tables] ?? []);
-        const match = rows.find((row) => conditions.every(([field, value]) => row[field] === value));
+            : (state.tables[key as keyof typeof state.tables] ?? []);
+        const match = rows.find(
+          (row: Row) => conditions.every(([field, value]) => row[field] === value)
+        );
         return { data: match ?? null };
       },
       upsert: async (row: Row) => {

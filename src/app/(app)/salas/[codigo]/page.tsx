@@ -67,8 +67,12 @@ export default async function RoomPage({ params }: RoomPageProps) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // `rooms_public` é a view da migration 20260930038 (F1/F2 da auditoria de
+  // RLS): mesmas 14 colunas de sempre, sem a credencial da TV e sem a chave de
+  // API, que passaram a sair por RPC host-only. Leia `rooms` direto e o banco
+  // responde `permission denied` — o `select *` cobre as colunas revogadas.
   const { data: room } = await supabase
-    .from("rooms")
+    .from("rooms_public")
     .select("*")
     .eq("code", code)
     .maybeSingle();
@@ -187,7 +191,23 @@ export default async function RoomPage({ params }: RoomPageProps) {
   const queueInitial = (queueRows ?? []) as QueueItem[];
 
   let youtubeConnectedAt: string | null = null;
+  // Os dois segredos da sala (credencial do link da TV e chave de API do
+  // YouTube) saíram do alcance do papel `authenticated` na migration
+  // `20260930000038`: a coluna não é mais legível pelo client, e sim por RPC
+  // `security definer` que só obedece ao dono. Aqui é o único lugar que precisa
+  // deles, e só quando `isHost` — que é exatamente quem as RPCs autorizam.
+  // O client é o do USUÁRIO (não o `createAdmin()`): o `auth.uid()` de dentro da
+  // RPC é o que faz a checagem de vínculo, e ele só existe com o JWT da sessão.
+  let playerToken: string | null = null;
+  let youtubeApiKey: string | null = null;
   if (isHost) {
+    const [tokenRes, keyRes] = await Promise.all([
+      supabase.rpc("admin_get_room_player_token", { p_room_id: room.id }),
+      supabase.rpc("admin_get_room_youtube_api_key", { p_room_id: room.id }),
+    ]);
+    playerToken = tokenRes.data ?? null;
+    youtubeApiKey = keyRes.data ?? null;
+
     const { data: oauth } = await createAdmin()
       .from("youtube_oauth_tokens")
       .select("updated_at")
@@ -306,7 +326,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
             queue_approval_mode: room.queue_approval_mode,
             require_song_confirmation: room.require_song_confirmation,
             pre_approval_24h: room.pre_approval_24h,
-            youtube_api_key: room.youtube_api_key ?? null,
+            youtube_api_key: youtubeApiKey,
           }}
           youtubeConnectedAt={youtubeConnectedAt}
           bar={
@@ -341,11 +361,16 @@ export default async function RoomPage({ params }: RoomPageProps) {
         <MesaPicker roomId={room.id} quantidadeMesas={bar.quantidade_mesas} />
       )}
 
-      {isHost && (
+      {/* Sem o token da TV não há link para montar, então os controles de
+          reprodução só aparecem com ele — passar `null` construiria uma URL
+          `/player/<código>?token=null` e o "copiar link" copiaria lixo. Na
+          prática o token sempre existe (o banco o gera); o que falta é a RPC,
+          e aí o sintoma é estes controles não aparecerem, e não um link quebrado. */}
+      {isHost && playerToken && (
         <PlaybackControls
           roomId={room.id}
           roomCode={code}
-          playerToken={room.player_token}
+          playerToken={playerToken}
           status={room.playback_status}
           hasCurrent={Boolean(room.current_item_id)}
           queueLength={queueInitial.filter((item) => item.status === "approved").length}

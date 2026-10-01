@@ -36,7 +36,7 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
   if (!user) redirect("/login");
 
   const { data: room } = await supabase
-    .from("rooms")
+    .from("rooms_public")
     .select("*")
     .eq("code", code)
     .maybeSingle();

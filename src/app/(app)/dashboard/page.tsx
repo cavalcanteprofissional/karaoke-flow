@@ -59,7 +59,7 @@ export default async function DashboardPage() {
   const myBarsList = (myBars ?? []) as Bar[];
 
   const { data: hostedRooms } = await supabase
-    .from("rooms")
+    .from("rooms_public")
     .select("*")
     .eq("host_id", user!.id)
     .order("created_at", { ascending: false });
@@ -89,7 +89,7 @@ export default async function DashboardPage() {
   if (approvedRooms.length > 0) {
     const approvedIds = approvedRooms.map((r) => r.room_id);
     const { data: rooms } = await supabase
-      .from("rooms")
+      .from("rooms_public")
       .select("*")
       .in("id", approvedIds);
 

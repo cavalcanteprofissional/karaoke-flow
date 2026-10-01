@@ -307,7 +307,35 @@ testes verdes.
 
 ---
 
-## 6. Lição de método (a que mais custou)
+## 6. Segunda rodada: o mesmo roteiro, cinco dias depois (2026-10-02)
+
+A validação da Fase 8c (RLS) rodou este smoke como regressão e ele **estourou** —
+mas nenhum dos quatro problemas era do produto. Vale registrar porque todos
+produzem a **mesma** ilusão: um erro que se lê como falha de segurança e é deriva
+do próprio instrumento.
+
+| # | Sintoma                                                                     | Causa real                                                                                          | Correção                                                                              |
+| - | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 1 | `set_playback` → `não autenticado`                                          | a sala era escolhida por `where exists (fila aprovada)`; com as filas do seed drenadas o `into` não devolvia linha, `v_host` ficou NULO e `set_config(..., NULL)` | escolher `where status = 'active' order by code` (determinístico, sem depender de fila) |
+| 2 | `set_playback` → `nada tocando` (bem depois da causa)                     | os itens do roteiro tiravam o `added_by_user_id` da **própria fila** (`lateral`); fila vazia ⇒ doador NULO ⇒ o `insert` nascia com **zero linhas** | doador passa a ser o **host da sala**, que sempre existe                              |
+| 3 | o roteiro só passava na **primeira** execução; a segunda falhava            | **não havia transação**: cada rodada commitava os itens `smoke1..5` na fila, e a rodada seguinte herdava a sujeira (a tabela de resultado já pedia `on commit drop` — a transação foi esquecida no arquivo) | `begin;` no topo e `rollback;` no fim; resíduo limpo uma vez                          |
+| 4 | o relatório misturava "a parede segurou" com "o instrumento quebrou"       | casos que devolviam o JSON da RPC, cujo `ok: false` é **recusa esperada**; e 9 dos 20 casos sem veredito `ok` próprio — nos ramos de `exception` de 12/13/14 isso esconderia regressão como "sem veredito" | veredito `ok` explícito nos 20 casos; nos que esperam erro, o `ok` compara com a mensagem |
+
+A 5ª lição, na mesma linha da 6ª: **instrumento que depende de estado que o mundo
+consome não é instrumento.** A fila do seed é consumida por sessão real de
+karaokê — usar a fila do seed como premissa de teste é usar dado de produção como
+constante. E a 6ª: **smoke que só passa na primeira execução não é smoke**; o
+critério de aceitação de um roteiro com escrita é "rode duas vezes seguidas e o
+banco fica igual".
+
+O caso 3 do `smoke-rls-audit` (Q1, que só contava a fila seedada e ficou vermelho
+`LEGITIMO` sem nenhuma mudança de segurança) é o mesmo defeito. Lá a correção foi
+o item ser inserido dentro do próprio caso — o `smoke-playback` precisava de
+`rollback` porque **escreve na fila que outros casos leem**.
+
+---
+
+## 7. Lição de método (a que mais custou)
 
 O erro de processo não foi técnico: foi **validar o script contra o ambiente
 real como se fosse um REPL**. Um `DO` block remoto não é iterável como uma

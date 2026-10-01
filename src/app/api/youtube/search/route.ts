@@ -36,12 +36,30 @@ async function getRoomContext(
   supabase: SupabaseClient,
   code: string
 ): Promise<RoomSearchContext | null> {
+  // Duas leituras, de propósito, e a ordem importa.
+  //
+  // 1) com o client do USUÁRIO, para a RLS decidir: se a pessoa não for membro
+  //    da sala, `rooms_public` devolve nada e a rota segue negando como antes.
+  //    A autorização fica no banco, não num `if` do TypeScript.
   const { data: room } = await supabase
-    .from("rooms")
-    .select("id, host_id, youtube_api_key, bar_id")
+    .from("rooms_public")
+    .select("id, host_id, bar_id")
     .eq("code", code)
     .maybeSingle();
   if (!room) return null;
+
+  // 2) a chave de API só no SERVIDOR, com o client de service role. Ela deixou
+  //    de ser legível pelo papel `authenticated` na migration `20260930038`
+  //    (F1 da auditoria de RLS: qualquer participante aprovado extraía a chave do
+  //    dono da sala). Uma RPC "só para membros" não resolveria — o participante
+  //    chamaria a RPC pelo PostgREST e leria a chave do mesmo jeito. Aqui a chave
+  //    é lida depois da autorização e nunca volta para o browser; é o mesmo
+  //    padrão que `getRoomEntryState` já usa em `src/lib/bars/actions.ts`.
+  const { data: secretRow } = await createAdmin()
+    .from("rooms")
+    .select("youtube_api_key")
+    .eq("id", room.id)
+    .maybeSingle();
 
   let bar: RoomSearchContext["bar"] = {
     latitude: null,
@@ -66,7 +84,7 @@ async function getRoomContext(
   return {
     roomId: room.id,
     hostId: room.host_id,
-    youtubeApiKey: room.youtube_api_key,
+    youtubeApiKey: secretRow?.youtube_api_key ?? null,
     bar,
   };
 }

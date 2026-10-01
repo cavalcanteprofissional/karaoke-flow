@@ -16,10 +16,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
+  // Espelha `security_manual_linking_enabled` do projeto Supabase. Default OFF
+  // (fail-closed): sem a env, o botão "Vincular GitHub" não aparece. Só ligue
+  // junto com `npm run enable:manual-linking`, senão o botão some e a flag fica
+  // ligada sem uso.
+  const manualLinkingEnabled = process.env.NEXT_PUBLIC_ENABLE_MANUAL_LINKING === "1";
+
   return (
     <>
       <ConsentSync />
-      <AppShell headerActions={<UserMenu />} nav={<AppNav />}>
+      <AppShell
+        headerActions={<UserMenu manualLinkingEnabled={manualLinkingEnabled} />}
+        nav={<AppNav />}
+      >
         {children}
       </AppShell>
     </>

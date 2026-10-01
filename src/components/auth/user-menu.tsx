@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { SetPasswordItem } from "@/components/auth/set-password-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +16,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/auth-store";
+
+type UserMenuProps = {
+  /**
+   * `security_manual_linking_enabled` no Auth. Lida no server e passada por
+   * prop porque é flag de serviço — o client não deve consultá-la a cada render.
+   */
+  manualLinkingEnabled?: boolean;
+};
 
 function initials(name: string | null, email: string) {
   const source = name ?? email;
@@ -63,7 +72,7 @@ function LinkGitHubIdentity() {
   );
 }
 
-export function UserMenu() {
+export function UserMenu({ manualLinkingEnabled = false }: UserMenuProps) {
   const user = useAuthStore((state) => state.user);
 
   if (!user) {
@@ -73,7 +82,11 @@ export function UserMenu() {
   const isAnonymous = user.is_anonymous ?? user.app_metadata?.is_anonymous === true;
   const identities = user.identities ?? [];
   const hasGithub = identities.some((identity) => identity.provider === "github");
-  const isEmailIdentity = identities.some((identity) => identity.provider === "email");
+  // `linkIdentity` é o único jeito de travar um GitHub numa conta que nasceu
+  // por e-mail, mas é também a rota de account takeover: qualquer OAuth cujo
+  // e-mail bata com uma conta existente vira dono dela. Só fica no ar quando o
+  // dono liga a flag de propósito (helper `scripts/enable-manual-linking.mjs`).
+  const showLinkGitHub = manualLinkingEnabled && !isAnonymous && !hasGithub;
   const userInitials = isAnonymous
     ? "V"
     : initials(user.user_metadata.full_name ?? null, user.email ?? "");
@@ -98,13 +111,26 @@ export function UserMenu() {
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {isEmailIdentity && !isAnonymous && !hasGithub && (
+        {showLinkGitHub && (
           <>
             <div className="flex flex-col gap-1 px-2 pt-1.5 pb-1">
               <span className="text-muted-foreground px-2 text-xs">
                 Entre com o GitHub no celular/usando a nuvem — mesma conta, uma vez só.
               </span>
               <LinkGitHubIdentity />
+            </div>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        {!isAnonymous && (
+          <>
+            <div className="px-2 pt-1.5 pb-1">
+              <span className="text-muted-foreground block px-2 pb-1 text-xs">
+                {hasGithub
+                  ? "Sua conta entrou pelo GitHub. Uma senha também deixa você entrar sem depender do GitHub."
+                  : "Sua conta não tem senha ainda. Defina uma para conseguir entrar por e-mail."}
+              </span>
+              <SetPasswordItem hasProvider={hasGithub} />
             </div>
             <DropdownMenuSeparator />
           </>

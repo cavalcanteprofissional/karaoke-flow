@@ -91,9 +91,24 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
     });
     setSubmitting(false);
     if (error) {
-      toast.error("Credenciais inválidas.", {
-        description: "Use os usuários criados pelo `npm run seed`.",
-      });
+      const msg = error.message || "";
+      if (msg.includes("Invalid login credentials")) {
+        toast.error("E-mail ou senha não batem com nenhuma conta.", {
+          description: "Verifique o e-mail e a senha usados para o acesso de teste.",
+        });
+      } else if (msg.includes("Email not confirmed")) {
+        toast.error("Este e-mail ainda não foi confirmado.", {
+          description: "Confirme o e-mail no Supabase Auth antes de entrar.",
+        });
+      } else if (msg.includes("Too many requests")) {
+        toast.error("Muitas tentativas. Tente de novo em instantes.", {
+          description: "Aguarde um pouco e repita o login.",
+        });
+      } else {
+        toast.error("Não foi possível entrar com e-mail/senha.", {
+          description: msg,
+        });
+      }
       return;
     }
     router.push("/dashboard");
@@ -186,7 +201,7 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
             >
               <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
                 <ShieldAlert className="size-3.5" />
-                Acesso de desenvolvimento
+                Acesso de teste
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="dev-email" className="text-xs">
@@ -196,7 +211,7 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
                   id="dev-email"
                   type="email"
                   autoComplete="username"
-                  placeholder="dono@exemplo.com"
+                  placeholder="ex.: dono@exemplo.com"
                   value={devEmail}
                   onChange={(event) => setDevEmail(event.target.value)}
                   required
@@ -210,7 +225,7 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
                   id="dev-password"
                   type="password"
                   autoComplete="current-password"
-                  placeholder="senha123"
+                  placeholder="senha privada (.env.local)"
                   value={devPassword}
                   onChange={(event) => setDevPassword(event.target.value)}
                   required

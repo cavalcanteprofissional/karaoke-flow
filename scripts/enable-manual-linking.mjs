@@ -1,17 +1,16 @@
 /**
- * Habilita o manual linking de identidades no Supabase (Auth) via Management API.
+ * Habilita ou desliga o manual linking de identidades no Supabase (Auth) via Management API.
  * (Fase 8b·ter — botão "Vincular GitHub": mesma conta por senha e por OAuth.)
  *
  * O `supabase.auth.linkIdentity` é recusado enquanto o projeto tiver
- * `security.manual_linking_enabled = false`. Ligar aqui é o requisito do
- * cruzamento (read README "Login e acesso" / TESTING §3.1).
+ * `security.manual_linking_enabled = false`. Esta flag amplia a superfície de
+ * ataque (advisory da Supabase sobre SSO/e-mail); o TODO 8b·ter registra o plano
+ * de reverter antes de uso real.
  *
- * Alerta: ligar manual linking amplia a superfície de ataque (advisory da
- * Supabase sobre SSO/e-mail). Para este projeto de dev que roda com senhas
- * privadas e contas de teste é aceitável; o TODO 8b·ter registra o plano de
- * reverter (ou migrar para staging) antes de uso real.
+ * Uso:
+ *   node scripts/enable-manual-linking.mjs        → habilita (true)
+ *   node scripts/enable-manual-linking.mjs --off  → desliga (false)
  *
- * Uso: node scripts/enable-manual-linking.mjs
  * Requer SUPABASE_ACCESS_TOKEN e NEXT_PUBLIC_SUPABASE_URL em .env.local.
  */
 import fs from "node:fs";
@@ -45,6 +44,22 @@ for (const k of [url, accessToken]) {
 const ref =
   url.match(/https:\/\/(.+)\.supabase\.co/)?.[1] ?? url.split("//")[1].split(".")[0];
 
+const enable = process.argv.includes("--off") ? false : true;
+const envGate = g("NEXT_PUBLIC_ENABLE_MANUAL_LINKING") === "1";
+
+if (enable && !envGate) {
+  console.warn(
+    "\nAVISO: habilitando a flag, mas NEXT_PUBLIC_ENABLE_MANUAL_LINKING!=1 no .env.local.\n" +
+      '       O botão "Vincular GitHub" NÃO vai aparecer (default é fail-closed).\n' +
+      "       Adicione NEXT_PUBLIC_ENABLE_MANUAL_LINKING=1 e reinicie o dev server."
+  );
+} else if (!enable && envGate) {
+  console.warn(
+    "\nAVISO: desligando a flag, mas NEXT_PUBLIC_ENABLE_MANUAL_LINKING=1 no .env.local.\n" +
+      "       O botão vai sumir da UI mesmo com a flag desligada. Ajuste a env para 0."
+  );
+}
+
 const getRes = await fetch(`https://api.supabase.com/v1/projects/${ref}/config/auth`, {
   headers: { Authorization: `Bearer ${accessToken}` },
 });
@@ -56,8 +71,8 @@ const config = await getRes.json();
 const manual = config.security_manual_linking_enabled;
 console.log("Estado atual: security_manual_linking_enabled =", String(manual));
 
-if (manual === true) {
-  console.log("Manual linking já habilitado. Nada a fazer.");
+if (manual === enable) {
+  console.log(`Já está ${enable ? "habilitado" : "desligado"}. Nada a fazer.`);
 } else {
   const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/config/auth`, {
     method: "PATCH",
@@ -65,12 +80,26 @@ if (manual === true) {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ security_manual_linking_enabled: true }),
+    body: JSON.stringify({ security_manual_linking_enabled: enable }),
   });
   const text = await res.text();
   if (res.ok) {
-    console.log(`OK (${res.status}): manual linking habilitado`);
-    if (text && text !== "") console.log(text.slice(0, 2000));
+    console.log(
+      `OK (${res.status}): manual linking ${enable ? "habilitado" : "desligado"}`
+    );
+    // NÃO loga o corpo do PATCH: a resposta é a config completa de Auth e traz
+    // `external_github_secret` / `external_google_secret` em texto puro.
+    if (!enable) {
+      const check = await fetch(
+        `https://api.supabase.com/v1/projects/${ref}/config/auth`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const after = await check.json();
+      console.log(
+        "Confere: security_manual_linking_enabled =",
+        String(after.security_manual_linking_enabled)
+      );
+    }
   } else {
     console.error(`FALHA (${res.status}):\n${text}`);
     process.exit(1);

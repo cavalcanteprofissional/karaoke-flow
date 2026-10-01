@@ -22,7 +22,18 @@ import { captureGeolocation, roundCoords, type GeoCoordinates } from "@/lib/cons
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
 import { cn } from "cn";
 
-export function CreateBarDialog() {
+export function CreateBarDialog({
+  triggerLabel = "Criar meu bar",
+  triggerVariant = "default",
+  triggerSize = "default",
+  triggerClassName,
+}: {
+  /** Rótulo do gatilho. O dev, que pode ter vários bars, usa "Criar bar". */
+  triggerLabel?: string;
+  triggerVariant?: "default" | "outline" | "secondary" | "ghost";
+  triggerSize?: "default" | "sm";
+  triggerClassName?: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -109,9 +120,9 @@ export function CreateBarDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="w-full">
+        <Button className={cn(triggerClassName, "w-full")} variant={triggerVariant} size={triggerSize}>
           <Plus className="size-4" />
-          Criar meu bar
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">

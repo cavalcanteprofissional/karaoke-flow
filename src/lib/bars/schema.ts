@@ -80,3 +80,27 @@ export const createBarSchema = z
   });
 
 export type CreateBarInput = z.infer<typeof createBarSchema>;
+
+/**
+ * Código de entrada de uma sala nova dentro de um bar existente
+ * (RPC `create_room`, migration `20260930000034`). Mesmas regras do
+ * `codigo_entrada` do bar — 3–12 alfanuméricos, maiúsculo; vazio → o banco
+ * resolve (`unique_room_code` sobre "KARAOKE", que dedup KARAOKE2, KARAOKE3…).
+ */
+export const createRoomSchema = z.object({
+  bar_id: z.string().uuid("Bar inválido."),
+  codigo_entrada: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() !== ""
+        ? normalizeRoomCode(value)
+        : undefined,
+    z
+      .string()
+      .min(3, "O código de entrada tem no mínimo 3 caracteres.")
+      .max(12, "O código de entrada tem no máximo 12 caracteres.")
+      .regex(/^[A-Z0-9]+$/, "Use apenas letras e números, sem acentos ou espaços.")
+      .optional()
+  ),
+});
+
+export type CreateRoomInput = z.infer<typeof createRoomSchema>;

@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdmin } from "@/lib/supabase/admin";
-import { createBarSchema, barRadiusSchema, type CreateBarInput } from "@/lib/bars/schema";
+import { createBarSchema, createRoomSchema, barRadiusSchema, type CreateBarInput, type CreateRoomInput } from "@/lib/bars/schema";
 import { requirePresence } from "@/lib/bars/presence";
 import { geocodeAddress, type PresenceDecision } from "@/lib/bars/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
@@ -23,6 +23,10 @@ type CreateBarRpcRow = {
 function friendlyError(message: string, fallback: string): string {
   if (/row-level security|permission denied|policy/i.test(message)) return fallback;
   if (/não autenticado/i.test(message)) return "Faça login para entrar.";
+  if (/já tem um bar|uma casa/i.test(message))
+    return "Você já tem um bar. Cada dono tem uma casa — use o mesmo bar para novas salas.";
+  if (/já tem uma sala|um karaokê/i.test(message))
+    return "Você já tem uma sala. Cada dono tem um karaokê.";
   if (/bar não encontrado/i.test(message)) return "Bar não encontrado.";
   if (/sala não encontrada|inativa/i.test(message))
     return "Sala não encontrada ou inativa.";
@@ -157,6 +161,56 @@ export async function createBarAction(raw: unknown): Promise<CreateBarResult> {
     ok: true,
     bar: { id: data.bar_id, code: data.bar_code, room_code: data.room_code },
   };
+}
+
+export type CreateRoomResult =
+  | { ok: true; room: { id: string; code: string } }
+  | { ok: false; error: string };
+
+/**
+ * Abre uma nova sala (karaokê) dentro de um bar que JÁ existe.
+ *
+ * Antes não havia caminho para isso: `create_bar` sempre nasce com exatamente
+ * uma sala, e a UI só tinha uma affordance desligada ("multi-sala chega em uma
+ * fase futura"). A autorização mora na RPC `create_room` — ela exige
+ * `bars.host_id = auth.uid()` antes de escrever, então quem não é dono leva
+ * "bar não encontrado" e nada é criado. Esta action só traduz o erro.
+ */
+export async function createRoomAction(raw: unknown): Promise<CreateRoomResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Faça login para abrir uma sala." };
+  }
+
+  const parsed = createRoomSchema.safeParse(raw);
+  if (!parsed.success) {
+    const first = parsed.error.errors[0];
+    return { ok: false, error: first?.message ?? "Dados da sala inválidos." };
+  }
+  const input = parsed.data as CreateRoomInput;
+
+  const { data, error } = (await supabase
+    .rpc("create_room", {
+      p_bar_id: input.bar_id,
+      p_codigo: input.codigo_entrada ?? null,
+    })
+    .single()) as { data: { room_id: string; room_code: string } | null; error: { message: string } | null };
+
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível abrir a sala."),
+    };
+  }
+  if (!data) {
+    return { ok: false, error: "Não foi possível abrir a sala." };
+  }
+
+  revalidatePath("/dashboard");
+  return { ok: true, room: { id: data.room_id, code: data.room_code } };
 }
 
 export type EntryPreviewResult =

@@ -4,7 +4,7 @@ import {
   Hourglass,
   Laugh,
   MapPin,
-  Plus,
+  Mic2,
   Power,
   QrCode,
   Table2,
@@ -13,8 +13,10 @@ import {
 } from "lucide-react";
 
 import { CreateBarDialog } from "@/components/bars/create-bar-dialog";
+import { CreateRoomDialog } from "@/components/bars/create-room-dialog";
 import { PendingEntryRequests } from "@/components/bars/pending-entry-requests";
 import { getMyEntryRequestsAction } from "@/lib/bars/actions";
+import { isDevAccount } from "@/lib/dev";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,12 +45,18 @@ export default async function DashboardPage() {
 
   const displayName = user?.user_metadata.full_name ?? user?.email ?? "pessoa";
   const isAnonymous = user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true;
+  const isDev = await isDevAccount(supabase);
 
-  const { data: myBar } = await supabase
+  // Lista, não `maybeSingle`: até a Fase 8b·quater `bars.host_id` era UNIQUE e
+  // o dev tinha uma casa só. O dev é isento do teto de 1 bar, então com 2+ bars
+  // esta query ERRARIA (`maybeSingle` exige no máximo 1 linha) — daí a lista.
+  const { data: myBars } = await supabase
     .from("bars")
     .select("*")
     .eq("host_id", user!.id)
-    .maybeSingle<Bar>();
+    .order("criado_em", { ascending: true });
+
+  const myBarsList = (myBars ?? []) as Bar[];
 
   const { data: hostedRooms } = await supabase
     .from("rooms")
@@ -56,9 +64,15 @@ export default async function DashboardPage() {
     .eq("host_id", user!.id)
     .order("created_at", { ascending: false });
 
-  const activeHostedCount = (hostedRooms ?? []).filter(
-    (r) => r.status === "active"
-  ).length;
+  // Salas por bar, para o card de cada bar mostrar as suas e oferecer
+  // "Adicionar sala" na bar certa.
+  const roomsByBar = new Map<string, Room[]>();
+  for (const room of hostedRooms ?? []) {
+    if (!room.bar_id) continue;
+    const list = roomsByBar.get(room.bar_id) ?? [];
+    list.push(room as Room);
+    roomsByBar.set(room.bar_id, list);
+  }
 
   const { data: memberships } = await supabase
     .from("room_members")
@@ -115,64 +129,104 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {myBar ? (
+      {myBarsList.length > 0 ? (
         <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="text-muted-foreground flex items-center gap-2 text-sm font-semibold">
               <Store className="size-4" />
-              Meu bar
+              {myBarsList.length > 1 ? `Meus bares · ${myBarsList.length}` : "Meu bar"}
+              {isDev && (
+                <Badge variant="outline" className="text-xs">
+                  dev
+                </Badge>
+              )}
             </h2>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled
-              title="Multi-sala chega em uma fase futura"
-            >
-              <Plus className="size-4" />
-              Adicionar sala
-            </Button>
+            {isDev && !isAnonymous && (
+              <CreateBarDialog
+                triggerLabel="Criar bar"
+                triggerVariant="outline"
+                triggerSize="sm"
+              />
+            )}
           </div>
-          <Link
-            href={hostedRooms?.[0] ? `/salas/${hostedRooms[0].code}` : "/entrar"}
-            className="group hover:bg-secondary/40 rounded-xl border p-4 transition-colors"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex flex-col gap-0.5">
-                <span className="flex items-center gap-2">
-                  <span className="text-lg font-semibold">{myBar.nome}</span>
-                  <span className="border-border bg-secondary/40 rounded-md border px-2 py-0.5 font-mono text-xs tracking-[0.2em]">
-                    {myBar.code}
-                  </span>
-                </span>
-                <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
-                  <Table2 className="size-3.5" />
-                  {myBar.quantidade_mesas} mesa{myBar.quantidade_mesas > 1 ? "s" : ""}
-                  {myBar.cidade && (
-                    <>
-                      <span className="text-border">·</span>
-                      <MapPin className="size-3.5" />
-                      {myBar.cidade}
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                {activeHostedCount === 0 && (hostedRooms?.length ?? 0) > 0 ? (
-                  <Badge variant="destructive" className="text-xs">
-                    <Power className="size-3" />
-                    encerrado — reabra pelo karaokê
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary" className="text-xs">
-                    <QrCode className="size-3" />
-                    {activeHostedCount} karaokê{" "}
-                    {activeHostedCount > 1 ? "ativos" : "ativo"}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </Link>
+
+          <div className="flex flex-col gap-2">
+            {myBarsList.map((bar) => {
+              const barRooms = roomsByBar.get(bar.id) ?? [];
+              const activeCount = barRooms.filter((r) => r.status === "active").length;
+              const primary = barRooms[0];
+              return (
+                <div
+                  key={bar.id}
+                  className="hover:bg-secondary/40 flex flex-col gap-3 rounded-xl border p-4 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        {primary ? (
+                          <Link
+                            href={`/salas/${primary.code}`}
+                            className="hover:underline"
+                          >
+                            <span className="text-lg font-semibold">{bar.nome}</span>
+                          </Link>
+                        ) : (
+                          <span className="text-lg font-semibold">{bar.nome}</span>
+                        )}
+                        <span className="border-border bg-secondary/40 rounded-md border px-2 py-0.5 font-mono text-xs tracking-[0.2em]">
+                          {bar.code}
+                        </span>
+                      </span>
+                      <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                        <Table2 className="size-3.5" />
+                        {bar.quantidade_mesas} mesa{bar.quantidade_mesas > 1 ? "s" : ""}
+                        {bar.cidade && (
+                          <>
+                            <span className="text-border">·</span>
+                            <MapPin className="size-3.5" />
+                            {bar.cidade}
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {barRooms.length === 0 ? (
+                        <Badge variant="outline" className="text-xs">
+                          sem sala ainda
+                        </Badge>
+                      ) : activeCount === 0 ? (
+                        <Badge variant="destructive" className="text-xs">
+                          <Power className="size-3" />
+                          encerrado — reabra pelo karaokê
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">
+                          <QrCode className="size-3" />
+                          {activeCount} karaokê {activeCount > 1 ? "ativos" : "ativo"}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {barRooms.map((room) => (
+                      <Button key={room.id} asChild variant="secondary" size="xs">
+                        <Link href={`/salas/${room.code}`}>
+                          <Mic2 className="size-3" />
+                          {room.code}
+                          {room.status === "closed" ? " · encerrada" : ""}
+                        </Link>
+                      </Button>
+                    ))}
+                    {/* Multi-sala é privilégio do dev (migration 00035): para os
+                        demais a regra do produto continua 1 bar = 1 karaokê, e
+                        mostrar o botão só levaria a um erro do banco. */}
+                    {isDev && <CreateRoomDialog barId={bar.id} barName={bar.nome} />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       ) : (
         <div className="grid grid-cols-2 gap-2">
@@ -258,7 +312,7 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      {!myBar && visited.length === 0 && pendingCount === 0 && (
+      {myBarsList.length === 0 && visited.length === 0 && pendingCount === 0 && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
             <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">

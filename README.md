@@ -130,7 +130,7 @@ Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start`
 | `npm test`                         | Vitest (unit)                                                               |
 | `npm run seed`                     | seed de dev no Supabase Cloud (⚠️ **apaga e recria** as salas de dev)       |
 | `npm run sync:seed-users`          | renomeia/rotaciona as contas do seed por **id fixo** (sem apagar domínio)   |
-| `npm run enable:manual-linking`    | liga `security.manual_linking_enabled` (pré-requisito do "Vincular GitHub") |
+| `npm run enable:manual-linking`    | liga `security.manual_linking_enabled`; use `-- --off` para desligar. Também exige `NEXT_PUBLIC_ENABLE_MANUAL_LINKING=1` para o botão aparecer |
 | `npm run diagnose:queue`           | diagnostica as actions de moderação da fila e mostra o erro cru do banco    |
 | `node scripts/apply-sql.mjs <sql>` | aplica migration manualmente (padrão do time; veja `README` do `scripts/`)  |
 
@@ -140,6 +140,7 @@ Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start`
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | `node scripts/apply-sql.mjs scripts/smoke-playback.sql 100000`       | contrato do playback (Fases 6/7): token, claim, pausa, skip, rotação de token, sala encerrada | **sim** — precisa de `npm run seed` antes e depois |
 | `node scripts/apply-sql.mjs scripts/smoke-player-session.sql 100000` | Fase 8a: token × sessão × anônimo × pré-aprovação de 24h, matriz do toggle, limpeza           | não — cria e apaga a sala `SMOKE8`                 |
+| `node scripts/apply-sql.mjs scripts/smoke-dev-role.sql 20000`         | Fase 8b·quater (15/15): `is_dev()` por host, dev sem teto, teto de 1 bar/karaokê dos demais, não-host recusado, **auto-promoção bloqueada por RLS** e **os 5 casos de bypass** (INSERT/UPDATE direto no PostgREST) | não — `begin`/`rollback`, nada persiste            |
 
 ## 🔑 Login e acesso
 
@@ -161,11 +162,17 @@ Os usuários do **seed** são resolvidos **por id fixo**; as credenciais saem de
 | `SEED_HOST2_EMAIL`                     | `betania@exemplo.com`                   | conta Betânia (host do `BARSEG` / `BAR2FO`)                        |
 | `SEED_USER_EMAIL` / `SEED_USER2_EMAIL` | `ana@exemplo.com` / `bruno@exemplo.com` | participantes                                                      |
 | `SEED_PASSWORD`                        | `senha123` (**pública**)                | senha aplicada **só na criação** do usuário                        |
+| `SEED_HOST_USER_ID`                    | *(vazio)*                               | **opcional**: auth user id que assume o slot do dono (bar 1 + sala 1) no lugar do `…0001` fixo **e ganha o papel `dev`** (sem teto de bars/salas). A conta precisa já existir no Auth; em branco = comportamento antigo |
 | `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN`       | `0` (desligado)                         | habilita o form e-mail/senha **em produção** (com senhas privadas) |
+| `NEXT_PUBLIC_ENABLE_MANUAL_LINKING`    | `0` (desligado)                         | mostra o botão "Vincular GitHub"; espelha `security_manual_linking_enabled`. Fail-closed |
+
+**Papel `dev`** (Fase 8b·quater): quem está em `public.dev_accounts` pode criar **quantos bares e salas quiser**. Os demais hosts continuam com a regra do produto — **1 bar = 1 karaokê**, e essa regra mora no **banco**, não só na UI: `create_bar`/`create_room` recusam **e** há `BEFORE INSERT`/`BEFORE UPDATE` em `bars`/`rooms` (`20260930000036`) fechando o caminho do `INSERT`/`UPDATE` direto que o PostgREST permite — o RLS sozinho só checava `host_id`, então um cliente autenticado criava 2º bar, 2ª sala, sala em bar alheio e re-apontava o `bar_id` para o bar de outra pessoa. A tabela `dev_accounts` tem **RLS ligado e nenhuma policy**, então só o service role promove alguém. Contrato: `scripts/smoke-dev-role.sql` (**15/15**, incluindo os 5 casos de bypass).
+
+**Login é OAuth-only; a senha é credencial de teste.** Quem entra pelo GitHub/Google **não** ganha senha automaticamente — **nenhuma senha é gerada nem enviada por e-mail** (e-mail é canal para *link* de uso único, não para credencial permanente; a recuperação é do próprio GitHub/Google). O item de menu **"Definir senha"** existe para o próprio usuário criar uma segunda porta, via `supabase.auth.updateUser({ password })`, e é **sempre visível** em conta não-anônima: o client **não consegue saber** se a conta já tem senha, porque o hash fica em `auth.users.encrypted_password` e nunca vai para o `user` do browser. A senha da conta do dono foi definida uma vez pela service role (`PUT /auth/v1/admin/users/{id}` com **só** `{ password }`, sem tocar em e-mail/metadata/identidades) porque `diagnose-queue-actions.mjs` precisa de uma sessão real de host — **ela é credencial local de teste, não um método de login do produto**; em produção o form depende de `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN`. O e-mail que o OAuth devolve é o que permite **auto-link por e-mail verificado**: se um dia a conta entrar também pelo Google, cai no **mesmo** usuário, sem botão nenhum.
+
+**Uma conta, dois métodos — desativado por padrão.** O botão "Vincular GitHub" (`linkIdentity`) exige `security_manual_linking_enabled=true` **e** `NEXT_PUBLIC_ENABLE_MANUAL_LINKING=1`, e hoje está **desligado** nos dois lados: ele é rota de account takeover (um OAuth cujo e-mail bate com uma conta existente assume a conta) e, com o e-mail do GitHub primário verificado, o auto-link por e-mail já resolve o mesmo caso. Para religar de propósito: `npm run enable:manual-linking` **e** a env; para desligar: `npm run enable:manual-linking -- --off` e a env em `0`.
 
 **Acesso de desenvolvimento** (seção "Acesso de desenvolvimento" no `/login`): aparece sempre em `npm run dev`; em produção **só** com `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`. Use **apenas** com `SEED_PASSWORD` **privada**: a URL da Vercel é pública e a anon key roda no bundle — a `senha123` documentada (ou senha padrão) viva no projeto Cloud permitiria a qualquer um autenticar como host. Por isso, aplicar a rotina de 2026-09-28 **rotaciona as senhas no projeto Cloud**: ali `senha123` deixa de funcionar; valem os valores do `.env.local` / das envs da Vercel.
-
-**Uma conta, local e na nuvem (e-mail/senha ↔ GitHub):** a conta de e-mail/senha aceita o **GitHub como segunda identidade** — a mesma conta por senha em dev **e** por GitHub na Vercel. Uma única vez: logado por e-mail/senha, abra o menu do usuário e clique **"Vincular GitHub"** → volta do GitHub com a identidade colada no mesmo `user_id` (`linkIdentity`; requer a config do projeto `security_manual_linking_enabled=true`). Depois, entrar com GitHub em qualquer dispositivo abre as **mesmas** salas. A conta do dono não precisa então do form e-mail/senha em produção; as demais contas de seed usam o form liberado por `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN` com senha privada.
 
 > **Credenciais de integração (dev):** a chave de busca `YOUTUBE_API_KEY` é **só de dev e não vai para produção** — ver `karaoke-watch-party-spec.md` §12/§13 e a tabela completa no fim deste arquivo.
 

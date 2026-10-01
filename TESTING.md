@@ -323,7 +323,7 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [ ] **Fim da última música (fila vira vazia)**: a TV mostra o QR **sem `NotFoundError`/`removeChild` no console**.
 - [ ] **Host clica "Parar" com música tocando**: a TV esvazia, **sem crash no console** — o mesmo crash do item anterior, por um caminho diferente (ver pós-mortem §3.8). Estado do console é o que conta aqui, não a tela.
 - [ ] **"Parar" com outra música aprovada na fila**: hoje a próxima entra sozinha (comportamento pendente de mudança — ver TODO Fase 8b). Anotar o comportamento, não falhar o teste por isso.
-- [ ] **Deixar tocar ≥ 60s com a CTA visível**: o texto "Toque para começar" **não** reaparece por cima do vídeo (regressão do poll).
+- [ ] **Deixar tocar ≥ 60s com a TV armada**: o gate **não** reaparece por cima do vídeo (regressão do poll — antes era a CTA "Toque para começar").
 - [ ] **Buffering (Throttling "Slow 3G") depois da faixa já ter começado**: a CTA **não** volta.
 - [ ] **Sequência longa (5+ músicas, atravessando a virada)**: nenhum erro no console no fim de cada faixa.
 - [ ] **Sair do `/player` pelo histórico do browser** (não pelo botão): sem erro.
@@ -338,7 +338,61 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [ ] **Modo avião → online**: a lista volta a atualizar.
 - [ ] **Desligar o realtime no DevTools (abrir a aba "Channels" e matar o WS)**: a lista continua atualizando pelo poll de 10s, e o console mostra o aviso de assinatura falha (log proposital, ver §3.10 do pós-mortem).
 
-### 3.10 Segurança / LGPD / NFR (Fase 8)
+### 3.9·quater O toque de partida da TV (Fase 8, 2026-10-01)
+
+> **O que mudou:** a TV não toca antes de um toque humano. O `PlayerGate` é a tela
+> inteira que aparece **antes** do IFrame Player existir, e o player só é montado
+> **dentro** do toque (`playerVars.autoplay: 0`). Consequências verificáveis:
+> desarmada a TV não tem iframe no DOM, não baixa vídeo e **não pede a próxima
+> música**; armada, o "armado" fica no `localStorage` e recarregar a página não
+> devolve o gate.
+>
+> **O "armado" é store externo, não estado do React** (`src/lib/rooms/player-arm.ts`,
+> `useSyncExternalStore`). O quiosque é SSR-rendered, e a primeira versão deste
+> gate lia o `localStorage` no estado inicial: o **servidor** mandava o gate e o
+> **cliente** mandava o vídeo, e a tela hydrationava com duas árvores diferentes
+> — "Hydration failed because the server rendered HTML didn't match the client",
+> que o Next 16 mostra como "Recoverable Error". Por isso o `getServerSnapshot` é
+> sempre `false`, e o storage só entra em vigor na hidratação. O item 3 abaixo
+> existe para isso não voltar sem ninguém perceber.
+>
+> **Por que este bloco é manual:** a política de autoplay é do browser e não
+> existe no jsdom. A suíte cobre a fiação (o 150 vira gate, o toque refaz o play,
+> o mudo destrava) com o duplo da IFrame API; o que só o aparelho real prova é
+> se o gesto chegou ao browser e se o D-pad acerta o botão.
+
+**TV com música já tocando no banco (abra `/player/<código>?token=…`)**
+
+- [ ] **A tela é o gate, não o vídeo**: aparece "Sala `<código>`" e **um** botão só, "Toque ou pressione OK para começar". No Elements, **não** existe `[data-testid="youtube-stage"]` — o iframe do YouTube ainda não foi criado.
+- [ ] **Botão já focado ao abrir**: o foco está no botão, sem precisar navegar. É o que faz o primeiro OK do controle não ir para o `body`.
+- [ ] **Console limpo ao abrir**: nenhum "Hydration failed…", nenhum "Recoverable Error", nenhuma mensagem de hydration no console. Este item é o que pegou o bug da primeira versão — a tela "funcionava", só que regerava a árvore inteira atrás. Confira também o terminal do `next dev`: sem `Warning: Text content did not match` / `An error occurred during hydration`.
+- [ ] **TV já armada, aberta de novo**: abra `/player/<código>` **depois** de já ter armado. A tela pode piscar o gate por **um frame** (é o instante entre a hidratação e a leitura do storage, e o React troca logo em seguida) — o que **não** pode é ficar no gate, nem derrubar erro de hydration. Conte o `localStorage.getItem("kf:player-armed:<código>")` no console: tem que dar `"1"`.
+- [ ] **Clique/toque**: o vídeo começa **com som**, sem erro 150 no console.
+- [ ] **Controle remoto (ou emulação de D-pad no DevTools)**: `Enter`/OK no botão focado tem o mesmo efeito do clique. Se o foco não estiver no botão, o teste falha aqui — é regressão.
+- [ ] **F5 na TV**: o gate **não** volta e o vídeo retoma do `elapsed_seconds` (o "armado" está no `localStorage`).
+- [ ] **"Trancar TV"**: o vídeo some do DOM e o gate volta; tocar de novo recarrega **a mesma faixa** e ela volta a tocar. Se a TV ficar muda com o toque certo, o `loadedRef` não foi zerado ao trancar.
+- [ ] **Gate com a fila vazia**: nada tocando e nada aprovado → a TV mostra o **QR** ("Escaneie para adicionar uma música"), não o gate. O gate só assume quando existe o que tocar.
+- [ ] **Desarmada + host aprova uma música**: o gate aparece em ~5s (poll) e a fila **não anda** — confirme no banco que o item continua `approved` e `playback_status` segue `idle`. Este é o item que mais importa: sem ele, a fila se esvazia sozinha com ninguém olhando.
+- [ ] **Sequência longa (5+ músicas)**: nenhuma vez o gate volta por cima de um vídeo **tocando**; nenhum erro no console no fim de cada faixa.
+
+**Fase "tentar de novo" (o browser recusou mesmo dentro do toque)**
+
+> Num browser de desktop moderno esta tela é **difícil de provoke** — é esse o
+> ponto da mudança. Onde ela aparecer (smart TV com política de autoplay
+> rígida), o roteiro é:
+
+- [ ] **Aparece a tela cheia "O navegador recusou o som"**, com "Tentar de novo" e "Começar sem som" — e o vídeo continua montado atrás dela.
+- [ ] **"Tentar de novo"**: o áudio entra (ou a tela some e o vídeo toca mudo, o que é aceitável desde que o vídeo apareça).
+- [ ] **"Começar sem som"**: o vídeo aparece **mudo** e a faixa inferior ganha "Ativar o som"; o clique therein **tira o mudo**.
+- [ ] **O botão de som some sozinho** depois de ~15s, sem o ninguém tocar.
+- [ ] **A TV já tocou normalmente antes**: o gate **não** aparece, e o "trancar" volta ao gate na hora.
+- [ ] **"Trancar TV" depois de a faixa tocar**: o vídeo some e o `localStorage` fica **sem** a chave `kf:player-armed:<código>`. Se o botão sumir com o vídeo e a chave continuar lá, o próximo F5 abre a TV armada — o bug que o estado `audioUnlocked` da primeira versão escondia, agora coberto por teste.
+
+**Participante no celular (o gate vale para todo mundo)**
+
+- [ ] **Participante pede uma música e abre o `/player`**: aparece o gate; um toque toca com som. O celular também bloqueia áudio sem gesto — por isso o gate não é só da TV.
+- [ ] **Participante assistindo com o gate na tela e a tela dormindo (≥ 30s)**: ao voltar, a TV não fica com o gate travado sobre um vídeo já em `PLAYING`.
+
 
 - [ ] RLS: participante aprovado de sala A **não** lê a fila da sala B (comprovar via API direta).
 - [ ] Ações de host rejeitadas no backend quando chamadas por não-host.

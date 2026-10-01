@@ -51,14 +51,16 @@ import {
  * mexer no DOM — com `try/catch` como segunda rede, porque a ordem do DOM do
  * player é território do YouTube, não nosso.
  *
- * ── Regra 3: o CTA de "toque para começar" só sai quando toca ────────────────
+ * ── Regra 3: quem pede o gesto é o quiosque, não o stage ─────────────────────
  * O quiosque relê o estado a cada 5s (poll) e reaplica `play()` a cada leitura
  * (o objeto `current` é novo a cada fetch). Com o pedido de gesto armado em
  * todo `play()`, a TV mostrava o CTA de "toque para começar" voltando sem parar
- * por cima de um vídeo que já estava tocando. Agora ele só é armado por um
- * `loadVideoById` de verdade, por `CUED`/buffering **antes** de a faixa tocar
- * uma vez, ou por um `play()` marcado como gesto do usuário — e some no
- * `PLAYING`.
+ * por cima de um vídeo que já estava tocando. O probe continua existindo (é ele
+ * que descobre o erro 150 antes de a tela ficar preta), mas o CTA saiu do quiosque:
+ * hoje o toque de partida é o `PlayerGate`, uma tela INTEIRA que aparece antes do
+ * player existir, e este componente só precisa dizer "não começou" (`onBlocked`).
+ * `play({ userGesture: true })` continua existindo para o gate repetir a tentativa
+ * — é o clique real da repetição que rearma o probe.
  */
 
 export const YT_STATE = {
@@ -102,6 +104,8 @@ type YtPlayer = {
   playVideo(): void;
   pauseVideo(): void;
   stopVideo(): void;
+  muteVideo(): void;
+  unmuteVideo(): void;
   loadVideoById(videoId: string, startSeconds: number): void;
   getCurrentTime(): number;
   destroy(): void;
@@ -185,6 +189,13 @@ export type YouTubeStageHandle = {
   play: (options?: { userGesture?: boolean }) => void;
   pause: () => void;
   stop: () => void;
+  /**
+   * Começa/continua mudo. É a última rede do gate: quando o browser recusa o
+   * áudio mesmo dentro do toque (erro 150), a TV toca muda e o quiosque oferece
+   * "Ativar o som" — o clique seguinte é um gesto novo, e é ele que destrava.
+   */
+  mute: () => void;
+  unmute: () => void;
 };
 
 export type YouTubeStageProps = {
@@ -366,6 +377,14 @@ export const YouTubeStage = forwardRef<YouTubeStageHandle, YouTubeStageProps>(
           intentRef.current = null;
           applyIntent();
         },
+        mute() {
+          // Não passa por `applyIntent`: mute não é intenção de reprodução, é
+          // estado de áudio do player atual — e não pode virar re-load da faixa.
+          if (canCall(playerRef.current, "muteVideo")) playerRef.current.muteVideo();
+        },
+        unmute() {
+          if (canCall(playerRef.current, "unmuteVideo")) playerRef.current.unmuteVideo();
+        },
       }),
       [applyIntent, armBlockedProbe]
     );
@@ -386,7 +405,11 @@ export const YouTubeStage = forwardRef<YouTubeStageHandle, YouTubeStageProps>(
           if (cancelled || !hostRef.current) return;
           new YT.Player(hostRef.current, {
             playerVars: {
-              autoplay: 1,
+              // `autoplay: 0` de propósito: quem manda no play é o toque do
+              // `PlayerGate`. Com `autoplay: 1` o player tentaria sozinho logo
+              // depois de montado e o `playVideo()` do quiosque competiria com
+              // esse play fora da janela de ativação do gesto.
+              autoplay: 0,
               controls: 1,
               rel: 0,
               fs: 0,

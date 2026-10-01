@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 
 import { PlayerKiosk } from "./player-kiosk";
 import type { PlayerState } from "@/lib/rooms/playback";
@@ -30,6 +31,7 @@ vi.mock("@/lib/rooms/player-channel", () => ({
   announcePlaybackChange: (...args: unknown[]) => mocks.announce(...args) as unknown,
 }));
 
+import { resetPlayerArmInMemory } from "@/lib/rooms/player-arm";
 import { installFakeYouTube as installFake } from "@/test/fake-youtube";
 import { FAKE_PLAYER_TOKEN } from "@/test/fake-player-token";
 
@@ -110,7 +112,10 @@ function makeState(overrides: Partial<PlayerState> = {}): PlayerState {
   };
 }
 
-async function renderKiosk(state = makeState(), options: { ready?: boolean } = {}) {
+async function renderKiosk(
+  state = makeState(),
+  options: { ready?: boolean; armed?: boolean } = {}
+) {
   const onInvalid = vi.fn();
   const result = render(
     <PlayerKiosk
@@ -120,6 +125,11 @@ async function renderKiosk(state = makeState(), options: { ready?: boolean } = {
       onInvalid={onInvalid}
     />
   );
+  // A TV só toca depois do toque de partida: por padrão o helper clica no gate,
+  // que é o estado NORMAL de uma TV em funcionamento (e é o caminho que o
+  // dedo/OK percorre). `armed: false` deixa a tela parada no gate, para os
+  // testes que são sobre o gate.
+  if (options.armed !== false) armPlayer();
   // deixa o load da API resolver e o player ser criado
   await act(async () => {
     await Promise.resolve();
@@ -129,6 +139,29 @@ async function renderKiosk(state = makeState(), options: { ready?: boolean } = {
   // o quiosque só pode aplicar o estado do banco DEPOIS disso.
   if (options.ready !== false) fireReady();
   return { onInvalid, ...result };
+}
+
+/** O toque do dono da TV no botão do gate. */
+function armPlayer() {
+  const button = screen
+    .queryAllByRole("button", { name: /Toque ou pressione OK/ })[0] as
+    | HTMLElement
+    | undefined;
+  if (!button) return;
+  act(() => {
+    fireEvent.click(button);
+  });
+}
+
+/**
+ * Deixa a IFrame API resolver e o construtor do player rodar. O `new YT.Player`
+ * acontece num `.then()`, então sem este flush o `ready()` do teste não
+ * encontraria o player que ainda nem existe.
+ */
+async function flushYouTubeMount() {
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 /** Simula o host (ou o poll de 5s) trazendo um estado novo do banco. */
@@ -155,6 +188,10 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // O "armado" é persistido por sala e tem memória de sessão: sem limpar os
+  // dois, o próximo teste abriria a TV já armada e o gate nem apareceria.
+  window.localStorage.clear();
+  resetPlayerArmInMemory();
   delete (window as unknown as { YT?: unknown }).YT;
 });
 
@@ -259,9 +296,10 @@ describe("PlayerKiosk — tela da TV", () => {
     expect(mocks.claimNextSongAction).toHaveBeenCalledWith(ROOM, TOKEN, null);
   });
 
-  it("música aprovada depois de a TV abrir entra sozinha (Fase 8a)", async () => {
+  it("música aprovada depois de a TV abrir espera o toque de partida", async () => {
     // Regressão do teste manual: a TV abria ociosa, o host aprovava uma música e
-    // nada acontecia — o claim só existia no mount e no onEnded.
+    // nada acontecia — o claim só existia no mount e no onEnded. A diferença
+    // agora: a TV também não pode POUXAR sozinha, porque ninguém olhou para ela.
     const idle = makeState({
       current: null,
       queue: [],
@@ -274,8 +312,10 @@ describe("PlayerKiosk — tela da TV", () => {
       },
     });
     mocks.getPlayerStateAction.mockResolvedValue({ ok: true, state: idle });
-    await renderKiosk(idle);
+    await renderKiosk(idle, { armed: false });
     expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
+    // Fila vazia e ninguém tocando: não é hora de pedir toque, é a tela do QR.
+    expect(screen.getByText("Escaneie para adicionar uma música")).toBeInTheDocument();
 
     // O poll (ou o broadcast do host) traz a fila aprovada.
     mocks.getPlayerStateAction.mockResolvedValue({
@@ -291,6 +331,12 @@ describe("PlayerKiosk — tela da TV", () => {
       onChange();
       await Promise.resolve();
     });
+
+    // O gate assume, e a fila continua parada até o toque.
+    expect(screen.getByTestId("player-gate")).toBeInTheDocument();
+    expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
+
+    armPlayer();
 
     expect(mocks.claimNextSongAction).toHaveBeenCalledWith(ROOM, TOKEN, null);
   });
@@ -431,6 +477,10 @@ describe("PlayerKiosk — tela da TV", () => {
     await act(async () => {
       await Promise.resolve();
     });
+    // O gate vale para todo mundo, participante incluído: o celular também
+    // bloqueia áudio sem gesto, e um código só é mais simples que dois.
+    expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
+    armPlayer();
 
     // Sem token: a action manda `null` e o banco decide pela sessão (migration
     // 20260927000029). O token da TV não aparece em nenhum lugar.
@@ -481,20 +531,23 @@ describe("PlayerKiosk — tela da TV", () => {
     expect(onInvalid).toHaveBeenCalledWith("Player inválido.");
   });
 
-  it("autoplay bloqueado pede um toque, e o toque destrava o player", async () => {
+  it("autoplay recusado vira a tela de 'tentar de novo', e o toque refaz o play", async () => {
     await renderKiosk();
 
     fireError(150);
 
-    expect(
-      screen.getByRole("button", { name: /Toque para começar/ })
-    ).toBeInTheDocument();
+    // Não é mais o CTA por cima do vídeo: é o gate inteiro, e o vídeo continua
+    // montado atrás dele.
+    const gate = screen.getByTestId("player-gate");
+    expect(gate).toHaveAttribute("data-phase", "2");
+    expect(screen.getByRole("button", { name: /Tentar de novo/ })).toBeInTheDocument();
+    expect(screen.getByTestId("youtube-stage")).toBeInTheDocument();
     const before = yt.player?.playVideo.mock.calls.length ?? 0;
 
-    fireEvent.click(screen.getByRole("button", { name: /Toque para começar/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Tentar de novo/ }));
 
     expect(yt.player?.playVideo.mock.calls.length).toBe(before + 1);
-    expect(screen.queryByRole("button", { name: /Toque para começar/ })).toBeNull();
+    expect(screen.queryByTestId("player-gate")).toBeNull();
   });
 
   it("erro de vídeo mostra aviso em vez de travar a tela", async () => {
@@ -581,32 +634,24 @@ describe("PlayerKiosk — 'Parar' do host e o CTA de gesto", () => {
     expect(yt.player.stopVideo).not.toHaveBeenCalled();
   });
 
-  it("o CTA de 'toque para começar' some quando o vídeo entra em PLAYING", async () => {
-    vi.useFakeTimers();
-    try {
-      await renderKiosk();
-      fireError(150);
-      expect(
-        screen.getByRole("button", { name: /Toque para começar/ })
-      ).toBeInTheDocument();
+  it("a tela de 'tentar de novo' some quando o vídeo entra em PLAYING", async () => {
+    await renderKiosk();
+    fireError(150);
+    expect(screen.getByTestId("player-gate")).toHaveAttribute("data-phase", "2");
 
-      fireState(1);
+    fireState(1);
 
-      expect(screen.queryByRole("button", { name: /Toque para começar/ })).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(screen.queryByTestId("player-gate")).toBeNull();
   });
 
-  it("as relêções do poll de 5s não trazem o CTA de volta", async () => {
+  it("as relêções do poll de 5s não trazem o gate de volta", async () => {
     // Regressão do spam na TV: o quiosque chama play() a cada poll (o objeto
-    // `current` volta NOVO do banco a cada leitura) e o CTA de gesto reaparecia
-    // sem parar por cima do vídeo que já estava tocando.
+    // `current` volta NOVO do banco a cada leitura) e o pedido de toque
+    // reaparecia sem parar por cima do vídeo que já estava tocando.
     vi.useFakeTimers();
     try {
       // Estado novo a cada leitura, como o banco devolve de verdade: é a
-      // identidade nova de `current` que reexecuta o efeito de aplicação (e,
-      // antes da correção, era o que rearmava o pedido de gesto a cada 5s).
+      // identidade nova de `current` que reexecuta o efeito de aplicação.
       const freshState = (): PlayerState =>
         makeState({ current: { ...CURRENT }, queue: [{ ...CURRENT }, { ...NEXT }] });
       mocks.getPlayerStateAction.mockImplementation(async () => ({
@@ -615,7 +660,7 @@ describe("PlayerKiosk — 'Parar' do host e o CTA de gesto", () => {
       }));
       await renderKiosk();
       fireState(1);
-      expect(screen.queryByRole("button", { name: /Toque para começar/ })).toBeNull();
+      expect(screen.queryByTestId("player-gate")).toBeNull();
 
       const playCalls = yt.player.playVideo.mock.calls.length;
       await act(async () => {
@@ -624,10 +669,201 @@ describe("PlayerKiosk — 'Parar' do host e o CTA de gesto", () => {
 
       // O player recebeu play() de novo (o poll relê o estado)...
       expect(yt.player.playVideo.mock.calls.length).toBeGreaterThan(playCalls);
-      // ...e mesmo assim nenhum pedido de gesto apareceu.
-      expect(screen.queryByRole("button", { name: /Toque para começar/ })).toBeNull();
+      // ...e mesmo assim nenhum pedido de toque apareceu.
+      expect(screen.queryByTestId("player-gate")).toBeNull();
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+/**
+ * O toque de partida (Fase 8). O quiosque inteiro gira em torno de duas
+ * garantias: **desarmada não toca** e **armada não pede o toque de novo**.
+ */
+describe("PlayerKiosk — toque de partida", () => {
+  it("não monta o player nem pede música antes do toque", async () => {
+    await renderKiosk(makeState(), { armed: false });
+
+    // O player do YouTube não existe: a TV desarmada não baixa vídeo nenhum.
+    expect(screen.queryByTestId("youtube-stage")).toBeNull();
+    expect(screen.getByTestId("player-gate")).toHaveAttribute("data-phase", "1");
+    expect(yt.player.loadVideoById).not.toHaveBeenCalled();
+    expect(yt.player.playVideo).not.toHaveBeenCalled();
+    // A faixa está tocando no banco e mesmo assim ninguém pediu nada: sem
+    // claim, o item não sai de `playing` às cegas.
+    expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
+  });
+
+  it("o toque arma a TV, monta o player e já manda a faixa tocando", async () => {
+    await renderKiosk(makeState(), { ready: false, armed: false });
+    expect(screen.queryByTestId("youtube-stage")).toBeNull();
+
+    armPlayer();
+    await flushYouTubeMount();
+
+    expect(screen.getByTestId("youtube-stage")).toBeInTheDocument();
+    expect(screen.queryByTestId("player-gate")).toBeNull();
+
+    // O player nasce DENTRO do gesto (por isso `autoplay: 0`): o primeiro play
+    // é o que o browser aceita.
+    fireReady();
+    expect(yt.player.loadVideoById).toHaveBeenCalledWith("abc123", 0);
+    expect(yt.player.playVideo).toHaveBeenCalled();
+  });
+
+  it("o botão do gate já nasce com o foco (é o D-pad que vai apertar)", async () => {
+    await renderKiosk(makeState(), { armed: false });
+
+    // Sem foco, o primeiro OK do controle iria para o body e a TV "não
+    // responderia". `Enter` num `<button>` focado dispara o onClick.
+    const button = screen.getByRole("button", { name: /Toque ou pressione OK/ });
+    expect(document.activeElement).toBe(button);
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.click(button);
+    expect(screen.queryByTestId("player-gate")).toBeNull();
+  });
+
+  it("com a fila vazia, o gate não aparece: a TV mostra o QR dos convidados", async () => {
+    await renderKiosk(
+      makeState({
+        current: null,
+        queue: [],
+        room: {
+          code: ROOM,
+          status: "active",
+          playback_status: "idle",
+          queue_approval_mode: "manual",
+          require_song_confirmation: true,
+        },
+      }),
+      { armed: false }
+    );
+
+    expect(screen.queryByTestId("player-gate")).toBeNull();
+    expect(screen.getByText("Escaneie para adicionar uma música")).toBeInTheDocument();
+  });
+
+  it("'trancar TV' devolve o gate e a mesma faixa volta a tocar no toque seguinte", async () => {
+    await renderKiosk();
+    expect(yt.player.loadVideoById).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Trancar TV/ }));
+
+    expect(screen.getByTestId("player-gate")).toBeInTheDocument();
+    expect(screen.queryByTestId("youtube-stage")).toBeNull();
+
+    // O player que guardava a faixa foi destruído: se o quiosque lembrasse,
+    // rearmar pareceria "faixa já carregada" e a TV ficaria muda com o toque
+    // certo na tela.
+    armPlayer();
+    await flushYouTubeMount();
+    fireReady();
+
+    expect(yt.player.loadVideoById).toHaveBeenCalledTimes(2);
+    expect(yt.player.loadVideoById).toHaveBeenLastCalledWith("abc123", 0);
+  });
+
+  it("'começar sem som' dá conta de uma TV que recusou o áudio", async () => {
+    await renderKiosk();
+    fireError(150);
+    expect(screen.getByTestId("player-gate")).toHaveAttribute("data-phase", "2");
+
+    fireEvent.click(screen.getByRole("button", { name: /Começar sem som/ }));
+
+    // O mute é pedido no load da faixa, senão o gesto já passou e o play
+    // sairia com som.
+    expect(yt.player.muteVideo).toHaveBeenCalled();
+    expect(screen.queryByTestId("player-gate")).toBeNull();
+
+    // E o som volta por um gesto novo, que é o que o browser aceita.
+    fireEvent.click(screen.getByRole("button", { name: /Ativar o som/ }));
+    expect(yt.player.unmuteVideo).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Ativar o som/ })).toBeNull();
+  });
+
+  it("o botão de som some sozinho depois de um tempo", async () => {
+    vi.useFakeTimers();
+    try {
+      await renderKiosk();
+      fireError(150);
+      fireEvent.click(screen.getByRole("button", { name: /Começar sem som/ }));
+      expect(screen.getByRole("button", { name: /Ativar o som/ })).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+
+      // Uma TV a noite inteira não pode ficar com o botão piscando sozinha.
+      expect(screen.queryByRole("button", { name: /Ativar o som/ })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a TV armada não pede o toque de novo ao recarregar", async () => {
+    const { unmount } = await renderKiosk();
+    expect(window.localStorage.getItem(`kf:player-armed:${ROOM}`)).toBe("1");
+    unmount();
+
+    // Reload da TV no meio da festa: o dono já autorizou, o gate não volta.
+    await renderKiosk(makeState(), { armed: false });
+
+    expect(screen.getByTestId("youtube-stage")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Toque ou pressione OK/ })).toBeNull();
+  });
+
+  it("a marcação do 'trancar' some do storage: a próxima abertura pede o toque", async () => {
+    await renderKiosk();
+    fireEvent.click(screen.getByRole("button", { name: /Trancar TV/ }));
+
+    expect(window.localStorage.getItem(`kf:player-armed:${ROOM}`)).toBeNull();
+  });
+
+  it("'trancar TV' funciona **depois** de a faixa tocar", async () => {
+    // Regressão da primeira versão do gate: o estado `audioUnlocked` congelava a
+    // escrita no storage quando o áudio já tinha sido destravado, e o "trancar"
+    // ficava sem efeito nenhum — o botão aparecia e não fazia nada.
+    await renderKiosk();
+    fireState(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Trancar TV/ }));
+
+    expect(screen.getByTestId("player-gate")).toBeInTheDocument();
+    expect(screen.queryByTestId("youtube-stage")).toBeNull();
+    expect(window.localStorage.getItem(`kf:player-armed:${ROOM}`)).toBeNull();
+  });
+
+  it("o HTML do servidor é o gate mesmo com a TV já armada no storage", () => {
+    // O bug que a primeira versão do gate tinha: ler o `localStorage` no estado
+    // inicial fazia o SERVIDOR mandar o gate e o CLIENTE mandar o vídeo — duas
+    // árvores diferentes para a mesma tela, hydration mismatch, e a TV pagando a
+    // regeneração. Este teste é o que o jsdom sozinho não provava.
+    window.localStorage.setItem(`kf:player-armed:${ROOM}`, "1");
+
+    const html = renderToString(
+      <PlayerKiosk roomCode={ROOM} token={TOKEN} initialState={makeState()} />
+    );
+
+    expect(html).toContain('data-testid="player-gate"');
+    expect(html).not.toContain('data-testid="youtube-stage"');
+  });
+
+  it("TV sem storage funciona igual (a cota estourada não pode derrubar a tela)", async () => {
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("storage cheio", "QuotaExceededError");
+      },
+    });
+    try {
+      await renderKiosk();
+
+      expect(screen.getByTestId("youtube-stage")).toBeInTheDocument();
+      expect(yt.player.playVideo).toHaveBeenCalled();
+    } finally {
+      if (original) Object.defineProperty(window, "localStorage", original);
     }
   });
 });

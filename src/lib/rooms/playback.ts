@@ -142,14 +142,21 @@ export type AutoAdvanceInput = {
   /** VideoId que o IFrame Player API acabou de terminar (0 = nada terminou). */
   endedVideoId: string | null;
   queueLength: number;
+  /** A TV já foi ARMADA pelo toque? Desarmada, ninguém está assistindo. */
+  armed: boolean;
 };
 
 /**
  * O player (TV) avança sozinho: quando a faixa termina e, no boot, quando a
  * sala está ociosa com música aprovada. Com `paused` nunca avança — quem
  * segura é o host. `wait` mantém o quiosque no estado atual.
+ *
+ * `armed: false` também nunca: desarmada, a fila não pode se esvaziar sozinha
+ * com ninguém olhando (a TV do outro lado da sala ia puxando faixa e ninguém
+ * veria nada — e o wouldn't-have-a-cue de "próxima" mentindo na tela).
  */
 export function shouldAutoAdvance(input: AutoAdvanceInput): boolean {
+  if (!input.armed) return false;
   if (input.playbackStatus === "paused") return false;
   if (!input.currentVideoId) return input.queueLength > 0;
   return input.endedVideoId !== null && input.endedVideoId === input.currentVideoId;
@@ -160,6 +167,8 @@ export type ClaimFromIdleInput = {
   /** Item em reprodução (`current.id`); `null` = sala ociosa. */
   currentItemId: string | null;
   queueLength: number;
+  /** A TV já foi ARMADA pelo toque? Desarmada, ninguém está assistindo. */
+  armed: boolean;
 };
 
 /**
@@ -173,12 +182,50 @@ export type ClaimFromIdleInput = {
  * TV não — o claim só existia no mount e no `onEnded`.
  *
  * Com `paused` nunca: quem segura é o host. `queueLength` é a fila aprovada que
- * `get_player_state` devolve (o que a TV pode tocar agora).
+ * `get_player_state` devolve (o que a TV pode tocar agora). Desarmada também
+ * nunca: pedir a próxima sem ninguém olhando faria a fila andar sozinha e cada
+ * item sairia do estado `approved` para `playing` (e depois `played`) sem nunca
+ * ter passado pela tela — o host perde a faixa sem ninguém perceber.
  */
 export function shouldClaimFromIdle(input: ClaimFromIdleInput): boolean {
+  if (!input.armed) return false;
   if (input.playbackStatus === "paused") return false;
   if (input.currentItemId) return false;
   return input.queueLength > 0;
+}
+
+export type PlayerGateInput = {
+  /** A TV já foi ARMADA pelo toque? */
+  armed: boolean;
+  /** Item em reprodução (`current.id`); `null` = sala ociosa. */
+  currentItemId: string | null;
+  /** Itens aprovados que a TV pode tocar agora (`state.queue`). */
+  queueLength: number;
+  /**
+   * A TV já mandou `play` para a faixa atual e a reprodução não começou (erro
+   * 150 / gesto recusado). Distingue "nada tocando de verdade" de "travado antes
+   * do primeiro frame".
+   */
+  stalled: boolean;
+};
+
+/**
+ * A TV está DESARMADA e há o que tocar? Então o toque de partida é obrigatório.
+ *
+ * Fila vazia NÃO pede o toque: a tela segue o "Escaneie para adicionar músicas",
+ * que é o que os convidados veem antes de existir faixa. O gate vira o principal
+ * assim que o host aprova algo (o poll de 5s do quiosque percebe).
+ *
+ * `stalled` manda em tudo, armada ou não: ele é a fase "tentar de novo", e ela
+ * acontece com o player montado e o vídeo parado no primeiro frame (erro 150 /
+ * gesto recusado). Se o gate se escondesse quando `armed`, o 150 deixaria a TV
+ * num retângulo mudo sem nenhum botão — o pior dos dois mundos. Já tocou
+ * normalmente? Aí `stalled` é `false` e o gate some no `PLAYING`.
+ */
+export function shouldShowPlayerGate(input: PlayerGateInput): boolean {
+  if (input.stalled) return true;
+  if (input.armed) return false;
+  return Boolean(input.currentItemId) || input.queueLength > 0;
 }
 
 export type PlayerPanelRow = {

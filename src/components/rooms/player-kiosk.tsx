@@ -1,19 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Music4, Play, Radio } from "lucide-react";
+import { Lock, Music4, Radio, Volume2 } from "lucide-react";
 
+import { PlayerGate } from "@/components/rooms/player-gate";
 import { RoomQr } from "@/components/rooms/room-qr";
-import { YouTubeStage } from "@/components/rooms/youtube-stage";
+import { YouTubeStage, YT_ERROR_AUTOPLAY_BLOCKED } from "@/components/rooms/youtube-stage";
 import type { YouTubeStageHandle } from "@/components/rooms/youtube-stage";
 import { Button } from "@/components/ui/button";
 import { getPlayerStateAction, claimNextSongAction } from "@/lib/rooms/playback-actions";
+import { setPlayerArmed, usePlayerArmed } from "@/lib/rooms/player-arm";
 import { subscribeToPlaybackChanges } from "@/lib/rooms/player-channel";
 import {
   playerHeadline,
   playerPanel,
   shouldAutoAdvance,
   shouldClaimFromIdle,
+  shouldShowPlayerGate,
 } from "@/lib/rooms/playback";
 import type { PlayerState } from "@/lib/rooms/playback";
 import { roomJoinUrl } from "@/lib/rooms/utils";
@@ -28,8 +31,37 @@ import { formatDurationSeconds } from "@/lib/youtube/format";
  * pede a próxima quando a sala está ociosa com fila aprovada
  * (`claim_next_song`, sob advisory lock). O poll de 5s é a rede de segurança
  * para a TV ficar de pé por horas; o canal realtime do host é o caminho rápido.
+ *
+ * ── O toque de partida (Fase 8) ──────────────────────────────────────────────
+ * A TV só toca depois de um toque humano, e esse toque é o `PlayerGate`: tela
+ * inteira que aparece ANTES do player do YouTube existir. Duas consequências que
+ * valem mais que "destravar o áudio":
+ *
+ *   - o player é montado dentro do gesto, e o primeiro `play()` dele cai na
+ *     janela de ativação do browser. Era o que faltava: o player subia no mount
+ *     e o `playVideo()` do quiosque chegava fora do gesto, o browser recusava
+ *     (erro 150) e a TV ficava muda até alguém clicar no CTA;
+ *   - desarmada, a TV não pede a próxima música (`shouldClaimFromIdle`), não
+ *     baixa vídeo nenhum e não existe overlay por cima do vídeo.
+ *
+ * O "armado" fica no `localStorage` por sala (`src/lib/rooms/player-arm.ts`): a TV
+ * pede o toque uma vez, não a cada música, e o botão "travar" da faixa
+ * inferior é quem limpa a marcação (voltando ao gate). Ele é store externo, e
+ * não estado do React, porque o quiosque é SSR-rendered — ler o storage no
+ * primeiro render fazia o servidor mandar o gate e o cliente mandar o vídeo, e a
+ * tela hydratava com duas árvores diferentes. Quem navega é o D-pad do
+ * controle, então o botão do gate é um `<button>` nativo com foco automático —
+ * Enter/OK nele dispara.
  */
 const POLL_MS = 5000;
+
+/**
+ * Depois de "Começar sem som", quanto tempo o botão "Ativar o som" fica na faixa
+ * inferior. O destravamento depende do `unmute` ser aceito pelo browser; o
+ * timeout existe para o botão não ficar piscando a noite inteira numa TV onde
+ * ninguém mais vai tocar.
+ */
+const AUDIO_UNLOCK_TIMEOUT_MS = 15000;
 
 export type PlayerKioskProps = {
   roomCode: string;
@@ -46,8 +78,26 @@ export function PlayerKiosk({
   onInvalid,
 }: PlayerKioskProps) {
   const [state, setState] = useState<PlayerState>(initialState);
-  const [needsGesture, setNeedsGesture] = useState(false);
+  /**
+   * O toque de partida já aconteceu nesta TV? Enquanto for `false` o player do
+   * YouTube não existe e a fila não anda (ver `PlayerGate` no topo do arquivo).
+   *
+   * Vem do `localStorage` por store externo (`usePlayerArmed`), e não de
+   * `useState`: o quiosque é SSR-rendered, e o primeiro render do cliente
+   * precisa ser idêntico ao HTML do servidor.
+   */
+  const armed = usePlayerArmed(roomCode);
+  /**
+   * O player recebeu `play` e a faixa NÃO começou (erro 150 / gesto recusado):
+   * é a fase "tentar de novo" do gate, que aparece mesmo com a TV armada e mesmo
+   * com a fila vazia — sem ela, o vídeo ficaria preso no primeiro frame e a TV
+   * sem nenhum botão. Zera quando a faixa toca e quando vira outra faixa.
+   */
+  const [stalled, setStalled] = useState(false);
+  /** A TV entrou mudo de propósito: a faixa inferior oferece "Ativar o som". */
+  const [needsUnmute, setNeedsUnmute] = useState(false);
   const [playerError, setPlayerError] = useState(false);
+
   // O player do YouTube nasce assíncrono: o estado do banco só pode ser aplicado
   // (load/play) depois que o player estiver reproduzível, senão a primeira
   // música da sessão nunca carrega. Este contador NÃO é a verdade sobre o player
@@ -59,11 +109,20 @@ export function PlayerKiosk({
   const stateRef = useRef(state);
   const loadedRef = useRef<string | null>(null);
   const claimingRef = useRef(false);
+  /** O gate mandou começar mudo: o stage aplica assim que a faixa carregar. */
+  const muteOnLoadRef = useRef(false);
+  const unlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // O estado mais recente para os callbacks imperativos (onEnded chega do
   // player, fora do ciclo de render): mantém o callback estável sem ler
   // props stale.
   const current = state.current;
   const playbackStatus = state.room.playback_status;
+
+  useEffect(() => {
+    return () => {
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current);
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     const result = await getPlayerStateAction(roomCode, token);
@@ -112,6 +171,14 @@ export function PlayerKiosk({
   useEffect(() => {
     const item = current;
     const stage = stageRef.current;
+    if (!armed) {
+      // Desarmada não é "sala ociosa": o player simplesmente não existe, e o
+      // `loadedRef` é zerado porque quem guardava a faixa foi destruído junto
+      // com o stage. Sem esse zero, ao rearmar a mesma faixa pareceria "já
+      // carregada" e a TV ficaria muda mesmo com o gesto certo.
+      loadedRef.current = null;
+      return;
+    }
     if (!item) {
       // A fila esvaziou e o stage desmontou: a próxima música monta um player
       // novo, que ainda não está reproduzível. `loadedRef` zera aqui; a
@@ -127,6 +194,12 @@ export function PlayerKiosk({
     if (!stage?.isPlayable()) return;
     if (loadedRef.current !== item.youtube_video_id) {
       loadedRef.current = item.youtube_video_id;
+      // Faixa nova: o travamento anterior era desta outra música, e a música
+      // antiga já foi desfeita pelo auto-avanço. A tela pode fechar o gate.
+      setStalled(false);
+      // O "começar sem som" precisa valer já no primeiro play — depois do
+      // `load` o gesto já passou e não dá para pedir mute retroativo.
+      if (muteOnLoadRef.current) stage.mute();
       stage.load(item.youtube_video_id, item.elapsed_seconds ?? 0);
     }
     if (playbackStatus === "paused") {
@@ -134,7 +207,7 @@ export function PlayerKiosk({
     } else {
       stage.play();
     }
-  }, [current, playbackStatus, playerGeneration]);
+  }, [armed, current, playbackStatus, playerGeneration]);
 
   // Claim por motivo de ESTADO, não de vídeo: sempre que o quiosque relê o
   // banco (boot, poll de 5s, broadcast do host) e encontra a sala ociosa com
@@ -148,11 +221,12 @@ export function PlayerKiosk({
         playbackStatus: state.room.playback_status,
         currentItemId: state.current?.id ?? null,
         queueLength: state.queue.length,
+        armed,
       })
     ) {
       void claimNext();
     }
-  }, [state, claimNext]);
+  }, [state, armed, claimNext]);
 
   const handleEnded = useCallback(
     (videoId: string) => {
@@ -163,6 +237,10 @@ export function PlayerKiosk({
           currentVideoId: snapshot.current?.youtube_video_id ?? null,
           endedVideoId: videoId,
           queueLength: snapshot.queue.length,
+          // `armed` direto (e não de um ref): o `onEnded` chega do player, mas o
+          // `YouTubeStage` guarda os callbacks num ref, então a identidade deste
+          // callback não provoca remontagem nem re-run de efeito.
+          armed,
         });
         if (advance) {
           // O id viaja junto: o banco só terminaliza se ainda for o item atual
@@ -174,33 +252,102 @@ export function PlayerKiosk({
         }
       })();
     },
-    [claimNext, refresh]
+    [claimNext, refresh, armed]
   );
 
+  /**
+   * O stage avisou que a faixa carregou e não entrou em play (probe) ou que o
+   * YouTube recusou o áudio (erro 150). O quiosque não desenha nada sobre o
+   * vídeo: ele vira a tela de gate, que é a mesma do toque de partida, agora na
+   * fase "de novo".
+   */
   const handleBlocked = useCallback(() => {
-    setNeedsGesture(true);
+    setStalled(true);
   }, []);
 
-  // O CTA só sai com o vídeo tocando: até lá, quem chega é o erro 150 ou o
-  // probe de autoplay bloqueado do stage.
   const handlePlaying = useCallback(() => {
-    setNeedsGesture(false);
+    // Tocou de verdade: o gate fecha, e o "armado" continua valendo no
+    // `localStorage` (quem tranca a TV é o botão "travar", não o fim da faixa).
+    setStalled(false);
   }, []);
 
-  const startWithGesture = useCallback(() => {
-    setNeedsGesture(false);
-    // `userGesture` é o que distingue este play dos `play()` do poll de 5s —
-    // é o único lugar onde o stage pode rearmar o pedido de gesto.
-    stageRef.current?.play({ userGesture: true });
+  /** Fase 1: o toque que arma a TV. O stage nasce DENTRO deste gesto. */
+  const handleArm = useCallback(() => {
+    setStalled(false);
+    setPlayerError(false);
+    setPlayerArmed(roomCode, true);
+  }, [roomCode]);
+
+  /**
+   * Fase 2: repetir a tentativa com o gesto real. Se o player ainda não subiu
+   * (a fila esvaziou no meio da tentativa, o que desmonta o stage), refaz o
+   * claim em vez de chamar `play` num player morto.
+   */
+  const handleRetry = useCallback(() => {
+    setStalled(false);
+    const stage = stageRef.current;
+    if (stage?.isPlayable()) {
+      stage.play({ userGesture: true });
+      return;
+    }
+    void claimNext();
+  }, [claimNext]);
+
+  /**
+   * Última rede: entra mudo. O vídeo aparece — que é o que importa para o
+   * grupo — e o quiosque passa a oferecer "Ativar o som" na faixa inferior:
+   * aquele clique é um gesto novo, inteiro, e é ele que o browser aceita.
+   */
+  const handleStartMuted = useCallback(() => {
+    setStalled(false);
+    setPlayerArmed(roomCode, true);
+    muteOnLoadRef.current = true;
+    stageRef.current?.mute();
+    setNeedsUnmute(true);
+    if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current);
+    unlockTimerRef.current = setTimeout(() => {
+      unlockTimerRef.current = null;
+      setNeedsUnmute(false);
+    }, AUDIO_UNLOCK_TIMEOUT_MS);
+  }, [roomCode]);
+
+  const handleUnlockAudio = useCallback(() => {
+    muteOnLoadRef.current = false;
+    setNeedsUnmute(false);
+    if (unlockTimerRef.current) {
+      clearTimeout(unlockTimerRef.current);
+      unlockTimerRef.current = null;
+    }
+    stageRef.current?.unmute();
   }, []);
+
+  /** Trancar a TV: some com o vídeo e devolve a tela de gate. */
+  const handleLock = useCallback(() => {
+    setStalled(false);
+    setNeedsUnmute(false);
+    muteOnLoadRef.current = false;
+    loadedRef.current = null;
+    setPlayerArmed(roomCode, false);
+  }, [roomCode]);
 
   const panel = playerPanel(state);
   const headline = playerHeadline(state);
+  const gateDue = shouldShowPlayerGate({
+    armed,
+    currentItemId: current?.id ?? null,
+    queueLength: state.queue.length,
+    stalled,
+  });
+  // Desarmada com fila vazia não é gate: é a tela de "Escaneie para adicionar",
+  // que é o que o convidado vê antes de existir música. O gate assume no mesmo
+  // instante em que o host aprova a primeira.
+  const showPlayer = Boolean(current) && armed;
+  const showIdle = !current && !gateDue;
 
   return (
     <div className="flex h-dvh flex-col bg-black text-white">
       <div className="relative min-h-0 flex-1">
-        {state.current ? (
+        {showPlayer && (
           <YouTubeStage
             ref={stageRef}
             className="size-full"
@@ -216,9 +363,19 @@ export function PlayerKiosk({
             onEnded={handleEnded}
             onPlaying={handlePlaying}
             onBlocked={handleBlocked}
-            onError={() => setPlayerError(true)}
+            onError={(code) => {
+              // O 150 é autoplay recusado: vira gate, não tela de erro — o
+              // player continua montado e o vídeo pode estar no ar mudo.
+              if (code === YT_ERROR_AUTOPLAY_BLOCKED) {
+                setStalled(true);
+                return;
+              }
+              setPlayerError(true);
+            }}
           />
-        ) : (
+        )}
+
+        {showIdle && (
           <div className="flex size-full flex-col items-center justify-center gap-6 p-8">
             {panel.empty ? (
               <>
@@ -238,17 +395,15 @@ export function PlayerKiosk({
           </div>
         )}
 
-        {needsGesture && !playerError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-8">
-            <Button
-              size="lg"
-              className="h-20 rounded-2xl px-10 text-2xl"
-              onClick={startWithGesture}
-            >
-              <Play className="size-8" />
-              Toque para começar
-            </Button>
-          </div>
+        {gateDue && !playerError && (
+          <PlayerGate
+            roomCode={roomCode}
+            state={state}
+            phase={stalled ? 2 : 1}
+            onStart={handleArm}
+            onRetry={handleRetry}
+            onUnlockAudio={handleStartMuted}
+          />
         )}
 
         {playerError && (
@@ -272,6 +427,26 @@ export function PlayerKiosk({
               {panel.pendingCount} aguardando aprovação
             </span>
           )}
+
+          <div className="ml-auto flex items-center gap-3">
+            {needsUnmute && (
+              <Button
+                size="lg"
+                variant="secondary"
+                className="h-14 text-lg"
+                onClick={handleUnlockAudio}
+              >
+                <Volume2 className="size-5" />
+                Ativar o som
+              </Button>
+            )}
+            {showPlayer && (
+              <Button size="lg" variant="ghost" className="h-14 text-lg" onClick={handleLock}>
+                <Lock className="size-5" />
+                Trancar TV
+              </Button>
+            )}
+          </div>
         </div>
 
         {panel.rows.length > 0 && (

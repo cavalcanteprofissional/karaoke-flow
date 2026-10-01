@@ -24,6 +24,9 @@ export type FakePlayerMethods = {
   playVideo: ReturnType<typeof vi.fn>;
   pauseVideo: ReturnType<typeof vi.fn>;
   stopVideo: ReturnType<typeof vi.fn>;
+  /** Fase 8: só o "começar sem som" e o "ativar o som" do gate chamam estes. */
+  muteVideo: ReturnType<typeof vi.fn>;
+  unmuteVideo: ReturnType<typeof vi.fn>;
   getCurrentTime: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
 };
@@ -65,6 +68,8 @@ export function installFakeYouTube(): FakeYouTube {
     playVideo: vi.fn(),
     pauseVideo: vi.fn(),
     stopVideo: vi.fn(),
+    muteVideo: vi.fn(),
+    unmuteVideo: vi.fn(),
     getCurrentTime: vi.fn(() => 0),
     destroy: vi.fn(),
   };

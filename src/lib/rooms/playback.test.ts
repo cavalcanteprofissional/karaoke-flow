@@ -9,6 +9,7 @@ import {
   playbackControls,
   shouldAutoAdvance,
   shouldClaimFromIdle,
+  shouldShowPlayerGate,
 } from "./playback";
 import type { PlayerState } from "./playback";
 import { FAKE_PLAYER_TOKEN } from "@/test/fake-player-token";
@@ -186,6 +187,7 @@ describe("shouldAutoAdvance", () => {
         currentVideoId: "abc123",
         endedVideoId: "abc123",
         queueLength: 2,
+        armed: true,
       })
     ).toBe(true);
   });
@@ -197,6 +199,7 @@ describe("shouldAutoAdvance", () => {
         currentVideoId: null,
         endedVideoId: null,
         queueLength: 1,
+        armed: true,
       })
     ).toBe(true);
   });
@@ -208,6 +211,7 @@ describe("shouldAutoAdvance", () => {
         currentVideoId: null,
         endedVideoId: null,
         queueLength: 0,
+        armed: true,
       })
     ).toBe(false);
   });
@@ -219,6 +223,19 @@ describe("shouldAutoAdvance", () => {
         currentVideoId: "abc123",
         endedVideoId: "abc123",
         queueLength: 2,
+        armed: true,
+      })
+    ).toBe(false);
+  });
+
+  it("desarmada nunca avança, mesmo com a fila cheia", () => {
+    expect(
+      shouldAutoAdvance({
+        playbackStatus: "playing",
+        currentVideoId: "abc123",
+        endedVideoId: "abc123",
+        queueLength: 3,
+        armed: false,
       })
     ).toBe(false);
   });
@@ -230,6 +247,7 @@ describe("shouldAutoAdvance", () => {
         currentVideoId: "abc123",
         endedVideoId: "outro",
         queueLength: 2,
+        armed: true,
       })
     ).toBe(false);
   });
@@ -242,6 +260,7 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         playbackStatus: "idle",
         currentItemId: null,
         queueLength: 1,
+        armed: true,
       })
     ).toBe(true);
   });
@@ -252,6 +271,7 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         playbackStatus: "playing",
         currentItemId: "11111111-1111-4111-8111-111111111111",
         queueLength: 3,
+        armed: true,
       })
     ).toBe(false);
   });
@@ -262,6 +282,7 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         playbackStatus: "idle",
         currentItemId: null,
         queueLength: 0,
+        armed: true,
       })
     ).toBe(false);
   });
@@ -272,8 +293,68 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         playbackStatus: "paused",
         currentItemId: null,
         queueLength: 2,
+        armed: true,
       })
     ).toBe(false);
+  });
+
+  it("desarmada não puxa nada, mesmo com a fila cheia", () => {
+    // Sem isso a fila anda sozinha: cada item sai de `approved` para `playing`
+    // (e depois `played`) sem nunca ter passado pela tela.
+    expect(
+      shouldClaimFromIdle({
+        playbackStatus: "idle",
+        currentItemId: null,
+        queueLength: 5,
+        armed: false,
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldShowPlayerGate (toque de partida)", () => {
+  const base = { armed: false, currentItemId: null, queueLength: 0, stalled: false };
+
+  it("pede o toque quando há faixa tocando e a TV não foi armada", () => {
+    expect(
+      shouldShowPlayerGate({ ...base, currentItemId: "11111111-1111-4111-8111-111111111111" })
+    ).toBe(true);
+  });
+
+  it("pede o toque quando há música aprovada esperando", () => {
+    expect(shouldShowPlayerGate({ ...base, queueLength: 2 })).toBe(true);
+  });
+
+  it("não pede o toque com a fila vazia: a TV mostra o QR dos convidados", () => {
+    expect(shouldShowPlayerGate(base)).toBe(false);
+  });
+
+  it("com a fila vazia e o vídeo travado, insiste (senão ficaria no primeiro frame)", () => {
+    expect(shouldShowPlayerGate({ ...base, stalled: true })).toBe(true);
+  });
+
+  it("armada, não mostra o gate do toque de partida", () => {
+    expect(
+      shouldShowPlayerGate({
+        armed: true,
+        currentItemId: "11111111-1111-4111-8111-111111111111",
+        queueLength: 2,
+        stalled: false,
+      })
+    ).toBe(false);
+  });
+
+  it("armada e travada, mostra a fase 'tentar de novo' mesmo assim", () => {
+    // O 150 chega com o player montado: se o gate se escondesse quando `armed`, a
+    // TV ficaria num retângulo mudo sem botão nenhum.
+    expect(
+      shouldShowPlayerGate({
+        armed: true,
+        currentItemId: "11111111-1111-4111-8111-111111111111",
+        queueLength: 2,
+        stalled: true,
+      })
+    ).toBe(true);
   });
 });
 

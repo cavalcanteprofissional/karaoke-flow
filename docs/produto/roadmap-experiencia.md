@@ -70,8 +70,7 @@ fica **marcado como "fora do bar"** e isso só aparece para o dono.
 **Além do QR e do código: link de convidado do dono (bloco 9B).** O dono também
 gera um link próprio de entrada remota, que **pula a digitação do código**:
 
-- Geração: `rooms.link_convidado` (token aleatório, com expiração e contador de
-  usos — a ligar em **D5**) + botão "Copiar link" e menu de compartilhamento.
+- Geração: `rooms.link_convidado` (token aleatório) + botão "Copiar link" e menu de compartilhamento. **D5 (2026-10-01): sem expiração e sem limite de usos** — quem entra por ele cai como `pending` e o dono aprova, então quem segura o link não abre a sala sozinho; a defesa é a aprovação do host, não a janela de validade. A **revogação é manual** (o host invalida o link na hora, como já faz com o link da TV).
 - Compartilhamento: **Web Share API** (`navigator.share`) no mobile — abre a folha
   de compartilhamento do sistema, incluindo Instagram — + botões explícitos para
   **WhatsApp** (`wa.me/?text=`), **Telegram** (`t.me/share/url`), **Facebook**
@@ -82,14 +81,14 @@ gera um link próprio de entrada remota, que **pula a digitação do código**:
   HTML), SMS, e o `RoomQr` já existente gerando PNG **com o link de convidado**
   impresso para a mesa.
 - O link **não** pula a aprovação: ele só substitui o passo de localizar a sala
-  (vai direto para a tela de espera). Se o dono quiser receber gente de fora
-  **sem** aprovar, é uma segunda flag — entra em **D5**.
+  (vai direto para a tela de espera). **Fechado em D5 (2026-10-01): não há segunda
+  flag de "entra sem aprovar" no MVP.**
 
 **Modelo (proposta):**
 
 - `rooms` ganha `permite_entrada_fora_raio boolean not null default false` e
-  `link_convidado text` (+ `link_convidado_expira_em` / `link_convidado_usos`,
-  se ligado em D5).
+  `link_convidado text`. **D5 (2026-10-01) decidiu que `link_convidado_expira_em` e
+  `link_convidado_usos` NÃO existem** — o link vive até o dono revogar.
 - `room_members` ganha `fora_do_raio boolean not null default false` +
   `distancia_m integer` + `via_link_convidado boolean`, gravados no `join_room`.
 - `checkPresence` deixa de ser booleano e passa a devolver **3 estados**:
@@ -111,8 +110,7 @@ gera um link próprio de entrada remota, que **pula a digitação do código**:
   conta — **visitante sem login (anônimo)** ou **usuário** — + mesa + horário.
   Filtros: mesa, anônimo/usuário, aguardando/aprovado, "entrou há X min".
 
-**Ainda aberto:** D5 (limite por pessoa/dia; se o link de convidado pode ou não
-pular a aprovação).
+**Ainda aberto:** nada — **D5 foi resolvida em 2026-10-01** (ver tabela abaixo).
 
 **Testes:** matriz do gate (dentro / fora com toggle off / fora com toggle on /
 anônimo) na entrada por código, por QR e por link de convidado; RLS provando que
@@ -303,12 +301,12 @@ Fase 9 (toggle + lista) ─→ Fase 10 (permissão sem música)
 | D3  | O que quem está fora enxerga          | **Fila/playlist + player ao vivo + agregados por mesa** (pessoas e músicas por mesa). Sem nome/foto de ninguém. **Detalhes (foto, nome, músicas de cada um) só entre quem está na mesma mesa.** A busca some para quem está fora.                                                                   |
 | D4  | Dado do fora-do-raio na lista do dono | **Com distância em metros** + tag "fora do bar" + tipo de conta (visitante sem login × usuário) — com **consentimento explícito** e retenção a fechar na Fase 8 (LGPD).                                                                                                                             |
 | D11 | Pedido de comida/bebida               | **Adiado de propósito**: as opções (deep-link para o sistema do bar × API do PDV deles × módulo nativo) serão avaliadas **diretamente com o bar** antes de escolher.                                                                                                                                |
+| D5  | Link de convidado e teto de entradas fora do raio (**2026-10-01**) | **O link NÃO pula a aprovação** (cai como `pending`, igual a D1); **sem expiração**; **sem limite de usos**; **sem teto de entradas fora do raio por pessoa/dia**. A defesa é a aprovação do host, não a janela de validade: como quem chega por ele sempre passa por ele, o link só substitui o passo de digitar o código. Revogação é **manual** (o dono invalida na hora). **Consequência no modelo:** as colunas `link_convidado_expira_em` e `link_convidado_usos` do rascunho original **saem** — só `rooms.link_convidado` + revogação. |
 
 ### Ainda abertas (bloqueantes para implementar)
 
 | #   | Decisão                                                                                                                                     | Por que é crítica                                                                        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| D5  | Limite de entradas fora do raio (por pessoa/dia) e o **link de convidado** pode ou não pular a aprovação? **Expiração/uso máximo do link?** | Sem limite, o bar vira karaokê online; o link é a porta de entrada mais fácil de abusar. |
 | D6  | No detalhe da mesa, o anônimo aparece com nome/apelido? Opt-in de visibilidade? Denúncia/bloqueio?                                          | Privacidade social dentro do bar.                                                        |
 | D7  | Ao estourar o teste grátis: **bloqueia** tudo, **sugere plano**, ou **última música** grátis?                                               | Primeira conversão de pago.                                                              |
 | D8  | Regra de **quebra de dias consecutivos** (1 dia de tolerância? congelador?).                                                                | Política de gamificação do cliente.                                                      |

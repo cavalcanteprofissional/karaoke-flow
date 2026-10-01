@@ -42,6 +42,12 @@ const FIXTURE_ALLOWLIST = [
   // Mesmo contrato de `seed.mjs`: os mesmos 4 IDs fixos e documentados dos
   // usuários de seed (`…0001`..`…0004`), não tokens de player da TV.
   /^[\\/]?scripts[\\/]sync-seed-users\.mjs$/i,
+  // Mesmo contrato outra vez: `inspect-users.mjs` carrega os mesmos 4 IDs fixos
+  // de `seed.mjs` para rotular as contas de desenvolvimento. Entrou na lista em
+  // 2026-10-01 porque o `scan:secrets` já vinha vermelho desde `24b17c0` com 5
+  // achados aqui — alarme falso que treina a ignorar o portão. Os IDs são
+  // literalmente `00000000-…-0001`..`0004`: não há token de TV aqui.
+  /^[\\/]?scripts[\\/]inspect-users\.mjs$/i,
   /^[\\/]?scripts[\\/]smoke-[\w-]+\.sql$/i,
   /^[\\/]?\.(env\.example|env\.default\.example)$/i,
 ];

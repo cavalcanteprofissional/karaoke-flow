@@ -19,6 +19,7 @@
     "inspect:users": "node scripts/inspect-users.mjs",
     "enable:manual-linking": "node scripts/enable-manual-linking.mjs",
     "diagnose:queue": "node scripts/diagnose-queue-actions.mjs",
+    "measure:limits": "node scripts/measure-limits.mjs",
     "scan:secrets": "node scripts/scan-secrets.mjs"
   },
   "dependencies": {

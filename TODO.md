@@ -23,33 +23,43 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
-## Retomada — contexto da próxima sessão (2026-09-28)
+## Retomada — contexto da próxima sessão (2026-10-01)
 
-> O que está em pé quando a máquina voltar. Para se pôr a par: estes três commits —
-> `21667d3` (seed por env + cruzamento + Advisor 0010), `8fd31f2` e `fe7efec` (MANIFEST).
+> O que está em pé quando a máquina voltar. Para se pôr a par: o bloco de
+> retomada da Fase 8b·ter (2026-09-28) **está superado** — a 8b·ter e a 8b·quater
+> foram fechadas depois. O histórico de cada uma está no próprio bloco delas, mais
+> abaixo. O último commit de código antes desta sessão é `24b17c0`/documentação
+> `df71c26` (Fase 8b·quater).
 
-**Estado atual — Fase 8b·ter (código + Cloud) pronta, tudo aplicado no projeto `kskoipyzqcacccepcqpc`:**
+**Estado atual — Fase 8b·quater fechada; Fase 8c (hardening) iniciada, Bloco A entregue:**
 
-- `security_manual_linking_enabled=true` via Management API (chave **plana** `security_manual_linking_enabled` — o corpo aninhado legado `security:{…}` retorna 200 mas não aplica; `scripts/enable-manual-linking.mjs` foi corrigido para a forma plana).
-- `sync:seed-users` rotacionou a senha privada nas 4 contas (`auth.admin.updateUserById`, idempotente, sem tocar em domínio): dono→`multimalakoi@gmail.com`; ana/bruno `@exemplo.com`; **betania mantém `betania@exemplo.com`** (o outlook pessoal pertence à conta GitHub `e3580e25…` da Vercel — sem merge, decisão do usuário).
-- Identidades `email` presentes nas 4 contas; GitHub só entra pelo botão **"Vincular GitHub"** (validação manual — ver item 2 abaixo).
-- Advisor 0010: migration `20260928000033_profiles_public_invoker.sql` **aplicada** + `smoke-profiles-public.sql` **8/8 ok** (view `security_invoker=true`, `email` com permission denied para `anon`/`authenticated`, grants por coluna `id/name/avatar_url`, policy `profiles_select_public`).
-- MANIFEST: voz/clima/o sentir como produto; homenagem à Supergiant Games/Transistor acomodada em §6 (sem nota de rodapé).
-- `SUPABASE_ACCESS_TOKEN` válido no `.env.local` (`sbp_fcb5…`); scripts leem token, anon key e service role de `.env.local`.
-- Testes: 379/379 (32 arquivos), typecheck, lint e scan de segredos verdes.
+- Migações até `20260930000037`, todas aplicadas no projeto Cloud `kskoipyzqcacccepcqpc`. Testes 384 (32 arquivos), typecheck, lint, build e `scan:secrets` verdes.
+- Bypass dos tetos de bar/sala e de domínio entre bars **fechado no banco** (`00036`, triggers `BEFORE INSERT`/`UPDATE`), e o smoke `scripts/smoke-dev-role.sql` cobre os ataques **sem passar por RPC** (15/15, `begin`/`rollback`).
+- `profiles.auth_provider` corrigido (`00037`): o GoTrue não põe `provider` em `raw_user_meta_data`, e sim em `raw_app_meta_data`.
+- `security_manual_linking_enabled` **desligado** no Cloud (o auto-link por e-mail verificado passou a valer); botão "Vincular GitHub" atrás de `NEXT_PUBLIC_ENABLE_MANUAL_LINKING` (default OFF, fail-closed).
+- Conta canônica do dono = `SEED_HOST_USER_ID`, com senha definida e provada por sign-in real; órfão `…0001` apagado.
+- `SUPABASE_ACCESS_TOKEN` válido no `.env.local`; scripts leem token, anon key e service role de lá.
+
+**Bloco A da Fase 8c entregue (2026-10-01) — medição, sem código de produção:**
+
+- `scripts/measure-limits.mjs` (`npm run measure:limits`), **sem escrita com `--no-write`**, resultado em [`docs/engenharia/limites-free-tier.md`](./docs/engenharia/limites-free-tier.md).
+- **200 conexões simultâneas abriram sem falha** (teto publicado) — o limite **não** aperta; **Firebase deixa de ser plano B obrigatório**. Banco 13,33 MB / 500 MB.
+- Broadcast p50 161 ms, p95 166 ms: o alvo de 2 s é viável **na rede**.
+- **Mas o total por ação de fila é 2039 ms no p95**, porque `announceQueueChange` abre e fecha uma conexão por mutação (assinar 708 ms + fechar 614 ms, contra `enviar` de **0 ms**). Virou item próprio na Fase 8: "aviso de fila por canal de longa duração".
+- **D5 fechada** (link de convidado do dono: não pula aprovação, sem expiração, sem limite de usos, sem teto por pessoa/dia) — registrada no roadmap; **nada implementado**, continua na Fase 9.
 
 **Falta (lado do usuário, sem código):**
 
-1. **Vercel:** espelhar as envs (SEED_HOST_EMAIL, SEED_USER_EMAIL, SEED_USER2_EMAIL, SEED_PASSWORD, NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1; SEED_HOST2_EMAIL fica no default) e revalidar no remoto.
-2. **Validar §3.1 (TESTING):** senha→dono→"Vincular GitHub"→sair→GitHub→mesmas salas. Quando o usuário fizer o link, rodar o check de `auth.identities` do id `…0001` (deve ter `email` + `github`).
-3. Depois: reavaliar `security_manual_linking_enabled` (desligar ou migrar para staging antes de uso real).
+1. **Rotacionar `external_github_secret` / `external_google_secret`** no projeto Supabase — os dois ficaram expostos no output de `enable-manual-linking.mjs` antes da correção (01/10).
+2. **Vercel:** `SEED_HOST_EMAIL`, `SEED_HOST_USER_ID` (se o seed rodar lá) e `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`.
+3. **Backup da chave GPG privada** — o maior risco aberto em `docs/engenharia/seguranca-assinatura-commits.md` ("AUSENTE").
+4. Habilitar **`pg_cron`** no projeto (Dashboard → Database → Extensions) quando chegar o bloco de LGPD/limpeza.
 
-**Próxima fase de desenvolvimento (decisão em aberto — recomendado: Fase 9):**
+**Próximo bloco: Fase 8c·B — auditoria completa de RLS.** É o de maior risco aberto: as regras de negócio já nasceram só nas RPCs **duas vezes** e o app falava com o PostgREST por baixo (`00036` e o bypass de `create_bar` legada). Método já provado na 8b·quater: atacar a **Data API direto**, com `set local role authenticated` (o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira) e **contando linhas** — RLS barrado devolve 0 linhas sem levantar erro, então "não(exception)" não prova nada. Entregável: `scripts/smoke-rls-audit.sql` autossuficiente + migrations de correção. Alvos: `rooms`, `bars`, `room_members`, `queue_items`, `song_cache`, `consents`, `dev_accounts`, `profiles_public` — participante de outra sala, anônimo, não-membro, leitura de `rooms.player_token` alheio, auto-`approved` via escrita direta.
 
-- **Fase 9:** entrada **fora do raio** (toggle por sala, `checkPresence` em 3 estados, lista do host com distância/tag "fora do bar") + **link de convidado do dono** (`rooms.link_convidado`, expiração/uso máximo). Decisões D1–D5 já fechadas com o PO em 2026-09-25. Sequência 9→10→11; o player (Fase 6/7) pronto destrava 12/13.
-- **Alternativa:** itens de hardening da **Fase 8** (auditoria completa de RLS, rate limiting em rotas sensíveis, teste de concorrência da fila, limites do Realtime, LGPD retenção/exclusão, limpeza de `played`/`rejected`, polimento mobile, latência realtime).
+**Depois (ordem combinada):** 8c·C concorrência da fila → 8c·D rate limiting distribuído → 8c·E Playwright + smoke HTTP → 8c·F LGPD retenção/exclusão + limpeza → 8c·G `playback_held` (D2) + tocando/próxima + pré-carregar → 8c·H polimento mobile → 8c·I fechamento (hook `pre-commit` do scanner, docs).
 
-**Ferramental que se aplica:** migrations via `node scripts/apply-sql.mjs supabase/migrations/<arquivo>.sql`; smokes em `scripts/*.sql`; smoke **por catálogo** quando `set role` não vale no contexto da Management API; validação manual no checklist do TESTING.
+**Ferramental que se aplica:** migrations via `node scripts/apply-sql.mjs supabase/migrations/<arquivo>.sql`; smokes em `scripts/*.sql`; smoke **por catálogo** quando `set role` não vale no contexto da Management API; medição com `npm run measure:limits`; diagnóstico de fila com `npm run diagnose:queue`; validação manual no checklist do TESTING.
 
 ---
 
@@ -428,13 +438,15 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] Estratégia de testes documentada: `TESTING.md` (Vitest + RTL + MSW + Playwright, checklist funcional por fase, DoD)
 - [x] **Advisor 0010 — `profiles_public` sem `security definer`** (2026-09-28): migration `20260928000033` virou a view para `security_invoker=true`, revogou o SELECT genérico de `anon`/`authenticated` em `profiles` e concedeu só `id/name/avatar_url` (`email` > permission denied pela API); policy `profiles_select_public` (`using true`) mantém o comportamento externo. Smoke `scripts/smoke-profiles-public.sql` valida por catálogo. **Aplicada e smoke verde no projeto Cloud (28/09).**
 - [ ] Auditoria completa de RLS — isolar salas; threads/admin; host actions autorizadas no backend
-- [ ] Rate limiting em rotas sensíveis (busca, entrada, ações de host)
-- [ ] Validação de limites do free tier Supabase Realtime (mensagens/eventos por segundo, conexões simultâneas) — Firebase como plano B anotado
+- [ ] Rate limiting em rotas sensíveis (busca, entrada, ações de host) — hoje só `/api/youtube/search` limita, **em memória do processo** (inútil em serverless multi-instância)
+- [x] **Limites do free tier do Realtime — medidos (2026-10-01):** `scripts/measure-limits.mjs` (`npm run measure:limits`; única escrita é o `UPDATE` de §3.3, sem mudança de conteúdo — `--no-write` zera) + [`docs/engenharia/limites-free-tier.md`](./docs/engenharia/limites-free-tier.md). **200 conexões simultâneas abriram, zero falhas** (bate com o teto publicado) — o teto **não** aperta o produto e **Firebase deixa de ser plano B obrigatório**. Banco 13,33 MB de 500 (2,7%). Broadcast p50 **161 ms** / p95 **166 ms** → o alvo de 2 s é viável. **Ressalva:** banda/mensagens com tráfego real segue sem medição (o teste usou canal vazio).
+- [x] **Latência realtime entre controller e tela — medida (2026-10-01):** o alvo de 2 s **é furado no p95** e a causa **não é a rede**: `announceQueueChange` cria um client, assina, envia e **desassina a cada mutação** de fila — `enviar` custa **0 ms**, `assinar` 708 ms e `fechar` 614 ms. Total por ação de fila: **1627 ms p50 / 2039 ms p95** (escrita 306 ms + aviso 1321 ms). Registrado como item próprio abaixo.
+- [ ] **Aviso de fila por canal de longa duração** — `announceQueueChange` (`src/lib/rooms/room-channel.ts:47`) deve reutilizar um canal vivo em vez de assinar/dessinar por mutação (espera: 1321 ms → ~0 ms). Ações: canal singleton no client, com `SUBSCRIBED` aguardado uma vez; manter o `try/catch` best-effort e o `createClient` **dentro** do `try` (regra do Bloco C da 8b); teste com temporizador (o efeito reexecuta por ação — lição §3.10 do pós-mortem)
+- [ ] **Revalidar a latência na TV de verdade** depois do item acima (o número do script é rede+banco; a tela é `TESTING.md` §3.9·ter)
 - [ ] Teste de concorrência: múltiplos usuários adicionando à fila ao mesmo tempo, sem posições duplicadas
 - [ ] LGPD: política de retenção de dados + caminho de exclusão de conta/dados
-- [ ] Rotina de limpeza de `played`/`rejected` antigos (agregar/arquivar)
+- [ ] Rotina de limpeza de `played`/`rejected` antigos (agregar/arquivar) — depende do item de LGPD acima
 - [ ] Polimento mobile: alvos de toque ≥ 44px, contraste adequado, tema escuro consistente (controller + tela)
-- [ ] Latência realtime < 2s validada entre controller e tela
 
 ## Fases 9–15 — Experiência do participante, entrada remota e monetizeção (registrado 2026-09-25)
 

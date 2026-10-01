@@ -350,6 +350,30 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [ ] Alvos de toque ≥ 44px no controller.
 - [ ] Tema escuro consistente no controller e na tela.
 
+### 3.11 Fase 8c·A — limites e latência do realtime (medido 2026-10-01)
+
+> **O que este bloco é:** a validação numérica de dois itens que estavam abertos
+> desde a Fase 6. **Rodar:** `npm run measure:limits`
+> (`scripts/measure-limits.mjs`; flags: `--no-ramp`, `--ramp-max N`, `--no-write`,
+> `--json`).
+> Resultado registrado em `docs/engenharia/limites-free-tier.md`.
+>
+> O script **não imprime nenhuma chave, senha ou token de player**, não cria e
+> não apaga nada; a única escrita é o `UPDATE` de §3.3, que não muda conteúdo
+> (só o `updated_at`, via trigger) e some com `--no-write`. Não substitui
+> `npm run seed`.
+
+- [ ] `npm run measure:limits` termina sem exceção e imprime as 5 seções
+- [ ] **Postgres:** banco em 2,7% do teto (13,33 MB / 500 MB) — confirmado
+- [ ] **Rampa:** 200 conexões simultâneas abrem com **0 falhas** (teto publicado)
+- [ ] **Broadcast:** p95 abaixo de 2000 ms (medido 166 ms) e **0 perdidos** em 60 envios
+- [ ] **Aviso de fila:** o script aponta `assinar` + `fechar` como o custo dominante e `enviar` como ~0 ms — é a prova de que o alvo de 2 s **falha no p95 por desenho do `announce`**, não por falta de rede
+- [ ] **Latência na TV de verdade** (o que o script **não** cobre): host aprova uma música no celular, a fila do participante muda **sem esperar o poll** (< 2 s), e a lista muda de novo com o celular em segundo plano (< 10 s, o poll) — roteiro em §3.9·ter
+
+> **Por que o alvo de 2 s é medida de script E de browser:** o script mede rede e
+> banco; a TV renderiza, o quiosque e o `set_playback` acontecem em código que o
+> script não executa. Os dois juntos fecham o item — nenhum dos dois sozinho.
+
 > Este checklist cresce a cada fase; registre falhas em issues e nunca lance release com item do escopo pendente.
 
 ---

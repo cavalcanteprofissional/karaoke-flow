@@ -16,6 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "seed": "node scripts/seed.mjs",
     "sync:seed-users": "node scripts/sync-seed-users.mjs",
+    "inspect:users": "node scripts/inspect-users.mjs",
     "enable:manual-linking": "node scripts/enable-manual-linking.mjs",
     "diagnose:queue": "node scripts/diagnose-queue-actions.mjs",
     "scan:secrets": "node scripts/scan-secrets.mjs"

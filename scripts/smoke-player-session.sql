@@ -45,13 +45,16 @@ declare
   v_membro_row public.room_members;
   v_approved_at timestamptz;
 begin
-  -- IDs fixos do seed (stable): 001 dono, 002 ana, 003 bruno.
-  select id into v_host from auth.users where id = '00000000-0000-0000-0000-000000000001';
+  -- O host vem do bar canônico (ZEHBAR), não de um id fixo: o dono do projeto
+  -- é a conta OAuth real (SEED_HOST_USER_ID), e o …0001 do seed foi apagado
+  -- por ficar órfão. Sobrevive a renomear e-mails e a trocar a conta do host.
+  -- Ana e Bruno seguem ids fixos (contas de teste do seed).
+  select host_id into v_host from public.bars where code = 'ZEHBAR';
   select id into v_membro from auth.users where id = '00000000-0000-0000-0000-000000000002';
   select id into v_forasteiro from auth.users where id = '00000000-0000-0000-0000-000000000003';
   if v_host is null or v_membro is null or v_forasteiro is null then
     insert into smoke8a values
-      ('00 setup', jsonb_build_object('erro', 'usuarios do seed ausentes: rode npm run seed'));
+      ('00 setup', jsonb_build_object('erro', 'host do ZEHBAR ou usuarios de teste ausentes: rode npm run seed'));
     return;
   end if;
 

@@ -39,6 +39,9 @@ const FIXTURE_ALLOWLIST = [
   /^[\\/]?src[\\/]test[\\/]fake-player-token\.ts$/i,
   /\.(test|spec)\.[cm]?tsx?$/i,
   /^[\\/]?scripts[\\/]seed\.mjs$/i,
+  // Mesmo contrato de `seed.mjs`: os mesmos 4 IDs fixos e documentados dos
+  // usuários de seed (`…0001`..`…0004`), não tokens de player da TV.
+  /^[\\/]?scripts[\\/]sync-seed-users\.mjs$/i,
   /^[\\/]?scripts[\\/]smoke-[\w-]+\.sql$/i,
   /^[\\/]?\.(env\.example|env\.default\.example)$/i,
 ];

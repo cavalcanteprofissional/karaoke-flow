@@ -12,6 +12,10 @@
  *   (bars/rooms/members/queue) não são tocados, então as salas continuam dele.
  * - Admin API ignora a confirmação de e-mail (o trigger handle_new_user não
  *   roda de novo — o profile já existe).
+ * - Exceção quando SEED_HOST_USER_ID está definido: o slot do dono é uma conta
+ *   OAuth (ex.: GitHub) e NÃO é tocado por aqui. `updateUserById` numa conta
+ *   só-OAuth falha com `Database error loading user` — a senha é definida pelo
+ *   próprio usuário no menu ("Definir senha", `auth.updateUser` client-side).
  * - NUNCA imprime os valores das credenciais.
  *
  * Uso: node scripts/sync-seed-users.mjs
@@ -46,11 +50,16 @@ for (const k of [url, serviceRole]) {
   }
 }
 
+/** Host canônico opcional — mesma var do `seed.mjs`. */
+const HOST_USER_ID = g("SEED_HOST_USER_ID") || undefined;
+
 const USERS = [
   {
-    id: "00000000-0000-0000-0000-000000000001",
+    id: HOST_USER_ID ?? "00000000-0000-0000-0000-000000000001",
     label: "dono",
     email: g("SEED_HOST_EMAIL") ?? "dono@exemplo.com",
+    // Conta só-OAuth: não aplicar e-mail/senha por aqui (quebraria o login).
+    readOnly: Boolean(HOST_USER_ID),
   },
   {
     id: "00000000-0000-0000-0000-000000000002",
@@ -83,6 +92,21 @@ async function main() {
     }
     const current = found.user.email;
     const emailChanged = current.toLowerCase() !== u.email.toLowerCase();
+
+    // Host canônico (conta OAuth): só reporta. Tentar aplicar e-mail/senha por
+    // admin API aqui é o que quebra a conta (`Database error loading user`).
+    if (u.readOnly) {
+      console.log(`ok ${u.label}: conta canônica OAuth, não tocada`);
+      console.log(`   e-mail real: '${current}' (e-mail/senha definidos no menu)`);
+      if (emailChanged) {
+        console.warn(
+          `   ATENÇÃO: SEED_HOST_EMAIL está '${u.email}' mas a conta usa '${current}'.` +
+            ` Ajuste SEED_HOST_EMAIL para o e-mail real (local e Vercel) ou o login por senha falha.`
+        );
+      }
+      continue;
+    }
+
     const patch = {
       email: u.email,
       email_confirm: true,

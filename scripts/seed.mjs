@@ -4,6 +4,11 @@
  * - Usuários são criados via Auth Admin API (service role) com IDs fixos —
  *   raw SQL em auth.users deixa o serviço Auth instável (validação OK: todos
  *   os fluxos de login funcionam após).
+ * - Exceção: SEED_HOST_USER_ID. Se definido, o slot do DONO (bar 1 + sala 1)
+ *   é da conta com esse auth user id em vez do `…0001` fixo — é assim que a
+ *   conta real do dono (a que entrou pelo GitHub) fica canônica no domínio,
+ *   em vez de um `dono@exemplo.com` órfão. A conta apontada precisa já existir
+ *   no Auth; o seed não cria conta de OAuth.
  * - Os usuários são identificados SEMPRE pelo ID fixo, nunca pelo e-mail:
  *   o e-mail pode ter sido personalizado via SEED_HOST_EMAIL/SEED_PASSWORD
  *   no .env.local (ver .env.example), e trocar o critério impediria criar um
@@ -16,6 +21,7 @@
  *
  * Credenciais (defaults públicos em .env.example, personalizáveis no .env.local):
  *   SEED_HOST_EMAIL / SEED_HOST2_EMAIL / SEED_USER_EMAIL / SEED_USER2_EMAIL / SEED_PASSWORD
+ *   SEED_HOST_USER_ID (opcional — canonicaliza o host; o dono vira `dev`)
  *
  * Uso: npm run seed
  * Requer credenciais válidas em .env.local.
@@ -74,6 +80,13 @@ const USERS = [
 // Senha APENAS na criação (usuário existente não tem senha resetada por seed).
 const PASSWORD = g("SEED_PASSWORD") ?? "senha123";
 
+/**
+ * Opcional: auth user id que assume o slot do DONO (bar 1 + sala 1) no lugar
+ * do `…0001` fixo, e ganha o papel `dev` (migration `20260930000034`).
+ * Sem esta var o seed se comporta exatamente como antes.
+ */
+const HOST_USER_ID = g("SEED_HOST_USER_ID") || undefined;
+
 // IDs fixos do domínio.
 const BAR1 = "20000000-0000-0000-0000-000000000001"; // Karaokê do Zé
 const BAR2 = "20000000-0000-0000-0000-000000000002"; // Bar da Esquina
@@ -85,7 +98,24 @@ async function ensureUsers(admin) {
   const byEmail = new Map((existing?.users ?? []).map((u) => [u.email, u]));
 
   const ids = [];
-  for (const u of USERS) {
+  for (const [index, u] of USERS.entries()) {
+    // Slot do dono com conta canônica real (ex.: a que entrou pelo GitHub):
+    // resolve pelo ID e não tenta criar — conta OAuth não nasce aqui.
+    if (index === 0 && HOST_USER_ID) {
+      const { data: byId, error } = await admin.auth.admin.getUserById(HOST_USER_ID);
+      if (error || !byId?.user) {
+        throw new Error(
+          `SEED_HOST_USER_ID=${HOST_USER_ID} não existe no Auth (${
+            error?.message ?? "ausente"
+          }). Crie/entre com a conta antes de rodar o seed.`
+        );
+      }
+      ids.push(byId.user.id);
+      console.log(
+        `host canônico (SEED_HOST_USER_ID): ${byId.user.email} → ${byId.user.id}`
+      );
+      continue;
+    }
     // ID fixo primeiro: o e-mail pode ter sido personalizado (SEED_*), e o ID
     // é o contrato estável do domínio. Só cai para e-mail se o ID não existe.
     const { data: byId } = await admin.auth.admin.getUserById(u.id);
@@ -139,6 +169,23 @@ async function main() {
 
   const ids = await ensureUsers(admin);
   const [dono, ana, bruno, betania] = ids;
+
+  // Papel `dev` do host canônico. Vai ANTES do domínio para falhar cedo (e com
+  // mensagem clara) se a migration `20260930000034` não estiver aplicada —
+  // `dev_accounts` não tem policy, então só o service role escreve nela.
+  if (HOST_USER_ID) {
+    const { error: devErr } = await admin
+      .from("dev_accounts")
+      .upsert({ user_id: HOST_USER_ID }, { onConflict: "user_id", ignoreDuplicates: true });
+    if (devErr) {
+      throw new Error(
+        "dev_accounts: " +
+          devErr.message +
+          " — aplique a migration 20260930000034 (node scripts/apply-sql.mjs supabase/migrations/20260930000034_dev_role_multi_bar.sql) antes do seed."
+      );
+    }
+    console.log("papel dev: garantido para", HOST_USER_ID);
+  }
 
   await resetDomain(admin);
 

@@ -157,7 +157,7 @@ describe("EntryApprovalWait", () => {
     await waitFor(() => expect(mocks.query.maybeSingle).toHaveBeenCalled());
   });
 
-  it("redireciona automaticamente quando o host aprova", async () => {
+  it("redireciona para a sala quando o host aprova", async () => {
     render(<EntryApprovalWait {...defaultProps} />);
     await waitFor(() => expect(mocks.state.realtimeHandler).toBeDefined());
 
@@ -167,10 +167,64 @@ describe("EntryApprovalWait", () => {
     });
 
     await waitFor(() => {
-      // Sem `destination`, o aprovado vai para o player público da sala.
-      expect(mocks.router.replace).toHaveBeenCalledWith("/player/ABC123");
+      // Default é `/salas/<código>`: é lá que ficam a escolha da mesa
+      // (`MesaPicker`) e a busca. O player é só para quem entrou fora do raio,
+      // e quem entra fora do raio passa o destino explicitamente.
+      expect(mocks.router.replace).toHaveBeenCalledWith("/salas/ABC123");
     });
     expect(screen.getByText("Entrada aprovada!")).toBeInTheDocument();
+  });
+
+  it("usa o destino informado por quem chama (espectador fora do raio)", async () => {
+    render(<EntryApprovalWait {...defaultProps} destination="/player/ABC123" />);
+    await waitFor(() => expect(mocks.state.realtimeHandler).toBeDefined());
+
+    mocks.state.membership = { status: "approved", mesa_numero: null };
+    act(() => {
+      mocks.state.realtimeHandler?.();
+    });
+
+    await waitFor(() =>
+      expect(mocks.router.replace).toHaveBeenCalledWith("/player/ABC123")
+    );
+  });
+
+  /**
+   * Quem renderiza o card já está em `/salas/<código>`: o card aparece **dentro**
+   * da página, junto com o `MesaPicker` e a busca. Na aprovação, o que tira o
+   * card da tela é o `router.refresh()` do servidor (a linha deixa de ser
+   * `pending`). Navegar para a própria URL seria recarregar a mesma página.
+   */
+  it("no modo refresh revalida em vez de trocar de rota", async () => {
+    render(<EntryApprovalWait {...defaultProps} mode="refresh" />);
+    await waitFor(() => expect(mocks.state.realtimeHandler).toBeDefined());
+
+    mocks.state.membership = { status: "approved", mesa_numero: 2 };
+    act(() => {
+      mocks.state.realtimeHandler?.();
+    });
+
+    await waitFor(() => expect(mocks.router.refresh).toHaveBeenCalledTimes(1));
+    expect(mocks.router.replace).not.toHaveBeenCalled();
+    expect(screen.getByText(/entrada liberada para bar da esquina/i)).toBeInTheDocument();
+  });
+
+  it("não oferece link de fuga quando só revalida", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<EntryApprovalWait {...defaultProps} mode="refresh" initialStatus="approved" />);
+
+      expect(mocks.router.refresh).toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8000);
+      });
+
+      // O escape existe para uma navegação que não conclui; aqui não há
+      // navegação para concluir.
+      expect(screen.queryByRole("link", { name: /abrir o karaokê agora/i })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("não chama refresh ao aprovar: era o refresh que reiniciava o spinner", async () => {
@@ -196,7 +250,7 @@ describe("EntryApprovalWait", () => {
       // Realtime.
       render(<EntryApprovalWait {...defaultProps} initialStatus="approved" />);
 
-      expect(mocks.router.replace).toHaveBeenCalledWith("/player/ABC123");
+      expect(mocks.router.replace).toHaveBeenCalledWith("/salas/ABC123");
       expect(screen.queryByText("Abrir o karaokê agora")).not.toBeInTheDocument();
 
       // O `act` é obrigatório: `setNavStalled` roda dentro do callback do timer,
@@ -209,7 +263,7 @@ describe("EntryApprovalWait", () => {
       // Um link real (<a href>), não router.replace: se o client router é
       // justamente o que travou, a navegação cheia não depende dele.
       const link = screen.getByRole("link", { name: /abrir o karaokê agora/i });
-      expect(link).toHaveAttribute("href", "/player/ABC123");
+      expect(link).toHaveAttribute("href", "/salas/ABC123");
     } finally {
       vi.useRealTimers();
     }

@@ -7,7 +7,15 @@ export type BarLocation = {
 };
 
 export type PresenceDecision =
-  | { ok: true }
+  | {
+      ok: true;
+      /**
+       * Distância medida até o bar, quando deu para medir (host não mede: é
+       * isento). É o que o `join_room` grava em `room_members.distancia_m` para o
+       * contador do host — a decisão que o browser tomou vira número consultável.
+       */
+      distanceMeters?: number;
+    }
   | {
       ok: false;
       /** `geo-unavailable` = sem coords do usuário ou do bar; `outside` = fora do raio. */
@@ -15,6 +23,8 @@ export type PresenceDecision =
       error: string;
       /** Sinaliza o client para oferecer o fluxo de "permitir localização de novo". */
       geoRequired: true;
+      /** Só o `outside` tem número: sem coordenada dos dois lados não há o que medir. */
+      distanceMeters?: number;
     };
 
 /** O branch de bloqueio: tem `error` e `geoRequired` para o client usar. */
@@ -132,6 +142,10 @@ export function isOutsideBar(presence?: PresenceDecision): presence is OutsideDe
  * Decisão do gate de presença física (regra pura — sem I/O).
  * Host é sempre isento. Participante precisa de coords do usuário E do bar
  * (sem elas => geo-unavailable) dentro do raio.
+ *
+ * A distância sai junto da decisão quando dá para medir: quem decide de fora
+ * precisa saber *quanto* longe está, e é ela que o `join_room` persiste em
+ * `room_members.distancia_m` para o contador do host.
  */
 export function checkPresence(params: {
   isHost: boolean;
@@ -151,16 +165,19 @@ export function checkPresence(params: {
     };
   }
 
-  if (!withinRadius(userCoords, barCoords, radiusMeters)) {
+  const distanceMeters = haversineDistanceMeters(userCoords, barCoords);
+
+  if (distanceMeters > radiusMeters) {
     return {
       ok: false,
       reason: "outside",
       error: PRESENCE_ERROR_OUTSIDE,
       geoRequired: true,
+      distanceMeters,
     };
   }
 
-  return { ok: true };
+  return { ok: true, distanceMeters };
 }
 
 type NominatimResponse = Array<{

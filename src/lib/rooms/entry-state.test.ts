@@ -30,6 +30,8 @@ describe("getMemberEntryState", () => {
         mesa_numero: 3,
         pre_approval: true,
         approved_at: "2026-09-27T10:00:00Z",
+        fora_do_raio: false,
+        distancia_m: 42.5,
       },
       error: null,
     });
@@ -44,6 +46,55 @@ describe("getMemberEntryState", () => {
         mesa_numero: 3,
         pre_approval: true,
         approved_at: "2026-09-27T10:00:00Z",
+        fora_do_raio: false,
+        distancia_m: 42.5,
+      },
+    });
+  });
+
+  /**
+   * `member_entry_state` passou a devolver a presença gravada no join
+   * (migration 00040) porque é ela que diz à página da sala se o espectador
+   * entrou de fora — e daí não oferecer mesa.
+   */
+  it("carrega a presença da entrada para a página não oferecer mesa ao espectador", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        status: "approved",
+        mesa_numero: null,
+        pre_approval: false,
+        approved_at: null,
+        fora_do_raio: true,
+        distancia_m: 1893.42,
+      },
+      error: null,
+    });
+
+    const result = await getMemberEntryState(ROOM);
+
+    expect(result).toMatchObject({
+      ok: true,
+      state: { fora_do_raio: true, distancia_m: 1893.42, mesa_numero: null },
+    });
+  });
+
+  it("normaliza coluna ausente (banco sem a 00040) sem quebrar a tela", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: { status: "approved", mesa_numero: 1, pre_approval: false, approved_at: null },
+      error: null,
+    });
+
+    const result = await getMemberEntryState(ROOM);
+
+    expect(result).toEqual({
+      ok: true,
+      state: {
+        status: "approved",
+        mesa_numero: 1,
+        pre_approval: false,
+        approved_at: null,
+        fora_do_raio: false,
+        distancia_m: null,
       },
     });
   });

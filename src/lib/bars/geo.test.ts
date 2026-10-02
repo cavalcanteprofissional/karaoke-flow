@@ -105,12 +105,17 @@ describe("checkPresence (gate de presença física — Requisito)", () => {
       barCoords: BAR,
       radiusMeters: 150,
     });
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       ok: false,
       reason: "outside",
       error: PRESENCE_ERROR_OUTSIDE,
       geoRequired: true,
     });
+    // A metragem é o que a migration 00040 grava em `room_members.distancia_m`:
+    // sem ela o card do host mostraria "fora do raio" sem explicação.
+    if (!decision.ok) {
+      expect(decision.distanceMeters).toBeGreaterThan(150);
+    }
   });
 
   it("libera participante dentro do raio", () => {
@@ -120,7 +125,9 @@ describe("checkPresence (gate de presença física — Requisito)", () => {
       barCoords: BAR,
       radiusMeters: 150,
     });
-    expect(decision).toEqual({ ok: true });
+    // 0.0002° de latitude ≈ 22 m — dentro do raio, e a metragem volta junto
+    // para o `join_room` guardar.
+    expect(decision).toEqual({ ok: true, distanceMeters: expect.closeTo(22.24, 1) });
   });
 });
 
@@ -175,7 +182,7 @@ describe("requirePresence", () => {
             : undefined,
       },
     });
-    expect(decision).toEqual({ ok: true });
+    expect(decision).toEqual({ ok: true, distanceMeters: expect.closeTo(22.24, 1) });
   });
 
   it("sempre libera host (mesmo com coords erradas)", () => {

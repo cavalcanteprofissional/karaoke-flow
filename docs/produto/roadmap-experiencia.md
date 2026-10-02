@@ -204,6 +204,59 @@ colegas de mesa veem nível 2; Realtime quando alguém entra na mesa.
 
 ---
 
+## Adendo 2026-10-03 — Painel do host: o que o dono olha de relance
+
+**Pedido do PO:** o dono da sala quer olhar um painel e saber, sem abrir nada, como
+está a noite — **quantas músicas estão aprovadas e quantas aguardando**, **quantas
+pessoas em cada mesa e quantas estão fora do raio**, **quanto tempo de música ainda
+falta** e **quantas músicas tem na lista**.
+
+**Já entregue (2026-10-03, migration `20261003000040`):**
+
+- **Quem está na sala, separado por raio e por mesa** — card `RoomOccupancyCard`
+  (`src/components/rooms/room-occupancy.tsx`) na aba de configurações da sala, que
+  só o host vê. Três números (na sala / dentro do raio / fora do raio), os
+  pendentes ao lado e as **todas as mesas do bar desenhadas, inclusive as vazias**
+  (mesa vazia é informação: mostra que o QR não colou em lugar nenhum).
+- **A presença precisa ser gravada para ser contada.** Antes o `kf-geo` vivia só no
+  cookie do navegador de cada um; o banco não tinha como saber de onde veio a
+  pessoa. `join_room` agora grava `fora_do_raio` + `distancia_m` no momento da
+  entrada, e `room_members` ganha `replica identity full` para o `DELETE` (quem
+  sai) chegar no Realtime.
+- **A contagem vem de uma RPC host-only** (`admin_room_occupancy`), não de um
+  `select`: a RLS de `room_members` é por linha, então nem o host conseguiria somar
+  os outros por cima da tabela. Só conta `approved`; `pending` sai separado; o host
+  e a TV não têm linha e não entram na conta.
+
+**Ficou registrado para as próximas fases (não implementado ainda):**
+
+1. **Aprovadas × aguardando, da fila.** Hoje o `PendingEntries` mostra os
+   *participantes* esperando; falta o parágrafo equivalente para as *músicas*
+   (`queue_approval_mode = "approval"`): `12 aprovadas · 3 aguardando`, com Realtime
+   em `queue_items`.
+2. **Duração total da fila + a que está tocando.** "Quanto tempo de música ainda
+   falta" é a soma das durações dos itens `approved`/`playing`, com a música em
+   execução contada do `started_at` até agora. A duração precisa vir de algum
+   lugar confiável (metadados do YouTube ou `duracao_segundos` em `queue_items` —
+   hoje não existe coluna); enquanto isso, a soma por faixas de 3–4 min serve de
+   aproximação, e a interface deve dizer que é estimativa ("~2h10", com margem de
+   alguns minutos), nunca um número exato. É decisão de display, não de matemática:
+   o dono precisa da ordem de grandeza para decidir se corta a songs.
+3. **Total de músicas da lista ao vivo.** Um contador simples (`23 músicas na
+   lista`), que é a soma de `approved + pending + playing + played` do dia — com
+   Realtime em `queue_items`, no mesmo card.
+4. **Filtros por mesa no card** (Fase 11 properamente dito): "Mesa 3 · 4 pessoas ·
+   3 músicas", sem nome de ninguém, e com o corte dentro/fora do raio só para o
+   host.
+
+**Por que não entra no mesmo passo:** os quatro dependem de `queue_items` ganhar
+duração confiável e de `queue_items.mesa_numero` desnormalizado (opção **D9** da
+Fase 11). Fazer a contagem de pessoas agora era possível; a de músicas exige
+decidir a fonte da duração primeiro, e mexer nisso às cegas darija a métrica que
+o dono vai usar a noite inteira.
+
+---
+
 ## Fase 12 — Perfil de karaokê: saber a experiência e sugerir ajustes
 
 **Objetivo:** responder "como está o som/microfone" com sugestão concreta, em vez

@@ -10,7 +10,7 @@ import { QueueList } from "@/components/rooms/queue-list";
 import { PlaybackControls } from "@/components/rooms/playback-controls";
 import type { QueueItem } from "@/components/rooms/queue-list";
 import { QUEUE_VISIBLE_STATUSES } from "@/lib/rooms/queue";
-import { RoomQr } from "@/components/rooms/room-qr";
+import { BarQr } from "@/components/rooms/bar-qr";
 import { RoomSettings } from "@/components/rooms/room-settings";
 import { CloseRoomButton } from "@/components/rooms/close-room-button";
 import { LeaveRoomButton } from "@/components/rooms/leave-room-button";
@@ -23,13 +23,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { barJoinUrl } from "@/lib/bars/qr";
 import { getEntryPreviewAction } from "@/lib/bars/actions";
+import { isOutsideBar } from "@/lib/bars/geo";
 import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
 import type { Bar } from "@/types/bar";
+import type { MemberEntryState } from "@/types/room";
 
 type RoomPageProps = {
   params: Promise<{ codigo: string }>;
@@ -87,6 +88,14 @@ export default async function RoomPage({ params }: RoomPageProps) {
           barName={entryResult.preview.bar_nome}
           mesa={entryResult.membership.mesa_numero}
           initialStatus={entryResult.membership.status}
+          // Fora do raio não há mesa para escolher nem busca: vai para o player.
+          // Dentro do raio o default (a sala) é o certo — é dela que vem o
+          // `MesaPicker` e a busca.
+          destination={
+            isOutsideBar(entryResult.presence)
+              ? `/player/${entryResult.preview.room_code}`
+              : undefined
+          }
         />
       );
     }
@@ -139,8 +148,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
     bar = barData;
   }
 
-  let myMembership:
-    { status?: string | null; mesa_numero?: number | null } | null | undefined;
+  let myMembership: MemberEntryState | null | undefined;
   if (!isHost) {
     // Status efetivo (regra das 24h), não a linha crua: aprovada há mais de 24h
     // volta a ser `pending` e a pessoa vê a tela de aprovação outra vez.
@@ -149,7 +157,12 @@ export default async function RoomPage({ params }: RoomPageProps) {
   }
   const myMesa = myMembership?.mesa_numero ?? null;
   const isPendingMember = myMembership?.status === "pending";
-  const needsMesa = (myMembership?.status ?? null) === "approved" && myMesa == null;
+  // Espectador fora do raio NUNCA tem mesa (o join manda `null`), então o teste
+  // antigo — "aprovado sem mesa precisa escolher uma" — abria o `MesaPicker`
+  // para quem entrou de fora, que não pode nem usar a mesa que escolher. Agora a
+  // gravação do join é o critério (migration 20261003000040).
+  const isOutsideViewer = myMembership?.fora_do_raio === true;
+  const needsMesa = (myMembership?.status ?? null) === "approved" && myMesa == null && !isOutsideViewer;
 
   let pendingInitial: PendingEntry[] = [];
   if (isHost) {
@@ -295,11 +308,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex justify-center">
-              <RoomQr
-                value={barJoinUrl(bar.code)}
-                alt={`QR do bar ${bar.nome}`}
-                fileName={`qr-bar-${bar.code}.png`}
-              />
+              <BarQr barCode={bar.code} barNome={bar.nome} />
             </div>
             {bar.quantidade_mesas > 1 && (
               <div className="flex justify-center">
@@ -336,6 +345,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
                   latitude: bar.latitude,
                   longitude: bar.longitude,
                   raio_permitido_metros: bar.raio_permitido_metros,
+                  quantidade_mesas: bar.quantidade_mesas,
                 }
               : null
           }
@@ -350,6 +360,10 @@ export default async function RoomPage({ params }: RoomPageProps) {
           roomCode={room.code}
           barName={bar?.nome ?? hostName}
           mesa={myMesa}
+          // A pessoa já está nesta página: na aprovação o servidor revalida e o
+          // card sai da tela sozinho, com o `MesaPicker` e a busca embaixo.
+          // `replace` para a URL em que ela já está só recarregaria a mesma tela.
+          mode="refresh"
         />
       )}
 

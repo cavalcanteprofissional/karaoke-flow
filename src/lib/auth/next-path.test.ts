@@ -35,6 +35,33 @@ describe("safeNextPath", () => {
     expect(safeNextPath("evil.com", "/dashboard")).toBe("/dashboard");
   });
 
+  /**
+   * O critério não é "começa com `/`", é sobreviver ao parser de URL do browser.
+   * Estas três variantes passam no teste ingênuo do `//` e mesmo assim viram
+   * `https://evil.com/` depois da normalização — a com `\` porque o parser troca
+   * `\` por `/`, e as de controle porque `searchParams.get` já devolveu o
+   * caractere decodificado e o parser o apaga antes de resolver.
+   */
+  it("recusa barra invertida, que o parser troca por barra", () => {
+    expect(safeNextPath("/\\evil.com/steal", "/dashboard")).toBe("/dashboard");
+    expect(safeNextPath("/\\evil.com", "/dashboard")).toBe("/dashboard");
+    expect(safeNextPath("/entrar\\code=X", "/dashboard")).toBe("/dashboard");
+  });
+
+  it("recusa caracteres de controle, que o parser apaga", () => {
+    expect(safeNextPath("/\t/evil.com", "/dashboard")).toBe("/dashboard");
+    expect(safeNextPath("/\n/evil.com", "/dashboard")).toBe("/dashboard");
+    expect(safeNextPath("/\r/evil.com", "/dashboard")).toBe("/dashboard");
+    expect(safeNextPath("/entrar?code=A\u0000B", "/dashboard")).toBe("/dashboard");
+  });
+
+  it("aceita caminho interno que não pode ser normalizado para fora", () => {
+    expect(safeNextPath("/salas/ABC123", "/dashboard")).toBe("/salas/ABC123");
+    expect(safeNextPath("/entrar?bar=XED123&mesa=7", "/dashboard")).toBe(
+      "/entrar?bar=XED123&mesa=7"
+    );
+  });
+
   it("usa o fallback quando não há valor", () => {
     expect(safeNextPath(null, "/entrar")).toBe("/entrar");
     expect(safeNextPath(undefined, "/entrar")).toBe("/entrar");

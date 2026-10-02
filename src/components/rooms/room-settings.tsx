@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PresenceGateInfo } from "@/components/rooms/presence-gate-info";
+import { RoomOccupancyCard } from "@/components/rooms/room-occupancy";
 import {
   updateRoomCodeAction,
   updateRoomSettingsAction,
@@ -46,6 +47,8 @@ type RoomSettingsProps = {
     latitude: number | null;
     longitude: number | null;
     raio_permitido_metros: number;
+    /** Quantas mesas o bar tem — o card de ocupação desenha todas, vazias também. */
+    quantidade_mesas: number;
   } | null;
 };
 
@@ -241,16 +244,19 @@ export function RoomSettings({
       </Card>
 
       {bar && (
-        <PresenceGateInfo
-          barId={bar.id}
-          barName={bar.nome}
-          address={bar.endereco}
-          city={bar.cidade}
-          latitude={bar.latitude}
-          longitude={bar.longitude}
-          radiusMeters={bar.raio_permitido_metros}
-          entryModeApproval={settings.entry_mode === "approval"}
-        />
+        <>
+          <RoomOccupancyCard roomId={roomId} quantidadeMesas={bar.quantidade_mesas} />
+          <PresenceGateInfo
+            barId={bar.id}
+            barName={bar.nome}
+            address={bar.endereco}
+            city={bar.cidade}
+            latitude={bar.latitude}
+            longitude={bar.longitude}
+            radiusMeters={bar.raio_permitido_metros}
+            entryModeApproval={settings.entry_mode === "approval"}
+          />
+        </>
       )}
 
       <Card>

@@ -15,6 +15,7 @@ import {
 import { requirePresence } from "@/lib/bars/presence";
 import {
   geocodeAddress,
+  isOutsideBar,
   needsLocationConsent,
   type PresenceDecision,
 } from "@/lib/bars/geo";
@@ -393,6 +394,11 @@ export async function joinEntryAction(
   const { data, error } = (await supabase.rpc("join_room", {
     p_code: roomCode,
     p_mesa: mesa,
+    // A decisão de presença que o servidor acabou de tomar vira número na linha
+    // do membro: é o que o contador do host lê para separar quem está no bar de
+    // quem entrou de fora. `geo-unavailable` nem chega aqui (voltou antes).
+    p_fora_do_raio: isOutsideBar(presence),
+    p_distancia_m: presence.distanceMeters ?? null,
   })) as { data: unknown; error: { message: string } | null };
   if (error) {
     return { ok: false, error: friendlyError(error.message, "Não foi possível entrar.") };
@@ -557,6 +563,8 @@ export async function enterRoomByCodeAction(
   const { data: joinData, error: joinError } = (await supabase.rpc("join_room", {
     p_code: preview.room_code,
     p_mesa: null,
+    p_fora_do_raio: isOutsideBar(presence),
+    p_distancia_m: presence.distanceMeters ?? null,
   })) as { data: unknown; error: { message: string } | null };
   if (joinError) {
     return {

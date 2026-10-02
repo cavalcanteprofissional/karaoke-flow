@@ -49,24 +49,32 @@ describe("PresenceGateInfo", () => {
     cleanup();
   });
 
-  it("avisa que o gate barra mesmo com entrada livre ligada", () => {
-    const { container } = render(
-      <PresenceGateInfo {...base} entryModeApproval={false} />
-    );
+  /**
+   * A copy prometeu "entrada bloqueada" para quem estava fora do raio até
+   * 2026-10-02, quando a regra mudou: agora **entra para assistir**. Um aviso
+   * que promete bloqueio onde o produto só recusa a fila (o corte é do servidor,
+   * em `buildQueueSongItem`) teaches o host a esperar uma barreira que não
+   * existe.
+   */
+  it("avisa que a entrada livre não dispensa a localização", () => {
+    const { container } = render(<PresenceGateInfo {...base} entryModeApproval={false} />);
     const text = textOf(container);
 
     expect(text).toMatch(/entrada livre ligada o guest entra direto na sala/);
-    expect(text).toMatch(/o gate de localização continua valendo/);
-    expect(text).toMatch(/fora de 500 m do bar, a entrada é bloqueada/);
+    expect(text).toMatch(/O gate de localização continua valendo/);
+    expect(text).toMatch(/fora do raio, assiste sem pedir/);
+    expect(text).toMatch(/Quem ainda não aceitou a localização é bloqueado/);
     expect(text).toMatch(/O host nunca é bloqueado/);
   });
 
-  it("avisa que a aprovação exige estar dentro do raio", () => {
+  it("avisa que fora do raio a entrada acontece, mas sem mesa e sem pedir música", () => {
     const { container } = render(<PresenceGateInfo {...base} entryModeApproval />);
 
     expect(textOf(container)).toMatch(
-      /entrada com aprovação ligada, quem estiver fora de 500 m do bar é bloqueado/
+      /entrada com aprovação ligada, quem está fora de 500 m do bar ainda pode entrar/
     );
+    expect(textOf(container)).toMatch(/só assistindo: sem mesa e sem pedir música/);
+    expect(textOf(container)).not.toMatch(/entrada é bloqueada/);
   });
 
   it("desenha o mapa com o raio em vigor e mostra a metragem", () => {

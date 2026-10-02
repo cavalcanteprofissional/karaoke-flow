@@ -723,6 +723,14 @@ begin
   -- a KARAOKE é `queue_approval_mode = 'manual'`. Este caso mata a hipótese
   -- "membro injeta status='approved' e pula a aprovação": quem decide é o
   -- trigger `queue_items_initial_status`, não o cliente.
+  --
+  -- O modo de aprovação **é mutável pelo app** (o host mexe nas configurações da
+  -- sala), então o smoke não pode depender de a KARAOKE ainda estar como o seed
+  -- criou: quem testou pelo celular e deixou em `auto` fazia o caso falhar com
+  -- `approved`, blaming o trigger por uma configuração. Forçamos `manual` aqui
+  -- como postgres — o `rollback` no fim do arquivo desfaz.
+  update public.rooms set queue_approval_mode = 'manual' where id = v_room_a;
+
   v_n := 0; v_err := ''; v_txt := '';
   begin
     set local role authenticated;
@@ -1051,6 +1059,38 @@ begin
   insert into smoke_rls values ('H5 admin_*: authenticated ainda executa',
     'LEGITIMO', 'F1/F2', v_n::text || ' RPC(s) bloqueadas para authenticated',
     v_n = 0);
+
+  -- H6/H7/H8 ATAQUE (F1/F2): a 00040 introduced `admin_room_occupancy`, que e
+  -- `security definer` justamente porque o RLS de `room_members` esconde a sala
+  -- por linha: o host nao conseguiria somar os outros com um `select`. A
+  -- protecao tem tres pernas (ACL, filtro no corpo, `search_path`) e o smoke
+  -- vigia as tres -- o mesmo desenho das `admin_*` da 00038/00039.
+  v_n := 0;
+  select count(*) into v_n
+   where has_function_privilege('anon', 'public.admin_room_occupancy(uuid)', 'execute');
+  insert into smoke_rls values ('H6 admin_room_occupancy: anon nao executa',
+    'ATAQUE', 'F1/F2', v_n::text || ' com EXECUTE para anon', v_n = 0);
+
+  -- Perna 2 (corpo): `security definer` sem o filtro de host deixa qualquer
+  -- participante ler o agregado dos outros.
+  v_n := 0;
+  select count(*) into v_n
+    from pg_proc p
+   where p.oid = 'public.admin_room_occupancy(uuid)'::regprocedure
+     and pg_get_functiondef(p.oid) not like '%is_host%';
+  insert into smoke_rls values ('H7 admin_room_occupancy: corpo filtra por is_host',
+    'ATAQUE', 'F1/F2', v_n::text || ' funcao(es) sem o filtro is_host', v_n = 0);
+
+  -- Perna 3: `search_path` fixado, senao um objeto sombra criado no schema
+  -- `public` por outro papel trocaria a resolucao dentro da funcao definer.
+  v_n := 0;
+  select count(*) into v_n
+    from pg_proc p
+   where p.oid = 'public.admin_room_occupancy(uuid)'::regprocedure
+     and (p.proconfig is null
+          or not exists (select 1 from unnest(p.proconfig) c where c like 'search\_path=%'));
+  insert into smoke_rls values ('H8 admin_room_occupancy: search_path fixado (anti shadowing)',
+    'ATAQUE', 'F1/F2', v_n::text || ' funcao(es) sem search_path no proconfig', v_n = 0);
 end;
 $$;
 

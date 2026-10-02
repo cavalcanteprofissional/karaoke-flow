@@ -45,6 +45,8 @@ export async function getMemberEntryState(
     mesa_numero?: number | null;
     pre_approval?: boolean;
     approved_at?: string | null;
+    fora_do_raio?: boolean;
+    distancia_m?: number | null;
   };
 
   if (!raw.status) {
@@ -62,6 +64,13 @@ export async function getMemberEntryState(
       mesa_numero: raw.mesa_numero ?? null,
       pre_approval: raw.pre_approval === true,
       approved_at: raw.approved_at ?? null,
+      // `?? false` (e não `=== true`) seria o mesmo efeito, mas o default
+      // explícito documenta a direção do erro: se a coluna não vier, é porque
+      // rodou app contra banco sem a 00040 — e aí "não estou fora do raio"
+      // mantém o comportamento antigo, que era menos restritivo para quem já
+      // estava na sala.
+      fora_do_raio: raw.fora_do_raio === true,
+      distancia_m: Number.isFinite(raw.distancia_m) ? Number(raw.distancia_m) : null,
     },
   };
 }

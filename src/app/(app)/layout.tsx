@@ -4,6 +4,7 @@ import { ConsentSync } from "@/components/consent/consent-sync";
 import { UserMenu } from "@/components/auth/user-menu";
 import { AppNav } from "@/components/shell/app-nav";
 import { AppShell } from "@/components/shell/app-shell";
+import { SiteFooter } from "@/components/shell/site-footer";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -30,6 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         nav={<AppNav />}
       >
         {children}
+        <SiteFooter />
       </AppShell>
     </>
   );

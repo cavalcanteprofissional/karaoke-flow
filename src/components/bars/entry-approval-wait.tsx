@@ -40,15 +40,24 @@ type EntryApprovalWaitProps = {
   mesa?: number | null;
   initialStatus?: MemberStatus;
   /**
-   * Para onde cair depois da aprovação. O default é o player público da sala.
+   * Para onde cair depois da aprovação. Default: `/salas/<código>` — a rota onde
+   * a pessoa escolhe a mesa (`MesaPicker`) e busca música. Quem entrou **fora do
+   * raio** não tem nem uma nem outra coisa, e é para esse caso que o chamador
+   * passa `/player/<código>` explicitamente.
    *
    * Antes esta prop aceitava `null` como "não navegue", o que produzia uma tela
    * presa girando para sempre: `null` desligava o `router.replace` e sobrava só o
-   * `router.refresh()`. Quem chamasse assim nunca saía dali. Agora a prop é um
-   * destino concreto e o default é o player — a rota que o visitante anônimo
-   * consegue abrir sem token e sem login.
+   * `router.refresh()`, e quem chamasse assim nunca saía de lá.
    */
   destination?: string;
+  /**
+   * `navigate` (default) troca de rota na aprovação. `refresh` fica onde está —
+   * para o chamador que já **está** na sala: o `router.refresh()` do servidor é o
+   * que retira o card da tela, porque a linha deixa de ser `pending` e a página
+   * já vem com o `MesaPicker` e a busca. Navegar para a própria URL ali seria um
+   * `replace` inútil.
+   */
+  mode?: "navigate" | "refresh";
   /** Para onde voltar depois de cancelar (default: entrada pelo código da sala). */
   cancelHref?: string;
   onRetry?: () => void | Promise<void>;
@@ -68,11 +77,12 @@ export function EntryApprovalWait({
   mesa = null,
   initialStatus = "pending",
   destination,
+  mode = "navigate",
   cancelHref,
   onRetry,
 }: EntryApprovalWaitProps) {
   const backToEntry = cancelHref ?? `/entrar?code=${roomCode}`;
-  const target = destination ?? `/player/${roomCode}`;
+  const target = destination ?? `/salas/${roomCode}`;
   const router = useRouter();
   const [status, setStatus] = useState<WaitStatus>(initialStatus);
   const [currentMesa, setCurrentMesa] = useState<number | null>(mesa);
@@ -83,21 +93,30 @@ export function EntryApprovalWait({
   const navTimerRef = useRef<number | null>(null);
 
   /**
-   * Aprovado: navega UMA vez e arma o timer de escape.
+   * Aprovado: resolve a tela UMA vez — e resolve do jeito que o chamador pediu.
    *
-   * `router.replace()` e `router.refresh()` não podem ser disparados juntos: o
-   * refresh revalida a rota atual, que depois da aprovação devolve a própria
-   * tela de espera, e ele preserva o estado do client component — o latch
-   * `redirected` continuava `true` e nenhuma nova tentativa saía dali. Por isso
-   * aqui só navega, e a recuperação é o botão do timer.
+   * `navigate` troca de rota e arma o timer de escape. `refresh` só revalida:
+   * quem está no modo refresh já está na sala, e o servidor devolve a página sem
+   * este card (a linha deixou de ser `pending`), então trocar de rota seria
+   * recarregar a URL em que a pessoa já está.
+   *
+   * `router.replace()` e `router.refresh()` nunca juntos: o refresh revalida a
+   * rota atual, que depois da aprovação devolve a própria tela de espera, e ele
+   * preserva o estado do client component — o latch `redirected` continuava
+   * `true` e nenhuma nova tentativa saía dali. Por isso aqui só se resolve por
+   * um caminho, e a recuperação é o botão do timer.
    */
   const finish = useCallback(() => {
     if (redirected.current) return;
     redirected.current = true;
     setStatus("approved");
+    if (mode === "refresh") {
+      router.refresh();
+      return;
+    }
     router.replace(target);
     navTimerRef.current = window.setTimeout(() => setNavStalled(true), NAV_FALLBACK_MS);
-  }, [router, target]);
+  }, [mode, router, target]);
 
   useEffect(() => {
     if (status === "approved") finish();
@@ -226,7 +245,9 @@ export function EntryApprovalWait({
           <CardDescription>
             {navStalled
               ? "A tela não avançou sozinha. Toque abaixo para abrir o karaokê agora."
-              : `Estamos abrindo o karaokê de ${barName}. Só um instante…`}
+              : mode === "refresh"
+                ? `Entrada liberada para ${barName}. O painel vai se atualizar…`
+                : `Estamos abrindo o karaokê de ${barName}. Só um instante…`}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-3">

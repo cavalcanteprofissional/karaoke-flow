@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/auth/login-form";
 import { Header } from "@/components/shell/header";
+import { SiteFooter } from "@/components/shell/site-footer";
 import { AUTH_PROVIDERS } from "@/lib/auth/providers";
 import { safeNextPath } from "@/lib/auth/next-path";
 import { createClient } from "@/lib/supabase/server";
@@ -39,6 +40,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           devLoginEnabled={devLoginEnabled}
         />
       </main>
+      <SiteFooter />
     </div>
   );
 }

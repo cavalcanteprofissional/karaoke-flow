@@ -124,14 +124,26 @@ A RPC `get_room_preview` **foi substituída** pela `get_entry_preview(p_code, p_
 
 **Mesa escolhida dentro da sala na entrada por código** (2026-09-24): QR de bar/mesa (`?bar=…[&mesa=N]`) mantém o fluxo abaixo — mesa vai no `join_room`. Já o **código puro de sala** (`/entrar?code=KARAOKE` ou digitado) entra **direto na sala sem mesa** (`join_room(code)` com `p_mesa` nulo) e o participante é **obrigado a escolher a mesa dentro da sala** (`pick_mesa`, migration `20260924000022` — valida mesa em 1..`quantidade_mesas`, só para membro `approved` de sala `active`); enquanto `pending` vê o aviso de aguardando aprovação.
 
-**Gate de presença física** (requisito 2026-09-23): antes de `join_room`, o servidor lê o cookie `kf-geo` (geo do participante coletada sob consentimento §2.5) e compara com as coordenadas do bar (haversine ≤ `raio_permitido_metros`). **Participante fora do raio/sem geo → bloqueado** (banner + CTA "Permitir localização"); **host isento**; sem geo o participante mantém only-view (não entra). **Exceção (2026-09-25):** quem já tem membership `pending`/`rejected` da sala vai direto para a tela de espera — o gate não esconde um pedido em andamento. O gate é independente de `entry_mode`: **entrada livre (`open`) não dispensa a presença** — o painel do host avisa isso e mostra o raio no mapa (abaixo).
+**Gate de presença física** (requisito 2026-09-23, revisto em 2026-10-02): antes de `join_room`, o servidor lê o cookie `kf-geo` (geo do participante coletada sob consentimento §2.5) e compara com as coordenadas do bar (haversine ≤ `raio_permitido_metros`). A decisão tem **três desfechos** (`src/lib/bars/geo.ts`), porque "onde a pessoa está" responde a duas perguntas diferentes — **entrar** e **participar**:
+
+| Desfecho | Quando | Entrada | Pedir música |
+|---|---|---|---|
+| `ok` | dentro do raio · **host sempre isento** | entra, com mesa | permite |
+| `geo-unavailable` | sem consentimento/coords do usuário, ou bar sem coords/raio | **bloqueia** (banner + CTA "Permitir localização") | bloqueia |
+| `outside` | tem coordenadas e está genuinamente longe | **entra sem mesa**, só assistindo (`join_room` com `p_mesa = null`; a grade de mesas some e o botão vira "Assistir ao karaokê") | **bloqueia** (`buildQueueSongItem`, §3.1.1) |
+
+Até 2026-10-02 os dois desfechos negativos bloqueavam a entrada, e quem caía no `outside` ficava numa tela **sem caminho possível**: sem mesa para escolher e sem como pedir música. O corte de pedir música é **independente** e nunca saiu de `buildQueueSongItem` — o que mudou foi só a régua da entrada. **Exceção (2026-09-25):** quem já tem membership `pending`/`rejected` da sala vai direto para a tela de espera — o gate não esconde um pedido em andamento. O gate é independente de `entry_mode`: **entrada livre (`open`) não dispensa a presença** — o painel do host avisa isso e mostra o raio no mapa (abaixo).
 
 ```mermaid
 flowchart TD
     A["Participante digita code / escaneia QR de bar ou de mesa"] --> V["RPC get_entry_preview(p_code, p_mesa) — (backend, security definer)"]
     V --> W["Resolve bar → karaokê único ativo → preview<br/>(bar_nome, host, entry_mode, status, quantidade_mesas, coords)"]
     W --> R{"Entrada por QR de bar/mesa?"}
-    R -->|não| ROOM["RPC join_room(p_code) sem mesa — (backend)"]
+    R -->|não| PC{"Presença: kf-geo × coords ± raio (host isento)"}
+    PC -->|sem consentimento/coords, ou bar sem raio| PC1["bloqueado: geoRequired → a entrada oferece 'Permitir localização'"]
+    PC -->|fora do raio| ROOMOUT["RPC join_room(p_code) sem mesa · entrada como espectador"]
+    PC -->|dentro do raio| ROOM["RPC join_room(p_code) sem mesa — (backend)"]
+    ROOMOUT --> OUTV["vê o player · sem MesaPicker e sem pedir música"]
     ROOM --> DG0{É o host?}
     DG0 -->|sim| HOST["redirect → /salas/[code]"]
     DG0 -->|não| DG1{Sala ativa?}
@@ -150,9 +162,10 @@ flowchart TD
     X -->|não| X2["UI pede a mesa (grid 1..N); default 1 quando mesa única"]
     X1 --> X3["Confirmar entrada"]
     X2 --> X3
-    X3 --> P{"Presente no bar? (kf-geo × coords ± raio)"}
-    P -->|não| P1["bloqueado: banner geo + permitir localização (host isento)"]
-    P -->|sim| B["RPC join_room(p_code=room_code, p_mesa) — (backend, security definer)"]
+    X3 --> P{"Presença: kf-geo × coords ± raio (host isento)"}
+    P -->|sem consentimento/coords, ou bar sem raio| P1["bloqueado: banner geo + permitir localização"]
+    P -->|fora do raio| POUT["entra sem mesa (p_mesa null) — só assiste; pedir música barrado por OUTSIDE_BAR"]
+    P -->|dentro do raio| B["RPC join_room(p_code=room_code, p_mesa) — (backend, security definer)"]
     B --> C{Sala ativa?}
     C -->|não| Z
     C -->|sim| D{É o host?}

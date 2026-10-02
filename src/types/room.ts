@@ -71,6 +71,14 @@ export type MemberEntryState = EntryMembership & {
   /** A pré-aprovação de 24h valeu nesta consulta? */
   pre_approval: boolean;
   approved_at: string | null;
+  /**
+   * A pessoa entrou **fora do raio de presença** (migration
+   * `20261003000040`). É a decisão gravada no join — não a posição de agora: o
+   * que muda o comportamento da UI é não oferecer mesa a um espectador.
+   */
+  fora_do_raio: boolean;
+  /** Metros até o bar no momento da entrada, quando deu para medir. */
+  distancia_m: number | null;
 };
 
 /** Retorno da RPC `get_room_preview` (lista com 1 item). */

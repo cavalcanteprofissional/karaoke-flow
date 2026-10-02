@@ -64,11 +64,15 @@ function snapRadius(value: number): number {
 }
 
 /**
- * Aviso do gate de presença + raio configurável pelo host (2026-09-25/26).
+ * Aviso do gate de presença + raio configurável pelo host (2026-09-25/26; copy
+ * revisada em 2026-10-03).
  *
- * O gate vale nos **dois** modos de entrada: com `entrada livre` ligada o
- * participante entra direto, mas ainda precisa estar dentro do raio — o que a
- * tela deixa explícito, com o círculo do raio e a metragem.
+ * O gate vale nos **dois** modos de entrada, mas com a regra de 2026-10-02 ele
+ * não bloqueia mais quem está longe: **entra para assistir**, sem mesa e sem
+ * poder pedir música. O que bloqueia é a **falta de consentimento** (sem
+ * coordenada não dá para saber onde a pessoa está), e é isso que o texto abaixo
+ * diz — a versão anterior prometia "entrada bloqueada" para quem estava fora do
+ * raio, que é o contrário do que o produto faz.
  *
  * O campo é o **mesmo número** que o servidor cobra (`bars.raio_permitido_metros`,
  * validado em `checkPresence`/`requirePresence`): o host arrasta, o mapa e o
@@ -209,17 +213,21 @@ export function PresenceGateInfo({
             {entryModeApproval ? (
               <>
                 Com <strong className="text-foreground">entrada com aprovação</strong>{" "}
-                ligada, quem estiver fora de {radius} m do bar é bloqueado antes de
-                pedir entrada.
+                ligada, quem está fora de {radius} m do bar ainda pode entrar —{" "}
+                <strong className="text-foreground">só assistindo</strong>: sem mesa e sem
+                pedir música.
               </>
             ) : (
               <>
                 Com <strong className="text-foreground">entrada livre</strong> ligada o
-                guest entra direto na sala, mas{" "}
+                guest entra direto na sala.{" "}
                 <strong className="text-foreground">
-                  o gate de localização continua valendo
+                  O gate de localização continua valendo
                 </strong>
-                : fora de {radius} m do bar, a entrada é bloqueada do mesmo jeito.
+                : dentro de {radius} m ele pede música normalmente; fora do raio,{" "}
+                <strong className="text-foreground">assiste sem pedir</strong>. Quem ainda
+                não aceitou a localização é bloqueado — sem a coordenada não dá para saber
+                onde a pessoa está.
               </>
             )}{" "}
             O host nunca é bloqueado.

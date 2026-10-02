@@ -7,6 +7,7 @@ import { Mic2, Store } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SiteFooter } from "@/components/shell/site-footer";
 import {
   hasConsent,
   readPreferences,
@@ -89,47 +90,53 @@ export function Onboarding() {
   }
 
   return (
-    <div className="bg-background flex min-h-dvh flex-col items-center justify-center gap-16 p-4">
-      <div
-        className="flex w-full max-w-sm flex-col gap-4"
-        role="group"
-        aria-label="Escolha seu perfil"
-      >
-        {ROLES.map(({ role, icon: Icon }) => (
-          <Button
-            key={role}
-            size="lg"
-            variant={role === "host" ? "default" : "outline"}
-            className="w-full gap-3"
-            aria-label={role === "host" ? dict.onboarding.host : dict.onboarding.sing}
-            onClick={() => chooseRole(role)}
+    <div className="bg-background flex min-h-dvh flex-col">
+      {/* O conteúdo fica num wrapper `flex-1` e o rodapé fora dele: no mesmo
+          container, o `gap-16` empurraria a assinatura para 4rem do botão. */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-16 p-4">
+        <div
+          className="flex w-full max-w-sm flex-col gap-4"
+          role="group"
+          aria-label="Escolha seu perfil"
+        >
+          {ROLES.map(({ role, icon: Icon }) => (
+            <Button
+              key={role}
+              size="lg"
+              variant={role === "host" ? "default" : "outline"}
+              className="w-full gap-3"
+              aria-label={role === "host" ? dict.onboarding.host : dict.onboarding.sing}
+              onClick={() => chooseRole(role)}
+            >
+              <Icon className="size-5" />
+              {role === "host" ? dict.onboarding.host : dict.onboarding.sing}
+            </Button>
+          ))}
+        </div>
+
+        {bannerOpen && (
+          <div
+            className="bg-background/80 fixed inset-0 z-50 flex items-end justify-center p-4 backdrop-blur-sm sm:items-center"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="kf-consent-title"
           >
-            <Icon className="size-5" />
-            {role === "host" ? dict.onboarding.host : dict.onboarding.sing}
-          </Button>
-        ))}
+            <Card className="border-border/60 bg-card w-full max-w-md">
+              <CardContent className="flex flex-col gap-4 p-5">
+                <h2 id="kf-consent-title" className="text-lg font-semibold">
+                  {dict.consent.title}
+                </h2>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  {dict.consent.body}
+                </p>
+                <Button onClick={acceptConsent}>{dict.consent.accept}</Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
 
-      {bannerOpen && (
-        <div
-          className="bg-background/80 fixed inset-0 z-50 flex items-end justify-center p-4 backdrop-blur-sm sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="kf-consent-title"
-        >
-          <Card className="border-border/60 bg-card w-full max-w-md">
-            <CardContent className="flex flex-col gap-4 p-5">
-              <h2 id="kf-consent-title" className="text-lg font-semibold">
-                {dict.consent.title}
-              </h2>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                {dict.consent.body}
-              </p>
-              <Button onClick={acceptConsent}>{dict.consent.accept}</Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <SiteFooter />
     </div>
   );
 }

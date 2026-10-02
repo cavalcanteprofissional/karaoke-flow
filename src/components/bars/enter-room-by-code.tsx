@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/card";
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { enterRoomByCodeAction } from "@/lib/bars/actions";
+import { isOutsideBar } from "@/lib/bars/geo";
+import type { PresenceDecision } from "@/lib/bars/geo";
 import type { EntryBarPreview } from "@/types/bar";
 import type { EntryMembership } from "@/types/room";
 
@@ -29,13 +31,19 @@ type EnterRoomByCodeProps = {
   code: string;
   preview: EntryBarPreview;
   membership?: EntryMembership;
+  /**
+   * A mesma decisão que o preview recebeu da server action: quem está fora do
+   * raio entra como espectador e vai para o player depois da aprovação, porque
+   * lá não há mesa para escolher nem busca de música.
+   */
+  presence?: PresenceDecision;
 };
 
 type EnterStatus = "idle" | "joining" | "error" | "pending" | "rejected" | "approved";
 
 /** Entrada DIRETA por código de sala: no mount, chama a Server Action de
  * entrada (queda do anti-pattern de mutação durante o render) e redireciona. */
-export function EnterRoomByCode({ code, preview, membership }: EnterRoomByCodeProps) {
+export function EnterRoomByCode({ code, preview, membership, presence }: EnterRoomByCodeProps) {
   const router = useRouter();
   const [status, setStatus] = useState<EnterStatus>(membership?.status ?? "idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -71,6 +79,9 @@ export function EnterRoomByCode({ code, preview, membership }: EnterRoomByCodePr
         barName={preview.bar_nome}
         mesa={membership?.mesa_numero ?? null}
         initialStatus={status}
+        // Default é a sala — é lá que a mesa é escolhida (o texto do card abaixo
+        // promete isso). Fora do raio não há mesa nem busca: vai para o player.
+        destination={isOutsideBar(presence) ? `/player/${preview.room_code}` : undefined}
         onRetry={enter}
       />
     );

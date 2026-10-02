@@ -86,6 +86,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
               code={normalized}
               preview={result.preview}
               membership={result.membership}
+              presence={presence}
             />
           )}
           <div className="border-border rounded-xl border border-dashed p-4">

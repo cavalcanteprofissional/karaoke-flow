@@ -101,6 +101,10 @@ export function EntryPreview({
         barName={preview.bar_nome}
         mesa={currentMembership?.mesa_numero ?? mesa}
         initialStatus={state}
+        // Quem está dentro do raio cai na sala, onde ficam a escolha da mesa e a
+        // busca. Quem entrou de fora não tem as duas coisas (o corte de pedir
+        // música é do servidor), então vai direto para o player.
+        destination={outside ? `/player/${preview.room_code}` : undefined}
         cancelHref={entryRoute({ bar: preview.bar_code, mesa })}
         onRetry={async () => {
           await handleJoin();

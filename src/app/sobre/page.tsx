@@ -28,8 +28,13 @@ export default function AboutPage() {
   // Chave Pix é pública por natureza (é o endereço de recebimento), então pode
   // ir no bundle — mas fica em env para não virar código. Sem a chave, a seção
   // avisa em vez de mostrar QR quebrado.
+  //
+  // Os fallbacks repetem o que está no `.env.local` do dono (Fortaleza é a cidade
+  // do domicílio dele): se a env faltar num deploy, o QR ainda sai legível, com o
+  // titular certo — só que sem a chave, porque a chave não pode ter valor
+  // chutado no código.
   const chave = process.env.NEXT_PUBLIC_PIX_KEY?.trim() ?? "";
-  const cidade = process.env.NEXT_PUBLIC_PIX_CITY?.trim() || "Sao Paulo";
+  const cidade = process.env.NEXT_PUBLIC_PIX_CITY?.trim() || "Fortaleza";
   const nome = process.env.NEXT_PUBLIC_PIX_NAME?.trim() || "Lucas Cavalcante";
 
   return (

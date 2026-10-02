@@ -23,37 +23,30 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
-## Retomada — contexto da próxima sessão (2026-10-01)
+## Retomada — contexto da próxima sessão (2026-10-02)
 
-> O que está em pé quando a máquina voltar. Para se pôr a par: o bloco de
-> retomada da Fase 8b·ter (2026-09-28) **está superado** — a 8b·ter e a 8b·quater
-> foram fechadas depois. O histórico de cada uma está no próprio bloco delas, mais
-> abaixo. O último commit de código antes desta sessão é `24b17c0`/documentação
-> `df71c26` (Fase 8b·quater).
+> O que está em pé quando a máquina voltar. Blocos antigos de retomada
+> (Fase 8b·ter, 8b·quater, 8c·A, 8c·B) **estão superados** — o histórico de cada
+> um está no próprio bloco dele, mais abaixo. Os commits de código mais recentes
+> são `f9748e0` (gate obrigatório do player + correção de hydration) e `ede4906`
+> (Fase 8c·C: fecha F1..F6 da auditoria de RLS e o F7 que a própria correção
+> criou). **Nada foi pushado** — os dois estão só na `main` local.
 
-**Estado atual — Fase 8b·quater fechada; Fase 8c (hardening) iniciada, Bloco A entregue:**
+**Estado atual — Fase 8c (hardening) com os blocos A, B e C entregues; Fase 8d (validação manual) pendente:**
 
-- Migações até `20260930000037`, todas aplicadas no projeto Cloud `kskoipyzqcacccepcqpc`. Testes 384 (32 arquivos), typecheck, lint, build e `scan:secrets` verdes.
-- Bypass dos tetos de bar/sala e de domínio entre bars **fechado no banco** (`00036`, triggers `BEFORE INSERT`/`UPDATE`), e o smoke `scripts/smoke-dev-role.sql` cobre os ataques **sem passar por RPC** (15/15, `begin`/`rollback`).
-- `profiles.auth_provider` corrigido (`00037`): o GoTrue não põe `provider` em `raw_user_meta_data`, e sim em `raw_app_meta_data`.
-- `security_manual_linking_enabled` **desligado** no Cloud (o auto-link por e-mail verificado passou a valer); botão "Vincular GitHub" atrás de `NEXT_PUBLIC_ENABLE_MANUAL_LINKING` (default OFF, fail-closed).
-- Conta canônica do dono = `SEED_HOST_USER_ID`, com senha definida e provada por sign-in real; órfão `…0001` apagado.
-- `SUPABASE_ACCESS_TOKEN` válido no `.env.local`; scripts leem token, anon key e service role de lá.
-
-**Bloco A da Fase 8c entregue (2026-10-01) — medição, sem código de produção:**
-
-- `scripts/measure-limits.mjs` (`npm run measure:limits`), **sem escrita com `--no-write`**, resultado em [`docs/engenharia/limites-free-tier.md`](./docs/engenharia/limites-free-tier.md).
-- **200 conexões simultâneas abriram sem falha** (teto publicado) — o limite **não** aperta; **Firebase deixa de ser plano B obrigatório**. Banco 13,33 MB / 500 MB.
-- Broadcast p50 161 ms, p95 166 ms: o alvo de 2 s é viável **na rede**.
-- **Mas o total por ação de fila é 2039 ms no p95**, porque `announceQueueChange` abre e fecha uma conexão por mutação (assinar 708 ms + fechar 614 ms, contra `enviar` de **0 ms**). Virou item próprio na Fase 8: "aviso de fila por canal de longa duração".
-- **D5 fechada** (link de convidado do dono: não pula aprovação, sem expiração, sem limite de usos, sem teto por pessoa/dia) — registrada no roadmap; **nada implementado**, continua na Fase 9.
+- Migações até `20260930000039`, todas aplicadas no projeto Cloud `kskoipyzqcacccepcqpc` via `node scripts/apply-sql.mjs` (padrão do time — sem `SUPABASE_DB_PASSWORD`, `supabase db push` falha em auth, então **o histórico de migrations no dashboard não registra nenhuma delas**). Testes **424 (35 arquivos)**, typecheck, lint, build e `scan:secrets` verdes.
+- **Fase 8c·C fechada (2026-10-02):** as 6 defesas de RLS medidas na auditoria (F1–F6) mais o F7 estão no banco; smoke `scripts/smoke-rls-audit.sql` em **55 casos, 0 vermelho, 14/14 legítimos**. Relatório em [`docs/engenharia/auditoria-rls.md`](./docs/engenharia/auditoria-rls.md). **A correção de raiz do F2 (o `player_token` na URL) continua sendo a Fase 9.**
+- **Gate obrigatório do player entregue** (`f9748e0`) — o "armado" é store externo (`useSyncExternalStore`), o que matou o hydration mismatch; falta **só** a prova na TV real (item 1 de "Falta (lado do usuário)").
+- **Três smokes davam falso sinal de regressão e foram corrigidos** (não era bug de produto): o `smoke-playback` não tinha transação e **commitava resíduo na fila real** a cada rodada, então só passava na primeira execução. Detalhe em [`pos-mortem-smoke-playback.md`](./docs/engenharia/pos-mortem-smoke-playback.md) §6.
+- `profiles_public` (`id`/`name`/`avatar_url`) é **decisão de produto**, não defeito: é o que o preview anônimo mostra. E-mail segue bloqueado.
 
 **Falta (lado do usuário, sem código):**
 
-1. **Rotacionar `external_github_secret` / `external_google_secret`** no projeto Supabase — os dois ficaram expostos no output de `enable-manual-linking.mjs` antes da correção (01/10).
-2. **Vercel:** `SEED_HOST_EMAIL`, `SEED_HOST_USER_ID` (se o seed rodar lá) e `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`.
-3. **Backup da chave GPG privada** — o maior risco aberto em `docs/engenharia/seguranca-assinatura-commits.md` ("AUSENTE").
-4. Habilitar **`pg_cron`** no projeto (Dashboard → Database → Extensions) quando chegar o bloco de LGPD/limpeza.
+1. **Validar o gate numa TV/celular de verdade** (`TESTING.md` §3.9·quater): o jsdom não prova se o gesto chegou ao browser, se o D-pad acerta o botão nem se o console fica limpo ao abrir com a TV já armada.
+2. **Rotacionar `external_github_secret` / `external_google_secret`** no projeto Supabase — os dois ficaram expostos no output de `enable-manual-linking.mjs` antes da correção (01/10).
+3. **Vercel:** `SEED_HOST_EMAIL`, `SEED_HOST_USER_ID` (se o seed rodar lá) e `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1`.
+4. **Backup da chave GPG privada** — o maior risco aberto em `docs/engenharia/seguranca-assinatura-commits.md` ("AUSENTE").
+5. Habilitar **`pg_cron`** no projeto (Dashboard → Database → Extensions) quando chegar o bloco de LGPD/limpeza.
 
 **Fase 8c·B — RLS: a auditoria rodou, e ela é vermelha (2026-10-01):**
 
@@ -87,7 +80,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Plano de testes por fase (ampliação da bateria)
 
-> **Situação atual (2026-09-27):** Vitest + RTL + jsdom com **353 testes** (32 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 55, `queue` matriçada (39), rota `/api/youtube/search` **16 via MSW** — incl. Bearer de OAuth host/app —, **roundtrip OAuth authorize→callback 4**, entrada com aprovação (`entry-approval-wait` 10, `pending-entry-requests` 5) e o gate de presença (`presence-gate-info` 14), fila (`queue-list` 23, `song-search` 9, `song-confirm-dialog` 9), player (`playback` 24 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 18 com a IFrame Player API mockada **fiel ao ciclo de vida real**, `playback-controls` 12), e a **Fase 8a** (`queue-actions` 7, `entry-state` 5, `room-settings` 3). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada — o banco é coberto por **smoke SQL** (`scripts/smoke-playback.sql`, `scripts/smoke-player-session.sql`). Detalhamento por área em `TESTING.md` §3.2.
+> ~~**Situação em 2026-09-27 (snapshot histórico deste bloco):**~~ Vitest + RTL + jsdom com **353 testes** (32 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, `src/lib/bars/schema.test.ts` 5 + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, i18n, consent cookies/geo, componente Onboarding, `src/lib/youtube/*` 55, `queue` matriçada (39), rota `/api/youtube/search` **16 via MSW** — incl. Bearer de OAuth host/app —, **roundtrip OAuth authorize→callback 4**, entrada com aprovação (`entry-approval-wait` 10, `pending-entry-requests` 5) e o gate de presença (`presence-gate-info` 14), fila (`queue-list` 23, `song-search` 9, `song-confirm-dialog` 9), player (`playback` 24 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 18 com a IFrame Player API mockada **fiel ao ciclo de vida real**, `playback-controls` 12), e a **Fase 8a** (`queue-actions` 7, `entry-state` 5, `room-settings` 3). **MSW instalado** (mocka a YouTube Data API nas provas de rota). **Ainda não há** Playwright, testes de server actions nem cobertura de banco/RLS automatizada — o banco é coberto por **smoke SQL** (`scripts/smoke-playback.sql`, `scripts/smoke-player-session.sql`). Detalhamento por área em `TESTING.md` §3.2.
+>
+> **Os números atuais estão no bloco "Estado atual" do topo deste arquivo e em `TESTING.md` §3.2** (424 testes / 35 arquivos em 2026-10-02). O parágrafo acima ficou como registro do estado naquele dia — inclusive a frase "Ainda não há cobertura de banco/RLS automatizada", que a Fase 8c mudou: hoje são 5 smokes, sendo `smoke-rls-audit.sql` a auditoria de RLS de verdade.
 >
 > Princípios: testar o que agrega (helpers de domínio e componentes críticos em unit; fluxos de usuário em e2e); manter a suíte rápida; RLS validada via smoke/e2e, não em unit.
 

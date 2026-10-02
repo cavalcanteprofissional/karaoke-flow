@@ -7,6 +7,7 @@ import {
   Check,
   Hourglass,
   LoaderCircle,
+  Play,
   Power,
   RotateCcw,
   ShieldCheck,
@@ -38,11 +39,27 @@ type EntryApprovalWaitProps = {
   barName: string;
   mesa?: number | null;
   initialStatus?: MemberStatus;
-  destination?: string | null;
+  /**
+   * Para onde cair depois da aprovação. O default é o player público da sala.
+   *
+   * Antes esta prop aceitava `null` como "não navegue", o que produzia uma tela
+   * presa girando para sempre: `null` desligava o `router.replace` e sobrava só o
+   * `router.refresh()`. Quem chamasse assim nunca saía dali. Agora a prop é um
+   * destino concreto e o default é o player — a rota que o visitante anônimo
+   * consegue abrir sem token e sem login.
+   */
+  destination?: string;
   /** Para onde voltar depois de cancelar (default: entrada pelo código da sala). */
   cancelHref?: string;
   onRetry?: () => void | Promise<void>;
 };
+
+/**
+ * Quanto tempo o card de aprovação espera a navegação do client router antes de
+ * oferecer o botão de escape. Um `router.replace()` que não completa é invisível
+ * para quem está olhando a TV: sem este timer, a falha vira um spinner eterno.
+ */
+const NAV_FALLBACK_MS = 4000;
 
 export function EntryApprovalWait({
   roomId,
@@ -55,26 +72,43 @@ export function EntryApprovalWait({
   onRetry,
 }: EntryApprovalWaitProps) {
   const backToEntry = cancelHref ?? `/entrar?code=${roomCode}`;
+  const target = destination ?? `/player/${roomCode}`;
   const router = useRouter();
   const [status, setStatus] = useState<WaitStatus>(initialStatus);
   const [currentMesa, setCurrentMesa] = useState<number | null>(mesa);
   const [retrying, setRetrying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [navStalled, setNavStalled] = useState(false);
   const redirected = useRef(false);
+  const navTimerRef = useRef<number | null>(null);
 
+  /**
+   * Aprovado: navega UMA vez e arma o timer de escape.
+   *
+   * `router.replace()` e `router.refresh()` não podem ser disparados juntos: o
+   * refresh revalida a rota atual, que depois da aprovação devolve a própria
+   * tela de espera, e ele preserva o estado do client component — o latch
+   * `redirected` continuava `true` e nenhuma nova tentativa saía dali. Por isso
+   * aqui só navega, e a recuperação é o botão do timer.
+   */
   const finish = useCallback(() => {
     if (redirected.current) return;
     redirected.current = true;
     setStatus("approved");
-    if (destination !== null) {
-      router.replace(destination ?? `/salas/${roomCode}`);
-    }
-    router.refresh();
-  }, [destination, roomCode, router]);
+    router.replace(target);
+    navTimerRef.current = window.setTimeout(() => setNavStalled(true), NAV_FALLBACK_MS);
+  }, [router, target]);
 
   useEffect(() => {
     if (status === "approved") finish();
   }, [status, finish]);
+
+  useEffect(
+    () => () => {
+      if (navTimerRef.current !== null) window.clearTimeout(navTimerRef.current);
+    },
+    []
+  );
 
   useEffect(() => {
     if (status !== "pending") return;
@@ -179,7 +213,6 @@ export function EntryApprovalWait({
     toast.success("Pedido cancelado.");
     setStatus("cancelled");
     router.replace(backToEntry);
-    router.refresh();
   }
 
   if (status === "approved") {
@@ -191,11 +224,30 @@ export function EntryApprovalWait({
           </span>
           <CardTitle>Entrada aprovada!</CardTitle>
           <CardDescription>
-            Estamos abrindo o karaokê de {barName}. Só um instante…
+            {navStalled
+              ? "A tela não avançou sozinha. Toque abaixo para abrir o karaokê agora."
+              : `Estamos abrindo o karaokê de ${barName}. Só um instante…`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex justify-center">
-          <LoaderCircle className="text-muted-foreground size-5 animate-spin" />
+        <CardContent className="flex flex-col items-center gap-3">
+          {navStalled ? (
+            <>
+              {/* <a> e não router.push: se o client router é justamente o que
+                  travou, a navegação cheia não depende dele. */}
+              <Button asChild size="lg" className="w-full">
+                <a href={target}>
+                  <Play className="size-4" />
+                  Abrir o karaokê agora
+                </a>
+              </Button>
+              <p className="text-muted-foreground text-center text-xs">
+                Se preferir digitar, abra <span className="font-mono">/entrar</span> e use
+                o código <span className="font-mono tracking-[0.2em]">{roomCode}</span>.
+              </p>
+            </>
+          ) : (
+            <LoaderCircle className="text-muted-foreground size-5 animate-spin" />
+          )}
         </CardContent>
       </Card>
     );
@@ -254,10 +306,7 @@ export function EntryApprovalWait({
           <Button
             type="button"
             className="w-full"
-            onClick={() => {
-              router.replace(backToEntry);
-              router.refresh();
-            }}
+            onClick={() => router.replace(backToEntry)}
           >
             <RotateCcw className="size-4" />
             Enviar novo pedido

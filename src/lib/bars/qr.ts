@@ -2,6 +2,8 @@
  * Código de entrada: bar (QR) mantém 6 chars gerados; sala é configurável
  * (3–12 alfanuméricos). Um mesmo padrão cobre os dois.
  */
+import { resolveAppUrl } from "@/lib/app-url";
+
 const CODE_PATTERN = /^[A-Z0-9]{3,12}$/;
 
 /** Resultado do parse de um token de entrada (texto digitado ou QR). */
@@ -71,12 +73,8 @@ export function entryRoute(token: EntryToken): string {
 }
 
 /** URL do QR do bar (leva à preview do bar para escolher a mesa). */
-export function barJoinUrl(barCode: string): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
-    /\/$/,
-    ""
-  );
-  return `${base}/entrar?bar=${barCode}`;
+export function barJoinUrl(barCode: string, appUrl?: string | null): string {
+  return `${resolveAppUrl(appUrl)}/entrar?bar=${barCode}`;
 }
 
 /**
@@ -90,10 +88,10 @@ export function extractEntryToken(text: string): string | null {
 }
 
 /** URL do QR de uma mesa (entrada direta na sala com a mesa pré-selecionada). */
-export function mesaJoinUrl(barCode: string, mesa: number): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
-    /\/$/,
-    ""
-  );
-  return `${base}/entrar?bar=${barCode}&mesa=${mesa}`;
+export function mesaJoinUrl(
+  barCode: string,
+  mesa: number,
+  appUrl?: string | null
+): string {
+  return `${resolveAppUrl(appUrl)}/entrar?bar=${barCode}&mesa=${mesa}`;
 }

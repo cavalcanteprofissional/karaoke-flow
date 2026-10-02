@@ -17,6 +17,13 @@ export type PresenceDecision =
       geoRequired: true;
     };
 
+/** O branch de bloqueio: tem `error` e `geoRequired` para o client usar. */
+export type PresenceBlocked = Extract<PresenceDecision, { ok: false }>;
+/** Bloqueio por falta de consentimento/coords — o único que exige o gate. */
+export type GeoUnavailableDecision = PresenceBlocked & { reason: "geo-unavailable" };
+/** Bloqueio por estar longe: assiste, mas não participa. */
+export type OutsideDecision = PresenceBlocked & { reason: "outside" };
+
 const EARTH_RADIUS_METERS = 6_371_000;
 
 export function toRadians(value: number): number {
@@ -31,8 +38,7 @@ export function haversineDistanceMeters(a: GeoCoordinates, b: GeoCoordinates): n
   const dLng = toRadians(b.longitude) - toRadians(a.longitude);
 
   const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -66,7 +72,10 @@ export function radiusTicks(
   stepMeters: number = radiusTickStep(radiusMeters)
 ): number[] {
   if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) return [];
-  const step = Number.isFinite(stepMeters) && stepMeters > 0 ? stepMeters : radiusTickStep(radiusMeters);
+  const step =
+    Number.isFinite(stepMeters) && stepMeters > 0
+      ? stepMeters
+      : radiusTickStep(radiusMeters);
   const ticks: number[] = [];
   for (let meters = step; meters < radiusMeters; meters += step) {
     ticks.push(meters);
@@ -74,8 +83,50 @@ export function radiusTicks(
   return ticks;
 }
 
-export const PRESENCE_ERROR_GEO = "Precisamos da sua localização para confirmar que você está no bar.";
-export const PRESENCE_ERROR_OUTSIDE = "Você precisa estar no bar para participar desta sala.";
+export const PRESENCE_ERROR_GEO =
+  "Precisamos da sua localização para confirmar que você está no bar.";
+export const PRESENCE_ERROR_OUTSIDE =
+  "Você precisa estar no bar para participar desta sala.";
+
+/** O que o visitante fora do raio ainda pode fazer depois de entrar. */
+export const PRESENCE_VIEWER_NOTICE =
+  "Você está fora do bar: pode assistir ao karaokê, mas não pode pedir músicas.";
+
+/**
+ * Quem pode ENTRAR na sala. Quem pode PEDIR música é outra pergunta, com a
+ * resposta mais apertada: `buildQueueSongItem` (`src/lib/rooms/queue.ts`) exige
+ * estar dentro do raio. Aqui a régua é só o consentimento.
+ *
+ *   - `geo-unavailable` (sem coords do usuário, ou bar sem raio/coords): sem o
+ *     cookie de localização não dá nem para saber onde a pessoa está, então a
+ *     entrada fica presa até ela aceitar. O consentimento é obrigatório.
+ *   - `outside` (tem coordenadas, está genuinamente longe): **não** impede a
+ *     entrada. A pessoa assiste ao player de onde está, sem mesa.
+ *
+ * Antes, os dois bloqueavam igual e quem estava fora do bar não conseguia nem
+ * escolher a mesa — ficava preso na tela de entrada sem caminho possível.
+ */
+export function canEnterAsViewer(presence?: PresenceDecision): boolean {
+  return !presence || presence.ok || presence.reason === "outside";
+}
+
+/**
+ * `true` só quando a falta é de consentimento/coord — aí a entrada precisa do gate.
+ *
+ * Type predicate de propósito: quem chama precisa chegar em `presence.error`
+ * logo abaixo (`needsLocationConsent(p) && p.error`), e um `boolean` nu deixaria
+ * o TS reclamar de `.error` num tipo que não tem esse campo.
+ */
+export function needsLocationConsent(
+  presence?: PresenceDecision
+): presence is GeoUnavailableDecision {
+  return !!presence && !presence.ok && presence.reason === "geo-unavailable";
+}
+
+/** `true` quando a pessoa entrou de fora: entra sem mesa e sem poder pedir. */
+export function isOutsideBar(presence?: PresenceDecision): presence is OutsideDecision {
+  return !!presence && !presence.ok && presence.reason === "outside";
+}
 
 /**
  * Decisão do gate de presença física (regra pura — sem I/O).
@@ -101,7 +152,12 @@ export function checkPresence(params: {
   }
 
   if (!withinRadius(userCoords, barCoords, radiusMeters)) {
-    return { ok: false, reason: "outside", error: PRESENCE_ERROR_OUTSIDE, geoRequired: true };
+    return {
+      ok: false,
+      reason: "outside",
+      error: PRESENCE_ERROR_OUTSIDE,
+      geoRequired: true,
+    };
   }
 
   return { ok: true };
@@ -124,7 +180,10 @@ export async function geocodeAddress(
   city: string,
   fetchFn: typeof fetch = fetch
 ): Promise<GeoCoordinates | null> {
-  const query = [address, city].filter(Boolean).map((part) => part.trim()).join(", ");
+  const query = [address, city]
+    .filter(Boolean)
+    .map((part) => part.trim())
+    .join(", ");
   if (!query) return null;
 
   const url = new URL("https://nominatim.openstreetmap.org/search");
@@ -137,7 +196,8 @@ export async function geocodeAddress(
     response = await fetchFn(url.toString(), {
       headers: {
         Accept: "application/json",
-        "User-Agent": "karaoke-flow/0.1 (contact: https://github.com/cavalcanteprofissional/karaoke-flow)",
+        "User-Agent":
+          "karaoke-flow/0.1 (contact: https://github.com/cavalcanteprofissional/karaoke-flow)",
       },
     });
   } catch {

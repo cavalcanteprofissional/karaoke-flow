@@ -14,6 +14,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RoomQr } from "@/components/rooms/room-qr";
 import { mesaJoinUrl } from "@/lib/bars/qr";
+import { useClientOrigin } from "@/lib/use-client-origin";
 
 type MesaQrDialogProps = {
   barCode: string;
@@ -22,6 +23,10 @@ type MesaQrDialogProps = {
 };
 
 export function MesaQrDialog({ barCode, barNome, quantidadeMesas }: MesaQrDialogProps) {
+  // `null` até o effect rodar: aí os QRs caem na env, que no servidor é a URL
+  // certa mesmo. Depois troca para o host que a TV está vendo.
+  const origin = useClientOrigin();
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -48,7 +53,7 @@ export function MesaQrDialog({ barCode, barNome, quantidadeMesas }: MesaQrDialog
                   Mesa {n}
                 </span>
                 <RoomQr
-                  value={mesaJoinUrl(barCode, n)}
+                  value={mesaJoinUrl(barCode, n, origin)}
                   alt={`QR da mesa ${n} do bar ${barNome}`}
                   fileName={`qr-mesa-${n}-${barCode}.png`}
                 />

@@ -393,7 +393,6 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [ ] **Participante pede uma música e abre o `/player`**: aparece o gate; um toque toca com som. O celular também bloqueia áudio sem gesto — por isso o gate não é só da TV.
 - [ ] **Participante assistindo com o gate na tela e a tela dormindo (≥ 30s)**: ao voltar, a TV não fica com o gate travado sobre um vídeo já em `PLAYING`.
 
-
 - [ ] RLS: participante aprovado de sala A **não** lê a fila da sala B (comprovar via API direta).
 - [ ] Ações de host rejeitadas no backend quando chamadas por não-host.
 - [ ] Rate limit nas rotas sensíveis.
@@ -429,6 +428,58 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 > script não executa. Os dois juntos fecham o item — nenhum dos dois sozinho.
 
 > Este checklist cresce a cada fase; registre falhas em issues e nunca lance release com item do escopo pendente.
+
+### 3.12 Visitante anônimo: QR, aprovação e fora do raio (2026-10-02)
+
+> **Por que este bloco existe:** a suíte cobriu os quatro defeitos (474 testes,
+> 39 arquivos), mas **jsdom renderiza só o cliente** — ela não prova nem que o QR
+> da TV sai correto nem que o celular do visitante chega ao player. Estes itens
+> são de browser e de aparelho real, e é aqui que eles ficam registrados.
+>
+> **Rodar:** em duas janelas. Janela A = a TV em `/player/<código>`. Janela B =
+> **modo anônimo** (janela privada ou outro perfil, sem sessão) no celular. Para
+> simular "fora do raio" de verdade, use o DevTools em **janela B**:
+> `Emulation ▸ Location ▸ Custom location` com coordenadas ~2 km longe do bar.
+> Um perfil **sem** o cookie `kf-geo` é o caso `geo-unavailable`.
+
+**QR codifica o host certo (o bug do `localhost:3000`)**
+
+- [ ] Na TV (janela A), com a sala vazia, o QR da tela de "Escaneie para adicionar" aponta para o **domínio em que a TV está aberta** — no deploy público, `https://<seu-dominio>/entrar?code=<código>`, e **nunca** `http://localhost:3000`
+- [ ] Conferir pelo leitor de QR do celular: o link abre o app certo sem digitação
+- [ ] O **QR das mesas** (página da sala, botão "QR das mesas") e o **QR do bar** apontam para o mesmo host
+- [ ] Gerar o QR de um **preview** da Vercel (URL diferente da produção): o QR tem que apontar para o preview, não para a produção — é a prova de que o origin tem precedência sobre `NEXT_PUBLIC_APP_URL`
+- [ ] `NEXT_PUBLIC_APP_URL` **case-sensitive**: confirmar na Vercel que é `..._APP_URL` (com `URL` em maiúscula). A variável com `url` minúscula é outra e simplesmente não existe
+
+**O código sobrevive ao login (o `?code=` que morria no redirect)**
+
+- [ ] Janela B em `/entrar?code=<código>` sem sessão → cai no `/login` com **`?next=`** na URL (visível na barra de endereços)
+- [ ] "Continuar sem login" → **abre `/entrar?code=<código>`**, com o código preenchido. Antes, voltava para `/entrar` pelado e exigia escanear o QR de novo
+- [ ] O mesmo pelo GitHub/Google (OAuth): o `redirectTo` leva o `next` e o callback devolve para o `code` certo
+- [ ] **Reentrante:** quem já tem sessão e abre `/login` direto é levado ao dashboard, **sem** obedecer a um `next` de link colado (`//evil.com` precisa cair em `/dashboard`, nunca no host externo)
+
+**Aprovação não é mais spinner eterno**
+
+- [ ] Com "entrada livre" **desligada** na sala, o pedido do visitante fica em "Aguardando aprovação"
+- [ ] O host aprova no celular → a tela do visitante **vira "Entrada aprovada!" e abre `/player/<código>`** sozinha
+- [ ] **Aprovação sem rede lenta:** aprovar e observar. O card para no spinner por ~4s e então oferece **"Abrir o karaokê agora"** com o código para digitar à mão. O link tem que ser um `<a href>` — se funcionar com o client router quebrado, é porque a navegação não depende dele
+- [ ] **Cancelar pedido** volta para `/entrar?code=<código>` sem recarregar nem travar
+- [ ] Rejeitar → "Tentar novamente" volta para a entrada, e o pedido novo aparece para o host
+- [ ] `console` limpo: **nenhum** `router.refresh` disparado na aprovação (o `refresh` era o que reiniciava o spinner)
+
+**Fora do raio entra e só assiste**
+
+- [ ] **Denovo dentro do raio** (coordenadas do bar): grade de mesas aparece, botão "Entrar na mesa N", pedido de música **funciona**
+- [ ] **Fora do raio** (DevTools, ~2 km longe): o aviso "Você está fora do bar: pode assistir ao karaokê, mas não pode pedir músicas" aparece, a **grade de mesas some** e o botão é **"Assistir ao karaokê"**
+- [ ] Entrar como fora do raio **funciona**: o visitante chega ao player `/player/<código>`
+- [ ] E **tentar pedir música** de fora dá recusa clara (o corte está em `buildQueueSongItem`) — este é o ponto que a regra de produto exige; se passar, é regressão
+- [ ] **Sem consentimento** (cookie `kf-geo` apagado, ou bar sem coords/raio): o gate de localização **continua bloqueando** e não oferece entrada sem mesa. `outside` e `geo-unavailable` não podem ter o mesmo comportamento
+- [ ] Dois visitantes fora do raio ao mesmo tempo: os dois entram (mesa nula convive com mesa nula — não há unique em `room_members.mesa_numero`)
+- [ ] Visitante de dentro que estava na mesa 4 e **reconecta de fora**: o `on conflict` do `join_room` preserva a mesa 4 (`coalesce`), ele não volta a "sem mesa"
+
+**`RoomQr` quando a geração falha**
+
+- [ ] Com o `qrcode` quebrado (DevTools ▸ bloquear `qrcode`), a tela **não** fica num skeleton piscando: mostra o erro **e o código da sala** para digitar à mão
+- [ ] `console` mostra `[RoomQr] falha ao gerar o QR` com o `value` — antes o erro era engolido sem log
 
 ---
 

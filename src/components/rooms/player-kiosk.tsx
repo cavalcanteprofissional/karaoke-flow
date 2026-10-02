@@ -5,7 +5,10 @@ import { Lock, Music4, Radio, Volume2 } from "lucide-react";
 
 import { PlayerGate } from "@/components/rooms/player-gate";
 import { RoomQr } from "@/components/rooms/room-qr";
-import { YouTubeStage, YT_ERROR_AUTOPLAY_BLOCKED } from "@/components/rooms/youtube-stage";
+import {
+  YouTubeStage,
+  YT_ERROR_AUTOPLAY_BLOCKED,
+} from "@/components/rooms/youtube-stage";
 import type { YouTubeStageHandle } from "@/components/rooms/youtube-stage";
 import { Button } from "@/components/ui/button";
 import { getPlayerStateAction, claimNextSongAction } from "@/lib/rooms/playback-actions";
@@ -20,6 +23,7 @@ import {
 } from "@/lib/rooms/playback";
 import type { PlayerState } from "@/lib/rooms/playback";
 import { roomJoinUrl } from "@/lib/rooms/utils";
+import { useClientOrigin } from "@/lib/use-client-origin";
 import { formatDurationSeconds } from "@/lib/youtube/format";
 
 /**
@@ -105,6 +109,13 @@ export function PlayerKiosk({
   // por montagem do stage). Quem sabe se dá para tocar é o próprio stage, em
   // `stageRef.current.isPlayable()`.
   const [playerGeneration, setPlayerGeneration] = useState(0);
+  /**
+   * Base do QR codificado pela TV: o host que a TV está vendo, não a da env.
+   * `NEXT_PUBLIC_APP_URL` é inlinada no bundle em build time — num deploy de
+   * preview da Vercel ela aponta para a produção e o QR manda o visitante para o
+   * app errado. `null` até o effect, aí a env segura o primeiro render.
+   */
+  const clientOrigin = useClientOrigin();
   const stageRef = useRef<YouTubeStageHandle>(null);
   const stateRef = useRef(state);
   const loadedRef = useRef<string | null>(null);
@@ -380,8 +391,9 @@ export function PlayerKiosk({
             {panel.empty ? (
               <>
                 <RoomQr
-                  value={roomJoinUrl(state.room.code)}
+                  value={roomJoinUrl(state.room.code, clientOrigin)}
                   alt={`QR para adicionar músicas na sala ${state.room.code}`}
+                  fallbackLabel={state.room.code}
                   size={320}
                   showDownload={false}
                 />
@@ -441,7 +453,12 @@ export function PlayerKiosk({
               </Button>
             )}
             {showPlayer && (
-              <Button size="lg" variant="ghost" className="h-14 text-lg" onClick={handleLock}>
+              <Button
+                size="lg"
+                variant="ghost"
+                className="h-14 text-lg"
+                onClick={handleLock}
+              >
                 <Lock className="size-5" />
                 Trancar TV
               </Button>

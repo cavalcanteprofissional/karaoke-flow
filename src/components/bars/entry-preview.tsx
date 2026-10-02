@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DoorOpen, LoaderCircle, LogIn, ShieldCheck, Table2, User } from "lucide-react";
+import {
+  DoorOpen,
+  Eye,
+  LoaderCircle,
+  LogIn,
+  ShieldCheck,
+  Table2,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +26,11 @@ import { LocationGate } from "@/components/bars/location-gate";
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { MesaGrid } from "@/components/rooms/mesa-grid";
 import { joinEntryAction } from "@/lib/bars/actions";
+import {
+  isOutsideBar,
+  needsLocationConsent,
+  PRESENCE_VIEWER_NOTICE,
+} from "@/lib/bars/geo";
 import { entryRoute } from "@/lib/bars/qr";
 import type { PresenceDecision } from "@/lib/bars/geo";
 import type { EntryBarPreview } from "@/types/bar";
@@ -50,11 +63,23 @@ export function EntryPreview({
     return Math.min(Math.max(1, Math.round(n)), preview.quantidade_mesas);
   }
 
-  const geoBlocked = presence && !presence.ok;
+  /**
+   * Três estados, não dois:
+   *
+   *   - sem coords/consentimento → `geoBlocked`: o botão espera o "Permitir
+   *     localização". Sem o consentimento não dá para saber nada.
+   *   - fora do raio (`outside`) → `outside`: entra **sem mesa** e sem poder
+   *     pedir música (a fila barra em `buildQueueSongItem`), só assistindo.
+   *   - dentro do raio → o fluxo normal, com a escolha de mesa.
+   */
+  const geoBlocked = presence && needsLocationConsent(presence) ? presence : null;
+  const outside = isOutsideBar(presence);
+  /** Fora do raio não escolhe mesa: a grade some e o join manda `null`. */
+  const mesaChoice = !outside && preview.quantidade_mesas > 1;
 
   async function handleJoin() {
     setState("joining");
-    const result = await joinEntryAction(preview.room_code, mesa);
+    const result = await joinEntryAction(preview.room_code, outside ? null : mesa);
     if (!result.ok) {
       setState("idle");
       if (result.geoRequired) {
@@ -102,9 +127,16 @@ export function EntryPreview({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {geoBlocked && <LocationGate error={presence.error} />}
+        {geoBlocked && <LocationGate error={geoBlocked.error} />}
 
-        {!singleMesa && (
+        {outside && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            <Eye className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <span>{PRESENCE_VIEWER_NOTICE}</span>
+          </div>
+        )}
+
+        {mesaChoice && (
           <div className="flex flex-col gap-2">
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
               <Table2 className="size-3.5" />
@@ -130,7 +162,13 @@ export function EntryPreview({
               Entrada com aprovação
             </Badge>
           )}
-          {singleMesa && (
+          {outside && (
+            <Badge variant="outline">
+              <Eye className="size-3.5" />
+              Só assistindo
+            </Badge>
+          )}
+          {singleMesa && !outside && (
             <Badge variant="outline">
               <Table2 className="size-3.5" />
               Mesa única
@@ -147,14 +185,18 @@ export function EntryPreview({
         >
           {state === "joining" ? (
             <LoaderCircle className="size-4 animate-spin" />
+          ) : outside ? (
+            <Eye className="size-4" />
           ) : (
             <LogIn className="size-4" />
           )}
           {geoBlocked
             ? "Habilitar localização para entrar"
-            : singleMesa
-              ? "Entrar no bar"
-              : `Entrar na mesa ${mesa}`}
+            : outside
+              ? "Assistir ao karaokê"
+              : singleMesa
+                ? "Entrar no bar"
+                : `Entrar na mesa ${mesa}`}
         </Button>
       </CardContent>
     </Card>

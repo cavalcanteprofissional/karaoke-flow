@@ -87,7 +87,6 @@ export default async function RoomPage({ params }: RoomPageProps) {
           barName={entryResult.preview.bar_nome}
           mesa={entryResult.membership.mesa_numero}
           initialStatus={entryResult.membership.status}
-          destination={null}
         />
       );
     }
@@ -141,9 +140,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
   }
 
   let myMembership:
-    | { status?: string | null; mesa_numero?: number | null }
-    | null
-    | undefined;
+    { status?: string | null; mesa_numero?: number | null } | null | undefined;
   if (!isHost) {
     // Status efetivo (regra das 24h), não a linha crua: aprovada há mais de 24h
     // volta a ser `pending` e a pessoa vê a tela de aprovação outra vez.
@@ -353,7 +350,6 @@ export default async function RoomPage({ params }: RoomPageProps) {
           roomCode={room.code}
           barName={bar?.nome ?? hostName}
           mesa={myMesa}
-          destination={null}
         />
       )}
 

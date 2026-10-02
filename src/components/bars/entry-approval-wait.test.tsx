@@ -167,10 +167,52 @@ describe("EntryApprovalWait", () => {
     });
 
     await waitFor(() => {
-      expect(mocks.router.replace).toHaveBeenCalledWith("/salas/ABC123");
-      expect(mocks.router.refresh).toHaveBeenCalled();
+      // Sem `destination`, o aprovado vai para o player público da sala.
+      expect(mocks.router.replace).toHaveBeenCalledWith("/player/ABC123");
     });
     expect(screen.getByText("Entrada aprovada!")).toBeInTheDocument();
+  });
+
+  it("não chama refresh ao aprovar: era o refresh que reiniciava o spinner", async () => {
+    render(<EntryApprovalWait {...defaultProps} />);
+    await waitFor(() => expect(mocks.state.realtimeHandler).toBeDefined());
+
+    mocks.state.membership = { status: "approved", mesa_numero: 2 };
+    act(() => {
+      mocks.state.realtimeHandler?.();
+    });
+
+    await waitFor(() => expect(mocks.router.replace).toHaveBeenCalled());
+    // `replace` + `refresh` juntos faziam o componente remontar e o latch de
+    // "já finishou" se perder, voltando ao estado pending: spinner eterno.
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("oferece um link de fuga quando a navegação não conclui", async () => {
+    vi.useFakeTimers();
+    try {
+      // `initialStatus="approved"` monta já aprovado: o efeito de mount chama
+      // `finish()`, que navega e arma o timer. Isso isola o timer de escape do
+      // Realtime.
+      render(<EntryApprovalWait {...defaultProps} initialStatus="approved" />);
+
+      expect(mocks.router.replace).toHaveBeenCalledWith("/player/ABC123");
+      expect(screen.queryByText("Abrir o karaokê agora")).not.toBeInTheDocument();
+
+      // O `act` é obrigatório: `setNavStalled` roda dentro do callback do timer,
+      // fora do ciclo de render, e sem o act o React agenda o update mas não o
+      // aplica dentro do teste.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+
+      // Um link real (<a href>), não router.replace: se o client router é
+      // justamente o que travou, a navegação cheia não depende dele.
+      const link = screen.getByRole("link", { name: /abrir o karaokê agora/i });
+      expect(link).toHaveAttribute("href", "/player/ABC123");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("permite tentar novamente depois de uma rejeição", async () => {
@@ -206,8 +248,11 @@ describe("EntryApprovalWait", () => {
     await waitFor(() => {
       expect(mocks.state.lastCancelRoomId).toBe("room-1");
       expect(mocks.router.replace).toHaveBeenCalledWith("/entrar?code=ABC123");
-      expect(mocks.router.refresh).toHaveBeenCalled();
     });
+    // Cancelar não precisa de refresh: a Server Action já rodou e a tela de
+    // entrada lê o estado do banco no render. O refresh aqui só brigava com o
+    // replace pela navegação.
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
 

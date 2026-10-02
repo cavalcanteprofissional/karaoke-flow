@@ -25,6 +25,40 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ## Retomada — contexto da próxima sessão (2026-10-02)
 
+> ### Correção de 2026-10-02 — visitante anônimo, QR e fora do raio
+>
+> Quatro defeitos encadeados, reportados contra o deploy público
+> (`https://<domínio>/`), mais a regra de produto "fora do raio entra e só
+> assiste". Tudo entregue no código; **falta a prova em browser real**, cujo
+> roteiro está em [`TESTING.md`](./TESTING.md) §3.12. `typecheck`, `lint`,
+> `test` (474 em 39 arquivos) e `build` verdes.
+>
+> **Entregue:**
+>
+> - `EntryApprovalWait` para de travar em "Entrada aprovada!…": o `router.refresh()`
+>   que brigava com o `replace` saiu, `destination` deixou de aceitar `null` e o
+>   default passou a ser `/player/<código>`, e há um link de fuga após 4s para quando
+>   a navegação não conclui.
+> - O `?code=` do QR **sobrevive ao login** (antes morria no redirect do proxy) —
+>   `next` novo em `src/lib/auth/next-path.ts`, com a validação de open redirect
+>   num lugar só.
+> - O QR usa o host servido (`window.location.origin`) em vez da env de build, que
+>   fazia a TV gerar QR apontando para `http://localhost:3000`.
+> - `RoomQr` não engole mais erro de geração: mostra o erro e o código para digitar.
+> - `outside` não bloqueia mais a entrada (entra sem mesa, só assiste);
+>   `geo-unavailable` continua bloqueando; pedir música segue barrado na fila.
+>
+> **Pendências (ações do dono, fora do repo):**
+>
+> - [ ] `NEXT_PUBLIC_APP_URL` na Vercel, **com `URL` em maiúsculo**, Production = `https://<domínio>` sem barra final. Build-time: só vale depois de redeploy.
+> - [ ] `YOUTUBE_API_KEY`: marcar como **Sensitive** e rotacionar no Google Cloud (o aviso não é vazamento — auditado; é higiene).
+> - [ ] Rodar o roteiro [`TESTING.md`](./TESTING.md) §3.12 — em especial o preview da Vercel, que é o caso que prova que o origin tem precedência sobre a env.
+>
+> **Fora do escopo, anotado:** o toggle do host "permitir entrada de fora do raio"
+> e a lista "quem está fora" continuam nas Fases 9–10
+> ([`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md)),
+> junto do `allowedDevOrigins` para o dev na LAN.
+
 > O que está em pé quando a máquina voltar. Blocos antigos de retomada
 > (Fase 8b·ter, 8b·quater, 8c·A, 8c·B) **estão superados** — o histórico de cada
 > um está no próprio bloco dele, mais abaixo. Os commits de código mais recentes

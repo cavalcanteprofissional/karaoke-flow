@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { entryRoute, parseEntryToken } from "./qr";
+import { barJoinUrl, entryRoute, mesaJoinUrl, parseEntryToken } from "./qr";
 import { createBarSchema } from "./schema";
 
 describe("parseEntryToken", () => {
@@ -178,5 +178,42 @@ describe("createBarSchema", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.codigo_entrada).toBeUndefined();
+  });
+});
+
+describe("URLs de QR usam o host servido, não a env de build", () => {
+  // Regressão do QR da TV: `NEXT_PUBLIC_APP_URL` é inlinada em build time, então
+  // num preview da Vercel ela apontava para a produção e o QR mandava o visitante
+  // para o app errado. O stub prova que a base é o host da página.
+  const PREVIEW = "https://karaoke-flow-g5c4txsx6.vercel.app";
+
+  beforeEach(() => {
+    vi.stubGlobal("window", { location: { origin: PREVIEW } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("barJoinUrl segue o host", () => {
+    expect(barJoinUrl("XED123")).toBe(`${PREVIEW}/entrar?bar=XED123`);
+  });
+
+  it("mesaJoinUrl segue o host", () => {
+    expect(mesaJoinUrl("XED123", 7)).toBe(`${PREVIEW}/entrar?bar=XED123&mesa=7`);
+  });
+
+  it("nenhum dos dois vaza localhost:3000 sem base explícita", () => {
+    expect(barJoinUrl("XED123")).not.toContain("localhost");
+    expect(mesaJoinUrl("XED123", 1)).not.toContain("localhost");
+  });
+
+  it("uma base explícita ganha do host", () => {
+    expect(barJoinUrl("XED123", "https://producao.vercel.app/")).toBe(
+      "https://producao.vercel.app/entrar?bar=XED123"
+    );
+    expect(mesaJoinUrl("XED123", 2, "https://exemplo.com")).toBe(
+      "https://exemplo.com/entrar?bar=XED123&mesa=2"
+    );
   });
 });

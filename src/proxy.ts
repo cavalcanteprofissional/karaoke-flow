@@ -2,6 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { safeNextPath, splitNextPath } from "@/lib/auth/next-path";
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -37,17 +39,32 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
   const isAnonymous = user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true;
 
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
 
   if (!user && matchesPrefix(pathname, PROTECTED_PREFIXES)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    // O `?code=`/`?bar=` do QR precisa sobreviver ao login: quem escaneia pela
+    // primeira vez cai aqui sem sessão, e sem este `next` voltaria para `/entrar`
+    // sem o código — obriga a escanear o QR de novo. A query original é *movida*
+    // para dentro do `next` (e não copiada), senão o `/login` ainda carregaria
+    // `?code=…` junto de `?next=…`.
     url.search = "";
+    url.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(url);
   }
 
   if (user && (pathname === "/" || matchesPrefix(pathname, AUTH_PREFIXES))) {
     const url = request.nextUrl.clone();
+    // Quem já tem sessão e chega no `/login` (ou na raiz) segue para onde queria
+    // estar, quando o proxy é quem mandou para cá.
+    const next = safeNextPath(request.nextUrl.searchParams.get("next"), null);
+    if (next) {
+      const target = splitNextPath(next);
+      url.pathname = target.pathname;
+      url.search = target.search;
+      return NextResponse.redirect(url);
+    }
     url.pathname = isAnonymous ? "/entrar" : "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);

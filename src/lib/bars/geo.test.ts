@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canEnterAsViewer,
   checkPresence,
   geocodeAddress,
   haversineDistanceMeters,
+  isOutsideBar,
+  needsLocationConsent,
   PRESENCE_ERROR_GEO,
   PRESENCE_ERROR_OUTSIDE,
   radiusTickStep,
@@ -44,7 +47,11 @@ describe("haversineDistanceMeters", () => {
 describe("withinRadius", () => {
   it("aceita usuário praticamente em cima do bar", () => {
     expect(
-      withinRadius({ latitude: BAR.latitude + 0.0001, longitude: BAR.longitude }, BAR, 150)
+      withinRadius(
+        { latitude: BAR.latitude + 0.0001, longitude: BAR.longitude },
+        BAR,
+        150
+      )
     ).toBe(true);
   });
 
@@ -72,7 +79,12 @@ describe("checkPresence (gate de presença física — Requisito)", () => {
       barCoords: BAR,
       radiusMeters: 150,
     });
-    expect(decision).toEqual({ ok: false, reason: "geo-unavailable", error: PRESENCE_ERROR_GEO, geoRequired: true });
+    expect(decision).toEqual({
+      ok: false,
+      reason: "geo-unavailable",
+      error: PRESENCE_ERROR_GEO,
+      geoRequired: true,
+    });
   });
 
   it("bloqueia quando o bar não tem localização registrada", () => {
@@ -93,7 +105,12 @@ describe("checkPresence (gate de presença física — Requisito)", () => {
       barCoords: BAR,
       radiusMeters: 150,
     });
-    expect(decision).toEqual({ ok: false, reason: "outside", error: PRESENCE_ERROR_OUTSIDE, geoRequired: true });
+    expect(decision).toEqual({
+      ok: false,
+      reason: "outside",
+      error: PRESENCE_ERROR_OUTSIDE,
+      geoRequired: true,
+    });
   });
 
   it("libera participante dentro do raio", () => {
@@ -108,16 +125,23 @@ describe("checkPresence (gate de presença física — Requisito)", () => {
 });
 
 describe("readUserGeoFromCookies", () => {
-  const store = (geoJson: string | null) => ({ get: (name: string) => (name === GEO_COOKIE ? { value: geoJson ?? undefined } : undefined) });
+  const store = (geoJson: string | null) => ({
+    get: (name: string) =>
+      name === GEO_COOKIE ? { value: geoJson ?? undefined } : undefined,
+  });
 
   it("lê coords de geo concedida", () => {
     expect(
-      readUserGeoFromCookies(store(JSON.stringify({ status: "granted", coords: BAR, ts: "x" })))
+      readUserGeoFromCookies(
+        store(JSON.stringify({ status: "granted", coords: BAR, ts: "x" }))
+      )
     ).toEqual(BAR);
   });
 
   it("ignora geo negada ou ausente", () => {
-    expect(readUserGeoFromCookies(store(JSON.stringify({ status: "denied", ts: "x" })))).toBeNull();
+    expect(
+      readUserGeoFromCookies(store(JSON.stringify({ status: "denied", ts: "x" })))
+    ).toBeNull();
     expect(readUserGeoFromCookies(store(null))).toBeNull();
   });
 });
@@ -141,7 +165,13 @@ describe("requirePresence", () => {
       store: {
         get: (name: string) =>
           name === GEO_COOKIE
-            ? { value: JSON.stringify({ status: "granted", coords: { latitude: BAR.latitude + 0.0002, longitude: BAR.longitude }, ts: "x" }) }
+            ? {
+                value: JSON.stringify({
+                  status: "granted",
+                  coords: { latitude: BAR.latitude + 0.0002, longitude: BAR.longitude },
+                  ts: "x",
+                }),
+              }
             : undefined,
       },
     });
@@ -166,14 +196,21 @@ describe("requirePresence", () => {
 describe("geocodeAddress", () => {
   const okFetch = (): Promise<Response> =>
     Promise.resolve(
-      new Response(JSON.stringify([{ lat: "-23.5505199", lon: "-46.6333094", display_name: "x" }]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
+      new Response(
+        JSON.stringify([{ lat: "-23.5505199", lon: "-46.6333094", display_name: "x" }]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      )
     );
 
   it("resolves um endereço e arredonda as coords", async () => {
-    const coords = await geocodeAddress("Praça da Sé", "São Paulo", okFetch as typeof fetch);
+    const coords = await geocodeAddress(
+      "Praça da Sé",
+      "São Paulo",
+      okFetch as typeof fetch
+    );
     expect(coords?.latitude).toBeCloseTo(-23.55, 2);
     expect(coords?.longitude).toBeCloseTo(-46.63, 2);
   });
@@ -254,10 +291,20 @@ describe("createBarSchema — localização e raio", () => {
 
   it("rejeita raio fora de 50–1000", () => {
     expect(
-      createBarSchema.safeParse({ nome: "Bar", cidade: "SP", quantidade_mesas: 1, raio_permitido_metros: "10" }).success
+      createBarSchema.safeParse({
+        nome: "Bar",
+        cidade: "SP",
+        quantidade_mesas: 1,
+        raio_permitido_metros: "10",
+      }).success
     ).toBe(false);
     expect(
-      createBarSchema.safeParse({ nome: "Bar", cidade: "SP", quantidade_mesas: 1, raio_permitido_metros: "2000" }).success
+      createBarSchema.safeParse({
+        nome: "Bar",
+        cidade: "SP",
+        quantidade_mesas: 1,
+        raio_permitido_metros: "2000",
+      }).success
     ).toBe(false);
   });
 });
@@ -290,5 +337,82 @@ describe("radiusTicks (anéis do mapa do raio)", () => {
     expect(radiusTicks(0)).toEqual([]);
     expect(radiusTicks(-100)).toEqual([]);
     expect(radiusTicks(Number.NaN)).toEqual([]);
+  });
+});
+
+describe("canEnterAsViewer", () => {
+  it("libera quem está ok", () => {
+    expect(canEnterAsViewer({ ok: true })).toBe(true);
+  });
+
+  it("libera quem está fora do raio: assiste sem mesa", () => {
+    expect(
+      canEnterAsViewer({
+        ok: false,
+        reason: "outside",
+        error: PRESENCE_ERROR_OUTSIDE,
+        geoRequired: true,
+      })
+    ).toBe(true);
+  });
+
+  it("bloqueia quem não aceitou a localização", () => {
+    expect(
+      canEnterAsViewer({
+        ok: false,
+        reason: "geo-unavailable",
+        error: PRESENCE_ERROR_GEO,
+        geoRequired: true,
+      })
+    ).toBe(false);
+  });
+
+  it("libera quem não tem decisão de presença (host)", () => {
+    expect(canEnterAsViewer(undefined)).toBe(true);
+  });
+});
+
+describe("needsLocationConsent", () => {
+  it("só é true para geo-unavailable", () => {
+    expect(needsLocationConsent({ ok: true })).toBe(false);
+    expect(
+      needsLocationConsent({
+        ok: false,
+        reason: "outside",
+        error: PRESENCE_ERROR_OUTSIDE,
+        geoRequired: true,
+      })
+    ).toBe(false);
+    expect(
+      needsLocationConsent({
+        ok: false,
+        reason: "geo-unavailable",
+        error: PRESENCE_ERROR_GEO,
+        geoRequired: true,
+      })
+    ).toBe(true);
+  });
+});
+
+describe("isOutsideBar", () => {
+  it("só é true para outside", () => {
+    expect(isOutsideBar({ ok: true })).toBe(false);
+    expect(
+      isOutsideBar({
+        ok: false,
+        reason: "outside",
+        error: PRESENCE_ERROR_OUTSIDE,
+        geoRequired: true,
+      })
+    ).toBe(true);
+    expect(
+      isOutsideBar({
+        ok: false,
+        reason: "geo-unavailable",
+        error: PRESENCE_ERROR_GEO,
+        geoRequired: true,
+      })
+    ).toBe(false);
+    expect(isOutsideBar(undefined)).toBe(false);
   });
 });

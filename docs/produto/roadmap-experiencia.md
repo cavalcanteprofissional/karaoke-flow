@@ -32,7 +32,7 @@ Levantamento no código em 2026-09-25 — base de todas as fases:
 | Host                         | Sobe ver **apenas os `pending`** (`PendingEntries`, nome + "aguardando aprovação"). Não há painel de membros aprovados, nem por mesa, nem de presença.                                                                                                                                                                                                                                                                |
 | Player                       | **Não existe** (`/player/[codigo]`, `PlayerControls`, transição para `playing` — tudo Fase 6/7). Sem `started_at`/`finished_at`, sem cronômetro, sem "próxima música".                                                                                                                                                                                                                                                |
 | Anônimo                      | Login anônimo do Supabase (`is_anonymous` só no JWT). Pode entrar, ver a fila e **pedir música** (sujeito ao gate). Não tem e-mail; `profiles.name` cai no prefixo do e-mail → "usuário".                                                                                                                                                                                                                             |
-| Perfis                       | `profiles` (name/email/avatar; API só `id/name/avatar` via view **invoker**) + view `profiles_public` (`security_invoker=true` desde `20260928000033`, email nunca exposto). **Sem** nível de karaokê, preferências, áudio ou microfone.                                                                                                                                                                                                                                                        |
+| Perfis                       | `profiles` (name/email/avatar; API só `id/name/avatar` via view **invoker**) + view `profiles_public` (`security_invoker=true` desde `20260928000033`, email nunca exposto). **Sem** nível de karaokê, preferências, áudio ou microfone.                                                                                                                                                                              |
 | Pagamento/pedido/gamificação | **Nada**: nenhuma tabela, nenhuma integração, nenhum item no roadmap. A monetization só aparece como pergunta de pesquisa (`questionario-donos-estabelecimento.md` Q6–Q9) e como "fora do MVP" na spec.                                                                                                                                                                                                               |
 
 **Lacunas que as fases precisam fechar** (ordem importa):
@@ -118,6 +118,31 @@ participante não lê `fora_do_raio`/`distancia_m` alheio; lista do host com as 
 variantes (anônimo/usuário) e com a distância; link expirado/usado demais.
 
 ## Fase 10 — Permissões: "fora do raio vê, mas não pede"
+
+> **Parcialmente entregue em 2026-10-02, na frente do combinado.** A separação
+> entre "pode entrar" e "pode pedir música" deixou de ser binária: `outside`
+> **não bloqueia mais a entrada** e a pessoa entra **sem mesa**, só assistindo; a
+> fila continua barrando (o corte está em `buildQueueSongItem`, que não foi
+> tocado). Os predicados `canEnterAsViewer` / `needsLocationConsent` /
+> `isOutsideBar` (`src/lib/bars/geo.ts`) são a fonte, e `geo-unavailable` — sem
+> consentimento — **continua bloqueando**, porque sem o cookie de localização não
+> dá para saber onde a pessoa está.
+>
+> **O que NÃO está entregue** (o resto desta fase e da Fase 9):
+>
+> - **O toggle "Permitir entrada de quem está fora do raio" do host continua
+>   inexistente.** Hoje quem está fora entra direto quando a sala está com
+>   `entry_mode = open`, e cai como `pending` quando está com
+>   `entry_mode = approval` — a aprovação individual da **D1** é o que acontece
+>   hoje pela regra de `entry_mode` da sala — mas ainda não há um controle dedicado ao remoto.
+> - **A lista "fora do raio" para o dono** não existe: a decisão de presença
+>   **não é persistida** junto do membro, então o host não tem como ver quem
+>   entrou de fora (lacuna 2 acima, ainda aberta).
+> - **A UI de dois níveis de visibilidade da Fase 11** (agregado por mesa) não existe, e o
+>   aviso de "fora do bar" **não** foi escondido dos outros participantes (isto
+>   sim é da Fase 11: exige o agregado, que também não existe).
+> - A busca já some para quem está fora (`youtube/service.ts`), o que é a
+>   parte inicial de "o botão de pedir não existe".
 
 **Objetivo:** a regra vira **permissão**, não bloqueio: quem está fora entra,
 escolhe mesa e vê a fila/player, e o botão de pedir música simplesmente não existe.
@@ -294,27 +319,27 @@ Fase 9 (toggle + lista) ─→ Fase 10 (permissão sem música)
 
 ### Resolvidas com o PO (2026-09-25)
 
-| #   | Decisão                               | Resposta                                                                                                                                                                                                                                                                                            |
-| --- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | Toggle: livre × aprovação individual? | **Aprovação individual** — fora do raio cai como `pending` e o dono aprova; **mais** um **link de convidado** gerado pelo dono (além de QR/código), com botão de copiar e compartilhamento (Web Share API + WhatsApp/Telegram/Facebook/X; sem URL web para Instagram). O link não pula a aprovação. |
-| D2  | Escopo do toggle                      | **Por sala** (`rooms`); o raio continua sendo do bar.                                                                                                                                                                                                                                               |
-| D3  | O que quem está fora enxerga          | **Fila/playlist + player ao vivo + agregados por mesa** (pessoas e músicas por mesa). Sem nome/foto de ninguém. **Detalhes (foto, nome, músicas de cada um) só entre quem está na mesma mesa.** A busca some para quem está fora.                                                                   |
-| D4  | Dado do fora-do-raio na lista do dono | **Com distância em metros** + tag "fora do bar" + tipo de conta (visitante sem login × usuário) — com **consentimento explícito** e retenção a fechar na Fase 8 (LGPD).                                                                                                                             |
-| D11 | Pedido de comida/bebida               | **Adiado de propósito**: as opções (deep-link para o sistema do bar × API do PDV deles × módulo nativo) serão avaliadas **diretamente com o bar** antes de escolher.                                                                                                                                |
+| #   | Decisão                                                            | Resposta                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Toggle: livre × aprovação individual?                              | **Aprovação individual** — fora do raio cai como `pending` e o dono aprova; **mais** um **link de convidado** gerado pelo dono (além de QR/código), com botão de copiar e compartilhamento (Web Share API + WhatsApp/Telegram/Facebook/X; sem URL web para Instagram). O link não pula a aprovação.                                                                                                                                                                                                                                            |
+| D2  | Escopo do toggle                                                   | **Por sala** (`rooms`); o raio continua sendo do bar.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| D3  | O que quem está fora enxerga                                       | **Fila/playlist + player ao vivo + agregados por mesa** (pessoas e músicas por mesa). Sem nome/foto de ninguém. **Detalhes (foto, nome, músicas de cada um) só entre quem está na mesma mesa.** A busca some para quem está fora.                                                                                                                                                                                                                                                                                                              |
+| D4  | Dado do fora-do-raio na lista do dono                              | **Com distância em metros** + tag "fora do bar" + tipo de conta (visitante sem login × usuário) — com **consentimento explícito** e retenção a fechar na Fase 8 (LGPD).                                                                                                                                                                                                                                                                                                                                                                        |
+| D11 | Pedido de comida/bebida                                            | **Adiado de propósito**: as opções (deep-link para o sistema do bar × API do PDV deles × módulo nativo) serão avaliadas **diretamente com o bar** antes de escolher.                                                                                                                                                                                                                                                                                                                                                                           |
 | D5  | Link de convidado e teto de entradas fora do raio (**2026-10-01**) | **O link NÃO pula a aprovação** (cai como `pending`, igual a D1); **sem expiração**; **sem limite de usos**; **sem teto de entradas fora do raio por pessoa/dia**. A defesa é a aprovação do host, não a janela de validade: como quem chega por ele sempre passa por ele, o link só substitui o passo de digitar o código. Revogação é **manual** (o dono invalida na hora). **Consequência no modelo:** as colunas `link_convidado_expira_em` e `link_convidado_usos` do rascunho original **saem** — só `rooms.link_convidado` + revogação. |
 
 ### Ainda abertas (bloqueantes para implementar)
 
-| #   | Decisão                                                                                                                                     | Por que é crítica                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| D6  | No detalhe da mesa, o anônimo aparece com nome/apelido? Opt-in de visibilidade? Denúncia/bloqueio?                                          | Privacidade social dentro do bar.                                                        |
-| D7  | Ao estourar o teste grátis: **bloqueia** tudo, **sugere plano**, ou **última música** grátis?                                               | Primeira conversão de pago.                                                              |
-| D8  | Regra de **quebra de dias consecutivos** (1 dia de tolerância? congelador?).                                                                | Política de gamificação do cliente.                                                      |
-| D9  | "Músicas da mesa": join em tempo real ou **coluna desnormalizada** `queue_items.mesa_numero`?                                               | Custo/performance em salas cheias.                                                       |
-| D10 | A **recompensa** dá badge, desconto no consumo do bar, ou tempo extra de canto?                                                             | Define o valor e amarra a Fase 14 à Fase 15.                                             |
-| D12 | Pagamento: **assinatura do bar** (mensal) ou **pago pelo participante**? Provedor (Pix/cartão)?                                             | Decide modelo e implementação.                                                           |
-| D13 | O "teste grátis" é **por bar**, por participante, ou uma janela única do app? E o que é "canto": músicas pedidas ou **minutos**?            | Define o contador e o alarme.                                                            |
-| D14 | A "distância em metros" da lista do dono: arredondada (100 m, 500 m) ou exata? E quem pode vê-la (só o dono que é o bar? também um gestor?) | Dado sensível; granularidade muda o risco de LGPD.                                       |
+| #   | Decisão                                                                                                                                     | Por que é crítica                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| D6  | No detalhe da mesa, o anônimo aparece com nome/apelido? Opt-in de visibilidade? Denúncia/bloqueio?                                          | Privacidade social dentro do bar.                  |
+| D7  | Ao estourar o teste grátis: **bloqueia** tudo, **sugere plano**, ou **última música** grátis?                                               | Primeira conversão de pago.                        |
+| D8  | Regra de **quebra de dias consecutivos** (1 dia de tolerância? congelador?).                                                                | Política de gamificação do cliente.                |
+| D9  | "Músicas da mesa": join em tempo real ou **coluna desnormalizada** `queue_items.mesa_numero`?                                               | Custo/performance em salas cheias.                 |
+| D10 | A **recompensa** dá badge, desconto no consumo do bar, ou tempo extra de canto?                                                             | Define o valor e amarra a Fase 14 à Fase 15.       |
+| D12 | Pagamento: **assinatura do bar** (mensal) ou **pago pelo participante**? Provedor (Pix/cartão)?                                             | Decide modelo e implementação.                     |
+| D13 | O "teste grátis" é **por bar**, por participante, ou uma janela única do app? E o que é "canto": músicas pedidas ou **minutos**?            | Define o contador e o alarme.                      |
+| D14 | A "distância em metros" da lista do dono: arredondada (100 m, 500 m) ou exata? E quem pode vê-la (só o dono que é o bar? também um gestor?) | Dado sensível; granularidade muda o risco de LGPD. |
 
 > As Fases 9–15 já estão registradas no `TODO.md` como pendentes, com esses
 > mesmos blocos de decisão.

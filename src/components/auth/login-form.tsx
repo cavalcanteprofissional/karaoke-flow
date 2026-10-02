@@ -39,24 +39,40 @@ const PROVIDER_ICONS: Record<AuthProviderId, typeof GoogleIcon> = {
 type LoginFormProps = {
   providers: AuthProviderConfig[];
   error?: string;
+  /**
+   * Para onde a pessoa queria estar antes do login (o proxy põe o caminho do QR
+   * aqui). O visitante que escaneia o QR chega em `/entrar?code=…` sem sessão e
+   * cai no login: sem isto, "Continuar sem login" mandava para `/entrar` pelado
+   * e o código do QR se perdia.
+   */
+  nextPath?: string | null;
   devLoginEnabled: boolean;
 };
 
-export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps) {
+export function LoginForm({
+  providers,
+  error,
+  nextPath,
+  devLoginEnabled,
+}: LoginFormProps) {
   const router = useRouter();
   const [pendingProvider, setPendingProvider] = useState<string | null>(null);
   const [devEmail, setDevEmail] = useState("");
   const [devPassword, setDevPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  /** Sem `next`, o comportamento antigo: anônimo vai para `/entrar`, login para o painel. */
+  const afterLogin = (fallback: string) => nextPath ?? fallback;
+
   async function handleOAuth(provider: AuthProviderConfig) {
     setPendingProvider(provider.id as string);
     const supabase = createClient();
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+      afterLogin("/dashboard")
+    )}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: provider.id,
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-      },
+      options: { redirectTo },
     });
     setPendingProvider(null);
     if (error) {
@@ -77,7 +93,9 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
       });
       return;
     }
-    router.push("/entrar");
+    // `replace` e não `push`: o `/login` não deve ficar na pilha, senão o botão
+    // "voltar" do celular manda o visitante para o login de novo.
+    router.replace(afterLogin("/entrar"));
     router.refresh();
   }
 
@@ -111,7 +129,7 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
       }
       return;
     }
-    router.push("/dashboard");
+    router.replace(afterLogin("/dashboard"));
     router.refresh();
   }
 
@@ -120,8 +138,8 @@ export function LoginForm({ providers, error, devLoginEnabled }: LoginFormProps)
       <CardHeader>
         <CardTitle className="text-lg">Entrar na sua conta</CardTitle>
         <CardDescription>
-          Entre sem login para pedir músicas pelo QR do bar. Para abrir o seu próprio
-          bar, faça login com uma conta.
+          Entre sem login para pedir músicas pelo QR do bar. Para abrir o seu próprio bar,
+          faça login com uma conta.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { Header } from "@/components/shell/header";
 import { AUTH_PROVIDERS } from "@/lib/auth/providers";
+import { safeNextPath } from "@/lib/auth/next-path";
 import { createClient } from "@/lib/supabase/server";
 
 type LoginPageProps = {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -19,7 +20,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     redirect("/dashboard");
   }
 
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
   // Form de e-mail/senha: sempre em dev; em produção só quando o dono liga
   // explicitamente NEXT_PUBLIC_ENABLE_EMAIL_LOGIN=1 (com senhas PRIVADAS —
   // a senha pública do repo deixa de valer no projeto Cloud).
@@ -34,6 +35,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <LoginForm
           providers={AUTH_PROVIDERS}
           error={error}
+          nextPath={safeNextPath(next, null)}
           devLoginEnabled={devLoginEnabled}
         />
       </main>

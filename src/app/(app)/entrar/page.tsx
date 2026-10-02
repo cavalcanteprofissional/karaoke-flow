@@ -8,6 +8,7 @@ import { EntryTokenForm } from "@/components/bars/entry-token-form";
 import { LocationGate } from "@/components/bars/location-gate";
 import { PendingEntryRequests } from "@/components/bars/pending-entry-requests";
 import { getEntryPreviewAction, getMyEntryRequestsAction } from "@/lib/bars/actions";
+import { needsLocationConsent } from "@/lib/bars/geo";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 
@@ -62,8 +63,14 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
       const presence = result.presence;
       // Pedido já feito tem prioridade sobre o gate de presença: quem está
       // `pending` precisa voltar para a tela de espera, não recadastrar o GPS.
+      // E o gate é só pela FALTA de consentimento: quem está fora do raio entra
+      // para assistir (ver `canEnterAsViewer`).
       const showWait = !!result.membership;
-      const showGate = !showWait && presence && !presence.ok;
+      const showGate = !showWait && needsLocationConsent(presence);
+      // Carrega a decisão já estreitada, não o booleano: `showGate ? …` não
+      // carrega o type guard para dentro do JSX, e `presence.error` não
+      // compila sem isso.
+      const geoBlocked = showGate ? presence : null;
 
       return (
         <div className="flex flex-col gap-6">
@@ -73,7 +80,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
               A sala do bar está encerrada no momento.
             </div>
           ) : showGate ? (
-            <LocationGate error={presence.error} />
+            <LocationGate error={geoBlocked?.error ?? ""} />
           ) : (
             <EnterRoomByCode
               code={normalized}

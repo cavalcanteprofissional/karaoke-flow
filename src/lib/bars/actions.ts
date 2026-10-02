@@ -5,9 +5,19 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdmin } from "@/lib/supabase/admin";
-import { createBarSchema, createRoomSchema, barRadiusSchema, type CreateBarInput, type CreateRoomInput } from "@/lib/bars/schema";
+import {
+  createBarSchema,
+  createRoomSchema,
+  barRadiusSchema,
+  type CreateBarInput,
+  type CreateRoomInput,
+} from "@/lib/bars/schema";
 import { requirePresence } from "@/lib/bars/presence";
-import { geocodeAddress, type PresenceDecision } from "@/lib/bars/geo";
+import {
+  geocodeAddress,
+  needsLocationConsent,
+  type PresenceDecision,
+} from "@/lib/bars/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
 import type { EntryBarPreview } from "@/types/bar";
@@ -59,8 +69,7 @@ export type CreateBarResult =
   | { ok: false; error: string };
 
 export type UpdateBarRadiusResult =
-  | { ok: true; radiusMeters: number }
-  | { ok: false; error: string };
+  { ok: true; radiusMeters: number } | { ok: false; error: string };
 
 /**
  * Raio de presença escolhido pelo host (`bars.raio_permitido_metros`).
@@ -164,8 +173,7 @@ export async function createBarAction(raw: unknown): Promise<CreateBarResult> {
 }
 
 export type CreateRoomResult =
-  | { ok: true; room: { id: string; code: string } }
-  | { ok: false; error: string };
+  { ok: true; room: { id: string; code: string } } | { ok: false; error: string };
 
 /**
  * Abre uma nova sala (karaokê) dentro de um bar que JÁ existe.
@@ -197,7 +205,10 @@ export async function createRoomAction(raw: unknown): Promise<CreateRoomResult> 
       p_bar_id: input.bar_id,
       p_codigo: input.codigo_entrada ?? null,
     })
-    .single()) as { data: { room_id: string; room_code: string } | null; error: { message: string } | null };
+    .single()) as {
+    data: { room_id: string; room_code: string } | null;
+    error: { message: string } | null;
+  };
 
   if (error) {
     return {
@@ -331,10 +342,17 @@ export async function getEntryRequestStateAction(
   return { state: entry.state.status };
 }
 
-/** Entra na sala do bar. `roomCode` é o código da sala resolvida na preview. */
+/**
+ * Entra na sala do bar. `roomCode` é o código da sala resolvida na preview.
+ *
+ * `mesa` é `null` quando quem entra está **fora do raio**: a grade de mesas
+ * nem aparece e a entrada é só para assistir (a fila barra o pedido de música
+ * em `buildQueueSongItem`). Dentro do raio, `null` ainda é aceito — quem entra
+ * por QR de sala escolhe a mesa depois, dentro da sala.
+ */
 export async function joinEntryAction(
   roomCode: string,
-  mesa: number
+  mesa: number | null
 ): Promise<JoinEntryResult> {
   const supabase = await createClient();
   const {
@@ -366,8 +384,10 @@ export async function joinEntryAction(
     },
     store: await cookies(),
   });
-  if (!presence.ok) {
-    return { ok: false, error: presence.error, geoRequired: presence.geoRequired };
+  // Só a falta de consentimento/coord barra a entrada. Quem está fora do raio
+  // entra sem mesa para assistir (ver `canEnterAsViewer`).
+  if (needsLocationConsent(presence)) {
+    return { ok: false, error: presence.error, geoRequired: true };
   }
 
   const { data, error } = (await supabase.rpc("join_room", {
@@ -527,7 +547,10 @@ export async function enterRoomByCodeAction(
     },
     store: await cookies(),
   });
-  if (!presence.ok) {
+  // Mesma regra de `joinEntryAction`: consentimento é obrigatório, estar fora do
+  // raio não impede a entrada — só impede pedir música, e isso é decidido na
+  // fila, não aqui.
+  if (needsLocationConsent(presence)) {
     return { ok: false, error: presence.error, geoRequired: presence.geoRequired };
   }
 

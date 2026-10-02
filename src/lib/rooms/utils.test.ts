@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   deriveRoomCodeFromName,
@@ -77,6 +77,29 @@ describe("roomJoinUrl", () => {
   it("monta a URL de entrada com o código", () => {
     expect(roomJoinUrl("KARAOK", "http://localhost:3000/")).toBe(
       "http://localhost:3000/entrar?code=KARAOK"
+    );
+  });
+
+  /**
+   * Regressão do bug do QR da TV: sem base explícita, a base era
+   * `NEXT_PUBLIC_APP_URL` (build-time) e, com a env faltando, virava
+   * `http://localhost:3000` — a TV gerava um QR que só funcionava na máquina
+   * dela. Aqui o host é stubado para provar que o QR segue o host servido.
+   */
+  it("segue o host de origem em vez da env de build", () => {
+    vi.stubGlobal("window", { location: { origin: "https://preview-abc.vercel.app" } });
+    try {
+      expect(roomJoinUrl("KARAOK")).toBe(
+        "https://preview-abc.vercel.app/entrar?code=KARAOK"
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("normaliza barra final na base explícita", () => {
+    expect(roomJoinUrl("ABC123", "https://karaoke-flow.vercel.app/")).toBe(
+      "https://karaoke-flow.vercel.app/entrar?code=ABC123"
     );
   });
 });

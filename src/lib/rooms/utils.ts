@@ -1,3 +1,5 @@
+import { resolveAppUrl } from "@/lib/app-url";
+
 /**
  * Código de entrada configurável do karaokê: 3–12 letras/números em maiúsculas
  * (sem acentos e sem espaços). O default é derivado do nome do bar; fallback
@@ -46,11 +48,6 @@ export function extractRoomCodeFromQr(text: string): string | null {
 }
 
 /** URL que o QR da sala codifica (join em 1 toque). */
-export function roomJoinUrl(code: string, appUrl?: string): string {
-  const base = (
-    appUrl ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "http://localhost:3000"
-  ).replace(/\/$/, "");
-  return `${base}/entrar?code=${code}`;
+export function roomJoinUrl(code: string, appUrl?: string | null): string {
+  return `${resolveAppUrl(appUrl)}/entrar?code=${code}`;
 }

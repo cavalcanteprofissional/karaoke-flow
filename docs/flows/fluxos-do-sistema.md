@@ -130,9 +130,9 @@ A RPC `get_room_preview` **foi substituída** pela `get_entry_preview(p_code, p_
 |---|---|---|---|
 | `ok` | dentro do raio · **host sempre isento** | entra, com mesa | permite |
 | `geo-unavailable` | sem consentimento/coords do usuário, ou bar sem coords/raio | **bloqueia** (banner + CTA "Permitir localização") | bloqueia |
-| `outside` | tem coordenadas e está genuinamente longe | **entra sem mesa**, só assistindo (`join_room` com `p_mesa = null`; a grade de mesas some e o botão vira "Assistir ao karaokê") | **bloqueia** (`buildQueueSongItem`, §3.1.1) |
+| `outside` | tem coordenadas e está genuinamente longe | **entra sem mesa**, só assistindo (`join_room` com `p_mesa = null`; a grade de mesas some, o CTA vira "Entrar só assistindo" e o destino é a **sala**, com o player só pelo botão "Ver o player") | **bloqueia** (`addSongToQueueAction` + `buildQueueSongItem`, §3.1.1) |
 
-Até 2026-10-02 os dois desfechos negativos bloqueavam a entrada, e quem caía no `outside` ficava numa tela **sem caminho possível**: sem mesa para escolher e sem como pedir música. O corte de pedir música é **independente** e nunca saiu de `buildQueueSongItem` — o que mudou foi só a régua da entrada. **Exceção (2026-09-25):** quem já tem membership `pending`/`rejected` da sala vai direto para a tela de espera — o gate não esconde um pedido em andamento. O gate é independente de `entry_mode`: **entrada livre (`open`) não dispensa a presença** — o painel do host avisa isso e mostra o raio no mapa (abaixo).
+Até 2026-10-02 os dois desfechos negativos bloqueavam a entrada, e quem caía no `outside` ficava numa tela **sem caminho possível**: sem mesa para escolher e sem como pedir música. O corte de pedir música é **independente** do gate de entrada — mudou de camada em 2026-10-03, quando saiu do `buildQueueSongItem` para também ser recusado pela `addSongToQueueAction` (`OUTSIDE_BAR`, pelo `fora_do_raio` gravado no join). **Exceção (2026-09-25):** quem já tem membership `pending`/`rejected` da sala vai direto para a tela de espera — o gate não esconde um pedido em andamento. O gate é independente de `entry_mode`: **entrada livre (`open`) não dispensa a presença** — o painel do host avisa isso e mostra o raio no mapa (abaixo).
 
 ```mermaid
 flowchart TD
@@ -164,7 +164,7 @@ flowchart TD
     X2 --> X3
     X3 --> P{"Presença: kf-geo × coords ± raio (host isento)"}
     P -->|sem consentimento/coords, ou bar sem raio| P1["bloqueado: banner geo + permitir localização"]
-    P -->|fora do raio| POUT["entra sem mesa (p_mesa null) — só assiste; pedir música barrado por OUTSIDE_BAR"]
+    P -->|fora do raio| POUT["entra sem mesa (p_mesa null) — só assiste; pedir música barrado por OUTSIDE_BAR; pick_mesa recusa e claim_next_song só com token da TV (00041)"]
     P -->|dentro do raio| B["RPC join_room(p_code=room_code, p_mesa) — (backend, security definer)"]
     B --> C{Sala ativa?}
     C -->|não| Z
@@ -265,7 +265,7 @@ flowchart TD
 
 ### 3.1 Adicionar música
 
-**Matriz de presença física (Fase 4):** antes do `INSERT`, a server action `addSongToQueueAction` revalida **membro aprovado/pendente** e a **presença** do participante (`kf-geo` × coords do bar ± raio) — mesmos códigos da busca: `GEO_UNAVAILABLE` (bar sem coords ou geo ausente) / `OUTSIDE_BAR` (fora do raio); **host isento**.
+**Matriz de presença física (Fase 4):** antes do `INSERT`, a server action `addSongToQueueAction` revalida **membro aprovado/pendente** e a **presença** do participante (`kf-geo` × coords do bar ± raio) — mesmos códigos da busca: `GEO_UNAVAILABLE` (bar sem coords ou geo ausente) / `OUTSIDE_BAR` (fora do raio); **host isento**. **Desde 03/10 (`20261003000041`)** o status vem de `member_entry_state` (o efetivo, com a pré-aprovação de 24h) em vez de `select status` em `room_members`, e um membro com `fora_do_raio` gravado no join é recusado com `OUTSIDE_BAR` **antes** do INSERT.
 
 ```mermaid
 flowchart TD

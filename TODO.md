@@ -23,6 +23,63 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-10-03, tarde)
+
+> ### Rodada do dia: LAN + a regra do espectador virou regra de banco
+>
+> Duas coisas que se atropelaram na mesma sessão, e as duas eram complaintões
+> de aparelho real.
+>
+> **1) O dev na LAN não hidratava.** `curl` fechou o diagnóstico: os chunks do
+> Next devolvem `200` com `Origin: http://localhost:3000` e **`403` com
+> `Origin: http://192.168.100.28:3000`** (o `blockCrossSiteDEV` do Next 16). O
+> conserto é `allowedDevOrigins` em `next.config.ts`, montado com os IPv4
+> **não-internos da máquina agora** (`node:os`), sem IP cravado. E o clipboard
+> foi junto, porque `http://<ip>:3000` não é secure context e
+> `navigator.clipboard` **não existe** (não é permissão negada): nasceu
+> `src/lib/clipboard.ts` com fallback `execCommand`, usado pelo Pix e pelo
+> "copiar link da TV".
+>
+> **2) "Quem entra fora do raio só assiste" era só UI.** O botão sumia, mas
+> `addSongToQueueAction`, `pick_mesa` e `claim_next_song` aceitavam o
+> espectador — esconder botão não é regra. **Migration `20261003000041`**
+> aplicada no Cloud: claim só pelo token da TV, `pick_mesa` recusa quem entrou
+> de fora, e a action recusa com `OUTSIDE_BAR`. O registro do join
+> (`fora_do_raio`) manda, inclusive sobre o GPS atual. O player ganhou modo
+> visualizador (mudo, sem gate, sem "Trancar TV", sem disputar a fila) e pedir
+> música **não** empurra mais para o player.
+>
+> **3) Dois desvios que sobraram da regra do espectador.** Quem entrava fora do
+> raio era jogado direto em `/player/<código>` (`destination={outside ? … }` em
+> `entry-preview.tsx` e `enter-room-by-code.tsx`): a pessoa nunca via a fila e
+> caía num player mudo sem explicação. A sala é a página canônica em modo
+> somente leitura e o player é botão ("Ver o player") dentro dela — a prop
+> `destination` do `EntryApprovalWait` saiu, e o CTA da prévia passou a "Entrar
+> só assistindo". E `npm run scan:secrets` estava **vermelho desde `ede4906`**
+> por uma chave de teste em formato `AIza…` (a regra não pula fixture de
+> propósito): o portão do DoD estava vermelho e ninguém via.
+>
+> **Gates:** `lint`, `typecheck`, **552 testes / 46 arquivos**, `build` e
+> `scan:secrets` (253 arquivos) verdes.
+> **Smokes no Cloud:** `smoke-rls-audit` **62 casos, 0 vermelho, 0 legítimos
+> quebrados** (a série S é nova: S1–S4); `smoke-player-session` verde, com os
+> passos 06/14 reescritos porque a porta da sessão no claim foi fechada.
+>
+> **Falta (não dá para fazer daqui):**
+>
+> - [ ] **Reiniciar `npm run dev`** — o `next.config.ts` só vale no start — e
+>       repetir o teste via `http://192.168.100.28:3000`: página viva, "Copiar"
+>       do Pix, link da TV, e o **celular** seguindo a fila da sala.
+> - [ ] **`TESTING.md` §3.13** (roteiro novo do espectador): entrar de fora do
+>       raio, ver que não há "Pedir música", que `/buscar` devolve para a sala,
+>       que o `MesaPicker` não aparece e que o player abre mudo e sem passar a
+>       música alheia. A prova do banco já está no smoke; falta o aparelho.
+> - [ ] Reprodução simultânea em vários dispositivos (áudio em cada aparelho)
+>       continua **fora de escopo** por enquanto — anotado no roadmap.
+>
+> **Gates desta rodada:** `lint`, `typecheck`, **552 testes / 46 arquivos**,
+> `build` e `scan:secrets` (253 arquivos) verdes.
+
 ## Retomada — contexto da próxima sessão (2026-10-02)
 
 > ### Correção de 2026-10-02 — visitante anônimo, QR e fora do raio
@@ -38,7 +95,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > - `EntryApprovalWait` para de travar em "Entrada aprovada!…": o `router.refresh()`
 >   que brigava com o `replace` saiu, `destination` deixou de aceitar `null` e o
 >   default passou a ser `/player/<código>`, e há um link de fuga após 4s para quando
->   a navegação não conclui.
+>   a navegação não conclui. **Em 03/10 esse default mudou outra vez**: hoje é
+>   `/salas/<código>` para qualquer um, e a prop `destination` foi removida — ver o
+>   bloco "3) Dois desvios…" acima.
 > - O `?code=` do QR **sobrevive ao login** (antes morria no redirect do proxy) —
 >   `next` novo em `src/lib/auth/next-path.ts`, com a validação de open redirect
 >   num lugar só.
@@ -66,12 +125,12 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > (Fase 8c·C: fecha F1..F6 da auditoria de RLS e o F7 que a própria correção
 > criou). **Nada foi pushado** — os dois estão só na `main` local.
 
-**Estado atual — Fase 8c fechada; Fase 9 (painel de presença) e a doação Pix entregues em 03/10; Fase 8d (validação manual) ainda pendente:**
+**Estado atual — Fase 8c fechada; Fase 9 (painel de presença + regra do espectador no banco) e a doação Pix entregues em 03/10; Fase 8d (validação manual) ainda pendente:**
 
-- Migrações até `20261003000040`, todas aplicadas no projeto Cloud `kskoipyzqcacccepcqpc` via `node scripts/apply-sql.mjs` (padrão do time — sem `SUPABASE_DB_PASSWORD`, `supabase db push` falha em auth, então **o histórico de migrations no dashboard não registra nenhuma delas**). Testes **523 (44 arquivos)**, typecheck e lint verdes, smokes 0 vermelho.
+- Migrações até `20261003000041`, todas aplicadas no projeto Cloud `kskoipyzqcacccepcqpc` via `node scripts/apply-sql.mjs` (padrão do time — sem `SUPABASE_DB_PASSWORD`, `supabase db push` falha em auth, então **o histórico de migrations no dashboard não registra nenhuma delas**). Testes **552 (46 arquivos)**, typecheck e lint verdes, smokes 0 vermelho.
 - **`20261003000040` — presença gravada + painel do host** (`8a56083`): `room_members` ganha `fora_do_raio`/`distancia_m` + `replica identity full`, `join_room` passa a 4 params (com defaults, então a chamada antiga de 2 args continua funcionando) e nasce `admin_room_occupancy`, host-only, `security definer`. **A armadilha da ACL:** o projeto tem `alter default privileges` dando `EXECUTE` a `anon` em função nova, e `revoke ... from public` não tira grant explícito — o `proacl` saiu com `anon` mesmo depois do revoke, medido no Cloud. Fechado com `revoke ... from anon`, e o smoke H6 pega a regressão. `fora_do_raio` é **telemetria forjável**, e isso está declarado no CHANGELOG: o corte que protege o produto continua sendo `kf-geo` + `buildQueueSongItem`.
 - **Doação Pix + página `/sobre` + assinatura no rodapé** (`8a56083`): BR Code estático escrito à mão (`src/lib/pix/brcode.ts`, 20 testes) e conferido campo a campo com a chave real do PO. **O app do banco em si ainda não foi exercitado** — a prova foi estrutural (CRC, DV do CPF, ordem dos campos). Três correções saíram da própria conferência: a máscara do CPF ia no payload; `readPixPayload` cortava o corpo pelo `lastIndexOf("63")`, que acha o "63" **dentro do próprio CRC**; e o nome cortado sobrava como "LUCAS CAVALCANTE DOS", que é o nome que o app do banco mostra ao doador. A chave real fica em `.env.local` (gitignored) e **não existe em nenhum arquivo do repositório**.
-- **Smoke `scripts/smoke-rls-audit.sql` em 58 casos, 0 vermelho, 17/17 legítimos** (os 3 novos são H6/H7/H8, sobre `admin_room_occupancy`). O `Q3` dependia da KARAOKE ainda estar `queue_approval_mode = 'manual'` como o seed criou — e o modo **é mutável pelo app**, então quem testou pelo celular e deixou em `auto` fazia o caso falhar com `approved`, blaming o trigger por uma configuração. O smoke agora força `manual` (o `rollback` no fim do arquivo desfaz).
+- **Smoke `scripts/smoke-rls-audit.sql` em 62 casos, 0 vermelho, 0 legítimos quebrados** (os 4 novos são S1–S4, a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa, quem está no raio ainda sentando). O `Q3` dependia da KARAOKE ainda estar `queue_approval_mode = 'manual'` como o seed criou — e o modo **é mutável pelo app**, então quem testou pelo celular e deixou em `auto` fazia o caso falhar com `approved`, blaming o trigger por uma configuração. O smoke agora força `manual` (o `rollback` no fim do arquivo desfaz).
 - **`profiles_public`** (`id`/`name`/`avatar_url`) é **decisão de produto**, não defeito: é o que o preview anônimo mostra. E-mail segue bloqueado.
 
 **Falta (lado do usuário, sem código):**

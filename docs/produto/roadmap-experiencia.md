@@ -128,39 +128,64 @@ variantes (anônimo/usuário) e com a distância; link expirado/usado demais.
 > consentimento — **continua bloqueando**, porque sem o cookie de localização não
 > dá para saber onde a pessoa está.
 >
-> **O que NÃO está entregue** (o resto desta fase e da Fase 9):
+> **Fechada em 2026-10-03, e a regra subiu de camada:** o corte deixou de ser só
+> de UI e passou a ser **do banco** (`20261003000041`). A fonte única é a
+> `member_entry_state` (o estado efetivo, com a pré-aprovação de 24h), não mais
+> `select status` em `room_members`: `addSongToQueueAction` recusa o espectador
+> aprovado com `OUTSIDE_BAR` **antes** de tentar o `INSERT`, e `pick_mesa` recusa
+> a mesa no servidor. `fora_do_raio` é gravado no `join_room`, então é
+> **imutável para a sessão** — GPS posterior não "corrige" ninguém para dentro.
+> No app, `canRequestSongs` / `canPickMesa` (`src/lib/rooms/spectator.ts`) são a
+> mesma regra para a UI, e o `/buscar` redireciona quem não pode pedir.
+> `geo-unavailable` — sem consentimento — **continua bloqueando a entrada**.
+>
+> **O que NÃO está entregue** (o resto da Fase 9 e da Fase 11):
 >
 > - **O toggle "Permitir entrada de quem está fora do raio" do host continua
 >   inexistente.** Hoje quem está fora entra direto quando a sala está com
 >   `entry_mode = open`, e cai como `pending` quando está com
 >   `entry_mode = approval` — a aprovação individual da **D1** é o que acontece
 >   hoje pela regra de `entry_mode` da sala — mas ainda não há um controle dedicado ao remoto.
-> - **A lista "fora do raio" para o dono** não existe: a decisão de presença
->   **não é persistida** junto do membro, então o host não tem como ver quem
->   entrou de fora (lacuna 2 acima, ainda aberta).
+> - **A lista "fora do raio" para o dono** não existe ainda como lista: a decisão
+>   de presença **é persistida** (`fora_do_raio`, migration `00040`), o painel
+>   mostra o **contador** de quantos estão fora, mas falta o card com nome,
+>   distância e filtros (lacuna 2 acima, parcialmente fechada).
 > - **A UI de dois níveis de visibilidade da Fase 11** (agregado por mesa) não existe, e o
 >   aviso de "fora do bar" **não** foi escondido dos outros participantes (isto
 >   sim é da Fase 11: exige o agregado, que também não existe).
-> - A busca já some para quem está fora (`youtube/service.ts`), o que é a
->   parte inicial de "o botão de pedir não existe".
+> - **Reprodução simultânea em vários dispositivos** foi adiada com o PO
+>   (2026-10-03): `/player/<código>` sem `player_token` é **modo espectador**
+>   (mudo, sem gate, sem "Trancar TV", sem claim e sem autoavanço) e quem está
+>   dentro do raio **também** cai nesse modo ao abrir o player no celular — a
+>   música toca só na TV. Toque em "Trancar TV"/sessão na TV é o que fica para
+>   uma fase futura.
+> - **O CTA "Quero pedir música"** (levar o espectador a aprovar a localização)
+>   **não** foi implementado: a decisão do PO foi manter o espectador como
+>   espectador até o fim da sessão, sem caminho de "upgrade" no meio da karaokê.
 
-**Objetivo:** a regra vira **permissão**, não bloqueio: quem está fora entra,
-escolhe mesa e vê a fila/player, e o botão de pedir música simplesmente não existe.
+**Objetivo (cumprido em 2026-10-03):** a regra virou **permissão**, não bloqueio:
+quem está fora entra sem mesa, vê a fila da sala e o player em modo somente
+leitura, e o botão de pedir música simplesmente não existe.
 
 **Regra (fonte única):** `canAskSong = isHost || (!fora_do_raio && presence.ok)`.
 Aplicada em:
 
-- `buildQueueSongItem` (`src/lib/rooms/queue.ts`) → erro `OUTSIDE_BAR_CANNOT_ASK`.
+- `buildQueueSongItem` (`src/lib/rooms/queue.ts`) e a **`addSongToQueueAction`**
+  (`src/lib/rooms/queue-actions.ts`) → erro `OUTSIDE_BAR`, os dois no servidor.
 - `searchYouTubeForRoom` (`src/lib/youtube/service.ts`) → **D3 resolvido: a busca
   some para quem está fora** — a busca é o passo que antecede o pedido, então
-  mantê-la seria só criar a tentação de um botão que não pode funcionar.
+  mantê-la seria só criar a tentação de um botão que não pode funcionar. O
+  `/buscar` escrito à mão redireciona para a sala.
 - UI: esconder "Pedir música"/campo de busca para quem está fora, com aviso
-  "Você entrou como visitante: pode ouvir, não pode pedir música" e CTA
-  "Quero pedir música" (leva o participante a **aprovar a localização**).
+  "Você entrou como visitante: pode ouvir, não pode pedir música" — **entregue**,
+  e sem CTA de upgrade (ver o adendo acima).
+- `pick_mesa` no banco recusa `fora_do_raio`, e o app esconde o `MesaPicker`.
 - O aviso de "fora do bar" **nunca** aparece para outro participante — só o host.
 
-**Testes:** matriz de permissão por papel (host, dentro, fora, anônimo, pending) em
-`addSongToQueueAction`, na rota de busca e nos botões da UI.
+**Testes:** matriz de permissão por papel (host, dentro, fora, nunca entrou,
+pending) em `addSongToQueueAction`, na rota de busca e nos botões da UI —
+entregue em `spectator.test.ts`, `queue-actions.test.ts`, `queue-list.test.ts` e
+`player-kiosk.test.ts`.
 
 ---
 
@@ -227,6 +252,12 @@ falta** e **quantas músicas tem na lista**.
   `select`: a RLS de `room_members` é por linha, então nem o host conseguiria somar
   os outros por cima da tabela. Só conta `approved`; `pending` sai separado; o host
   e a TV não têm linha e não entram na conta.
+- **O número de "fora do raio" deixou de depender da UI** no mesmo passo
+  (`20261003000041`): `addSongToQueueAction` recusa o espectador com `OUTSIDE_BAR`
+  pelo estado efetivo (`member_entry_state`), `pick_mesa` recusa a mesa e
+  `claim_next_song` passou a exigir o `player_token` da TV — sem token, nem
+  espectador nem participante autenticado movem a fila. Isso é o que garante que
+  as três contagens do card não dependam de ninguém respeitar a tela.
 
 **Ficou registrado para as próximas fases (não implementado ainda):**
 

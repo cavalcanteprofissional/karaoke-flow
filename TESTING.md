@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-03):** suite com **523 testes** (44 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 55, `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 10 (raio + `createRoomSchema` da Fase 8b·quater) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **16 provas via MSW** — incl. credencial OAuth via **Bearer** host/app —, o **roundtrip authorize→callback** com 4 provas do estado, a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 23, `song-search` 9, `song-confirm-dialog` 9), o **player** (`playback` 24 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 18 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host) e a **Fase 8a** (`queue-actions` 7, `entry-state` 5, `room-settings` 3), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**58/58** — 46 ataques que precisam falhar e 17 legítimos que precisam passar; os 3 de 03/10 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-03):** suite com **523 testes** (44 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 55, `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 10 (raio + `createRoomSchema` da Fase 8b·quater) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **16 provas via MSW** — incl. credencial OAuth via **Bearer** host/app —, o **roundtrip authorize→callback** com 4 provas do estado, a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 28, `song-search` 9, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `room-settings` 3, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -468,13 +468,53 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 
 **Fora do raio entra e só assiste**
 
+> **Regras deste bloco mudaram em 03/10** (ver §3.13): o espectador agora
+> **fica na tela da sala** — que é a página canônica e somente leitura — e o
+> player virou **botão**, não destino de entrada. Os itens de entrada continuam
+> válidos; os de destino são os de §3.13.
+
 - [ ] **Denovo dentro do raio** (coordenadas do bar): grade de mesas aparece, botão "Entrar na mesa N", pedido de música **funciona**
-- [ ] **Fora do raio** (DevTools, ~2 km longe): o aviso "Você está fora do bar: pode assistir ao karaokê, mas não pode pedir músicas" aparece, a **grade de mesas some** e o botão é **"Assistir ao karaokê"**
-- [ ] Entrar como fora do raio **funciona**: o visitante chega ao player `/player/<código>`
-- [ ] E **tentar pedir música** de fora dá recusa clara (o corte está em `buildQueueSongItem`) — este é o ponto que a regra de produto exige; se passar, é regressão
+- [ ] **Fora do raio** (DevTools, ~2 km longe): o aviso de fora do raio aparece, a **grade de mesas some** e não há como escolher mesa
+- [ ] Entrar como fora do raio **funciona** e leva à **sala** (`/salas/<código>`), com a fila visível
+- [ ] E **tentar pedir música** de fora dá recusa clara em **duas** camadas: o botão não existe na tela e a `addSongToQueueAction` recusa com `OUTSIDE_BAR` — este é o ponto que a regra de produto exige; se passar, é regressão
 - [ ] **Sem consentimento** (cookie `kf-geo` apagado, ou bar sem coords/raio): o gate de localização **continua bloqueando** e não oferece entrada sem mesa. `outside` e `geo-unavailable` não podem ter o mesmo comportamento
 - [ ] Dois visitantes fora do raio ao mesmo tempo: os dois entram (mesa nula convive com mesa nula — não há unique em `room_members.mesa_numero`)
 - [ ] Visitante de dentro que estava na mesa 4 e **reconecta de fora**: o `on conflict` do `join_room` preserva a mesa 4 (`coalesce`), ele não volta a "sem mesa"
+
+### 3.13 O espectador de fora do raio e o dev na rede local (2026-10-03)
+
+> **Por que este bloco existe:** a rodada turningou a regra "quem entra fora do
+> raio só assiste" de tela em **regra de banco** (migration `20261003000041`) e
+> mexeu no dev da LAN (`allowedDevOrigins` + clipboard sem secure context). Os
+> smokes já mediram as três portas no Cloud — S1–S4 no `smoke-rls-audit`, e o par
+> do claim no `smoke-player-session`. O que falta é o **aparelho**, e o primeiro
+> item é o que bugou nesta semana.
+
+**Dev na LAN (reiniciar o servidor antes — o `next.config.ts` só vale no start)**
+
+- [ ] `npm run dev` reiniciado, e `http://192.168.100.28:3000` **aberta no celular**: a página **hidrata** (botão responde, sem tela morta) — o sintoma antigo era `/_next/static/chunks/*.js` em `403` por `blockCrossSiteDEV`
+- [ ] `curl -I -H "Origin: http://192.168.100.28:3000" http://localhost:3000/_next/static/chunks/<qualquer>.js` → **`200`** (antes dava 403)
+- [ ] **"Copiar" do Pix** funciona em HTTP (cai no `execCommand`, sem secure context) e **não rouba o foco** — clicar e voltar a navegar por teclado tem que continuar funcionando
+- [ ] **"Copiar link da TV"** idem, e o link colado no celular abre `/player/<código>?token=…`
+- [ ] Trocar de rede (outro Wi-Fi, 4G no notebook) continua funcionando sem hardcode de IP — a config pega o IPv4 da máquina agora
+
+**O espectador na tela (aparelho, com DevTools em coordenadas ~2 km do bar)**
+
+- [ ] Entrar de fora: a fila aparece, **sem** "Pedir música" no cabeçalho **e** sem o botão do estado vazio — os dois pontos de entrada, porque o vazamento do botão do estado vazio era o mais fácil de esquecer
+- [ ] A frase da regra aparece na lista ("fora do raio do bar … não para pedir música"), em vez de a lista só parecer quebrada
+- [ ] **"Trocar"** some do item do próprio espectador; **"Tirar da fila"** continua (retirar não é pedir)
+- [ ] `/salas/<código>/buscar` **digitado na mão** volta para a sala (não fica com a tela de busca nem com a busca montada)
+- [ ] **Nenhum `MesaPicker`**, e a grade de mesas some
+- [ ] O botão **"Ver o player"** abre `/player/<código>`: o vídeo aparece **mudo**, **sem** o gate de "Começar", **sem** "Ativar o som" e **sem** "Trancar TV"
+- [ ] **A TV continua tocando** enquanto o celular assiste: aprovada uma música na sala, ela começa na TV **sem** o celular tocar nada — e o celular não "puxa" a próxima nem derruba a música que a TV começou (a prova de que os dois lados do `claim_next_song` estão fechados)
+- [ ] Pedir música **não** leva mais para o player: depois de pedir, volta para a **tela da sala** (antes ia para `/player/<código>`)
+- [ ] Fim da faixa: a **TV** avança sozinha; o celular só acompanha
+- [ ] `console` limpo nas duas janelas
+
+**O banco (para quem tem acesso ao Management API)**
+
+- [ ] `node scripts/apply-sql.mjs scripts/smoke-rls-audit.sql 15000` → S1 vermelho? Não: **S1 recusado**, **S2 TV avançando**, **S3 espectador sem mesa**, **S4 quem está no raio sentando**, e o placar **62 casos · 0 falhas**
+- [ ] `node scripts/apply-sql.mjs scripts/smoke-player-session.sql` → passo **06** `ok:false` com "só a TV avança a fila" e **06b** `ok:true`; passo **14** continua dando "sala encerrada"
 
 **`RoomQr` quando a geração falha**
 

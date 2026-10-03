@@ -491,6 +491,13 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 > item é o que bugou nesta semana.
 
 **Dev na LAN (reiniciar o servidor antes — o `next.config.ts` só vale no start)**
+>
+> O IP deste roteiro (`192.168.100.28`) é o da máquina **na hora em que foi
+> escrito**: depois de um reboot o DHCP pode trocar o endereço, e a única coisa
+> que muda no roteiro é o link. Rode `ipconfig` antes e use o IPv4 atual — o
+> `allowedDevOrigins` não depende do número (ele é montado no start com os IPv4
+> que a máquina tiver naquele momento), mas o `curl` abaixo tem que ser refeito
+> com o IP novo.
 
 - [ ] `npm run dev` reiniciado, e `http://192.168.100.28:3000` **aberta no celular**: a página **hidrata** (botão responde, sem tela morta) — o sintoma antigo era `/_next/static/chunks/*.js` em `403` por `blockCrossSiteDEV`
 - [ ] `curl -I -H "Origin: http://192.168.100.28:3000" http://localhost:3000/_next/static/chunks/<qualquer>.js` → **`200`** (antes dava 403)

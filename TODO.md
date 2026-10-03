@@ -70,15 +70,32 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > - [ ] **Reiniciar `npm run dev`** — o `next.config.ts` só vale no start — e
 >       repetir o teste via `http://192.168.100.28:3000`: página viva, "Copiar"
 >       do Pix, link da TV, e o **celular** seguindo a fila da sala.
-> - [ ] **`TESTING.md` §3.13** (roteiro novo do espectador): entrar de fora do
->       raio, ver que não há "Pedir música", que `/buscar` devolve para a sala,
->       que o `MesaPicker` não aparece e que o player abre mudo e sem passar a
->       música alheia. A prova do banco já está no smoke; falta o aparelho.
+> - [x] **`TESTING.md` §3.13** escrito (roteiro do espectador + o dev na LAN,
+>       Cloud incluso): entrar de fora, não ver "Pedir música", `/buscar`
+>       devolver para a sala, nenhum `MesaPicker`, player mudo sem passar a
+>       música alheia. Falta **executar** no aparelho.
 > - [ ] Reprodução simultânea em vários dispositivos (áudio em cada aparelho)
 >       continua **fora de escopo** por enquanto — anotado no roadmap.
 >
-> **Gates desta rodada:** `lint`, `typecheck`, **552 testes / 46 arquivos**,
-> `build` e `scan:secrets` (253 arquivos) verdes.
+> **Sessão encerrada aqui (o dono vai reiniciar o PC antes de testar).** A
+> rodada está **commitada e nada pushada**: `fb0bb35` (LAN + clipboard),
+> `6474633` (regra do espectador no banco), `01d5f2d` (modo espectador + entrada
+> parando na sala), `d70af7e` (`scan:secrets`) e `05230df` (docs). A `main`
+> local está **9 commits à frente** do `origin/main` — nada de `git pull`
+> esperando novade.
+>
+> **Ao voltar, nesta ordem:**
+>
+> 1. `git status` (árvore limpa) e `git log --oneline -5`.
+> 2. **Conferir o IP da LAN com `ipconfig`** — o DHCP pode ter trocado o
+>    endereço depois do reboot, e o roteiro §3.13 cita
+>    `http://192.168.100.28:3000`. O `allowedDevOrigins` é montado no start
+>    com os IPv4 que a máquina tiver **naquele momento**, então o número novo
+>    já entra sozinho; o que muda é o link do roteiro.
+> 3. `npm run dev` **do zero** (o `next.config.ts` só vale no start) e seguir o
+>    §3.13: bloco da LAN, depois o espectador, e o Cloud só se algo divergir.
+> 4. `npm run seed` continua **fora** do roteiro: é destrutivo em filas,
+>    participações, salas, mesas e bares, e nada nesta rodada precisa dele.
 
 ## Retomada — contexto da próxima sessão (2026-10-02)
 

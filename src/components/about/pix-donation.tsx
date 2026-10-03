@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { Check, Copy, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { copiarTexto } from "@/lib/clipboard";
 import { buildPixPayload, PixPayloadError } from "@/lib/pix/brcode";
 
 type PixDonationProps = {
@@ -72,11 +73,14 @@ export function PixDonation({ chave, nome, cidade }: PixDonationProps) {
 
   async function copiar() {
     if (!payload) return;
-    try {
-      await navigator.clipboard.writeText(payload);
+    // `copiarTexto` e não `navigator.clipboard`: em `http://<ip-da-rede>` — como
+    // o celular e a TV acessam o bar — não existe Clipboard API, e o catch
+    // segurando `writeText` não cobria isso (a propriedade nem existe).
+    const ok = await copiarTexto(payload);
+    if (ok) {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2500);
-    } catch {
+    } else {
       setFalha("O navegador bloqueou a cópia. Selecione o código abaixo e copie à mão.");
     }
   }

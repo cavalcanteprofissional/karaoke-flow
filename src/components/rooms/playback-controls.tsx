@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { copiarTexto } from "@/lib/clipboard";
 import { setPlaybackAction, rotatePlayerTokenAction } from "@/lib/rooms/playback-actions";
 import { announcePlaybackChange } from "@/lib/rooms/player-channel";
 import { playbackControls } from "@/lib/rooms/playback";
@@ -88,11 +89,14 @@ export function PlaybackControls({
 
   async function copyLink() {
     const url = new URL(playerUrl, window.location.origin).toString();
-    try {
-      await navigator.clipboard.writeText(url);
+    // Pelo mesmo motivo do Pix: o dono copia esse link pela rede do bar, onde
+    // não existe Clipboard API — e o quiosque não mostra o token para o
+    // convidado, então essa cópia é a única forma de ele chegar na TV.
+    const ok = await copiarTexto(url);
+    if (ok) {
       toast.success("Link do player copiado.");
-    } catch {
-      toast.error("Não foi possível copiar. Abra o link e copie da barra.");
+    } else {
+      toast.error("Não foi possível copiar. Use “Abrir player na TV” e copie o link da barra.");
     }
   }
 

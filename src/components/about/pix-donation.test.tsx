@@ -87,6 +87,41 @@ describe("PixDonation", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/bloqueou a cópia/i);
   });
 
+  /**
+   * O caso do bar: em `http://<ip-da-rede>` não existe Clipboard API — a
+   * propriedade é `undefined`, não uma promessa rejeitada. Os dois testes acima
+   * mockavam `navigator.clipboard`, então o botão que na TV do bar morria nunca
+   * foi testado.
+   */
+  it("copia mesmo sem Clipboard API (HTTP da rede local)", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    const copia: string[] = [];
+    let textareasDuranteCopia = 0;
+    Object.defineProperty(document, "execCommand", {
+      value: () => {
+        const areas = document.querySelectorAll("textarea");
+        textareasDuranteCopia = areas.length;
+        // O temporário do helper é anexado ao `body`, então é o ÚLTIMO do DOM.
+        // Pegar o primeiro seria o textarea visível do código, que já tem o
+        // payload: o teste passaria sem o helper ter feito nada.
+        const area = areas[areas.length - 1];
+        if (area) copia.push(area.value);
+        return true;
+      },
+      configurable: true,
+    });
+    render(<PixDonation {...base} />);
+    await waitFor(() => expect(qrMock.toDataURL).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: /Copiar código Pix/i }));
+
+    await waitFor(() => expect(copia).toEqual([payloadNaTela()]));
+    // 2 no momento da cópia: o visível + o temporário que o helper removeu depois.
+    expect(textareasDuranteCopia).toBe(2);
+    expect(await screen.findByRole("button", { name: /Copiado!/ })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("mantém a chave visível quando o QR não gera (fallback é copiar e colar)", async () => {
     qrMock.toDataURL.mockRejectedValue(new Error("canvas indisponível"));
     render(<PixDonation {...base} />);

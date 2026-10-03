@@ -24,7 +24,15 @@ import { updateYoutubeKeyAction } from "./actions";
  * explícito abaixo é o que torna o contrato legível.
  */
 const ROOM = "22222222-2222-4222-8222-222222222222";
-const KEY = "AIzaSy_EXEMPLO_NAO_E_REAL_1234567890";
+/**
+ * Valor **sem forma de chave**: o `scan:secrets` barra o formato `AIza…` em
+ * arquivo de teste de propósito (a regra `chave-conhecida` não pula fixture,
+ * porque chave real em teste continua sendo vazamento), e esta string era um
+ * alarme falso que deixava o portão do DoD vermelho. O teste só precisa de
+ * "uma string não vazia que sobrevive ao `trim`" — o formato não entra na
+ * asserção.
+ */
+const KEY = "chave-de-teste";
 
 type RpcResult = { data: unknown; error: { message: string } | null };
 

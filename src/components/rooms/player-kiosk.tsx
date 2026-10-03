@@ -92,6 +92,30 @@ export function PlayerKiosk({
    */
   const armed = usePlayerArmed(roomCode);
   /**
+   * A TV é a tela que tem o `token` (`/player/<código>?token=…`); o convidado
+   * que abre `/player/<código>` pela sessão entra no MESMO componente com
+   * `token = null`. A diferença não é de permissão — as duas podem ver a fila e
+   * o que está tocando — e sim de QUEM MANDA: só a TV puxa a próxima faixa.
+   *
+   * Daí saem as três diferenças do modo visualizador: sem gate de toque (não há
+   * áudio a destravar no celular), `canAdvance` falso nas duas perguntas puras
+   * acima, e o "Trancar TV" escondido. `claimNext` também recusa na entrada, mas
+   * isso é defense in depth: a regra de verdade é a da migration, que exige o
+   * token.
+   */
+  const isTv = token !== null;
+  /** Sem token não há áudio local: nasce mudo e não há botão de destravar. */
+  const viewerSilent = !isTv;
+  /**
+   * Quem só assiste não depende do "armado" da TV: o `localStorage` é por
+   * origem, e o celular do convidado nunca foi armado — sem esta conta, ele cairia
+   * na tela de "Escaneie para adicionar" enquanto a TV toca, que é o oposto de
+   * ver a festa. Para o visualizador, o player existe sempre que há faixa, e
+   * silencioso (o áudio é da TV): o `muteOnLoadRef` nasce verdadeiro, e o
+   * "Trancar TV" nem aparece.
+   */
+  const effectiveArmed = isTv ? armed : true;
+  /**
    * O player recebeu `play` e a faixa NÃO começou (erro 150 / gesto recusado):
    * é a fase "tentar de novo" do gate, que aparece mesmo com a TV armada e mesmo
    * com a fila vazia — sem ela, o vídeo ficaria preso no primeiro frame e a TV
@@ -121,7 +145,7 @@ export function PlayerKiosk({
   const loadedRef = useRef<string | null>(null);
   const claimingRef = useRef(false);
   /** O gate mandou começar mudo: o stage aplica assim que a faixa carregar. */
-  const muteOnLoadRef = useRef(false);
+  const muteOnLoadRef = useRef(viewerSilent);
   const unlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // O estado mais recente para os callbacks imperativos (onEnded chega do
   // player, fora do ciclo de render): mantém o callback estável sem ler
@@ -147,6 +171,10 @@ export function PlayerKiosk({
 
   const claimNext = useCallback(
     async (finishedItemId?: string | null) => {
+      // Quem só assiste não avança a fila: a TV é quem tem o token e quem
+      // termina a faixa no banco. As regras puras já respondem `false`, mas a
+      // guarda aqui fecha o caminho mesmo se um `claim` entrar por outro effect.
+      if (!isTv) return;
       if (claimingRef.current) return;
       claimingRef.current = true;
       try {
@@ -160,7 +188,7 @@ export function PlayerKiosk({
         claimingRef.current = false;
       }
     },
-    [roomCode, token, refresh, onInvalid]
+    [roomCode, token, isTv, refresh, onInvalid]
   );
 
   // Poll: mantém a TV coerente mesmo sem realtime (reconexão, troca de rede).
@@ -182,7 +210,7 @@ export function PlayerKiosk({
   useEffect(() => {
     const item = current;
     const stage = stageRef.current;
-    if (!armed) {
+    if (!effectiveArmed) {
       // Desarmada não é "sala ociosa": o player simplesmente não existe, e o
       // `loadedRef` é zerado porque quem guardava a faixa foi destruído junto
       // com o stage. Sem esse zero, ao rearmar a mesma faixa pareceria "já
@@ -218,7 +246,7 @@ export function PlayerKiosk({
     } else {
       stage.play();
     }
-  }, [armed, current, playbackStatus, playerGeneration]);
+  }, [effectiveArmed, current, playbackStatus, playerGeneration]);
 
   // Claim por motivo de ESTADO, não de vídeo: sempre que o quiosque relê o
   // banco (boot, poll de 5s, broadcast do host) e encontra a sala ociosa com
@@ -233,11 +261,12 @@ export function PlayerKiosk({
         currentItemId: state.current?.id ?? null,
         queueLength: state.queue.length,
         armed,
+        canAdvance: isTv,
       })
     ) {
       void claimNext();
     }
-  }, [state, armed, claimNext]);
+  }, [state, armed, isTv, claimNext]);
 
   const handleEnded = useCallback(
     (videoId: string) => {
@@ -252,6 +281,7 @@ export function PlayerKiosk({
           // `YouTubeStage` guarda os callbacks num ref, então a identidade deste
           // callback não provoca remontagem nem re-run de efeito.
           armed,
+          canAdvance: isTv,
         });
         if (advance) {
           // O id viaja junto: o banco só terminaliza se ainda for o item atual
@@ -263,7 +293,7 @@ export function PlayerKiosk({
         }
       })();
     },
-    [claimNext, refresh, armed]
+    [claimNext, refresh, armed, isTv]
   );
 
   /**
@@ -343,16 +373,18 @@ export function PlayerKiosk({
 
   const panel = playerPanel(state);
   const headline = playerHeadline(state);
-  const gateDue = shouldShowPlayerGate({
-    armed,
-    currentItemId: current?.id ?? null,
-    queueLength: state.queue.length,
-    stalled,
-  });
+  const gateDue =
+    isTv &&
+    shouldShowPlayerGate({
+      armed,
+      currentItemId: current?.id ?? null,
+      queueLength: state.queue.length,
+      stalled,
+    });
   // Desarmada com fila vazia não é gate: é a tela de "Escaneie para adicionar",
   // que é o que o convidado vê antes de existir música. O gate assume no mesmo
   // instante em que o host aprova a primeira.
-  const showPlayer = Boolean(current) && armed;
+  const showPlayer = Boolean(current) && effectiveArmed;
   const showIdle = !current && !gateDue;
 
   return (
@@ -441,7 +473,7 @@ export function PlayerKiosk({
           )}
 
           <div className="ml-auto flex items-center gap-3">
-            {needsUnmute && (
+            {needsUnmute && isTv && (
               <Button
                 size="lg"
                 variant="secondary"
@@ -452,7 +484,7 @@ export function PlayerKiosk({
                 Ativar o som
               </Button>
             )}
-            {showPlayer && (
+            {showPlayer && isTv && (
               <Button
                 size="lg"
                 variant="ghost"

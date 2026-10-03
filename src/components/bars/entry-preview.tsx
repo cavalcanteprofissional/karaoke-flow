@@ -101,11 +101,12 @@ export function EntryPreview({
         barName={preview.bar_nome}
         mesa={currentMembership?.mesa_numero ?? mesa}
         initialStatus={state}
-        // Quem está dentro do raio cai na sala, onde ficam a escolha da mesa e a
-        // busca. Quem entrou de fora não tem as duas coisas (o corte de pedir
-        // música é do servidor), então vai direto para o player.
-        destination={outside ? `/player/${preview.room_code}` : undefined}
         cancelHref={entryRoute({ bar: preview.bar_code, mesa })}
+        // Todo mundo cai na sala, inclusive quem está fora do raio: a tela da
+        // sala é a página canônica e somente leitura (fila ao vivo, sem mesa e
+        // sem busca), e o player é um botão dela ("Ver o player"), não o
+        // destino da entrada. Sem token de TV o player é modo espectador —
+        // mudo, sem gate e sem mexer na fila.
         onRetry={async () => {
           await handleJoin();
         }}
@@ -197,7 +198,7 @@ export function EntryPreview({
           {geoBlocked
             ? "Habilitar localização para entrar"
             : outside
-              ? "Assistir ao karaokê"
+              ? "Entrar só assistindo"
               : singleMesa
                 ? "Entrar no bar"
                 : `Entrar na mesa ${mesa}`}

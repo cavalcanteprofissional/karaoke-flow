@@ -144,6 +144,8 @@ export type AutoAdvanceInput = {
   queueLength: number;
   /** A TV já foi ARMADA pelo toque? Desarmada, ninguém está assistindo. */
   armed: boolean;
+  /** Esta tela pode puxar a próxima? Só a TV (que tem o token) pode. */
+  canAdvance: boolean;
 };
 
 /**
@@ -154,8 +156,14 @@ export type AutoAdvanceInput = {
  * `armed: false` também nunca: desarmada, a fila não pode se esvaziar sozinha
  * com ninguém olhando (a TV do outro lado da sala ia puxando faixa e ninguém
  * veria nada — e o wouldn't-have-a-cue de "próxima" mentindo na tela).
+ *
+ * `canAdvance: false` também nunca, e é o caso de quem só assiste: o celular do
+ * convidado tem o `/player/<código>` sem token, a fila anda na TV, e avançar de
+ * um celular deixaria duas telas disputando o mesmo item sob advisory lock — cada
+ * `claim` novo tentando terminar o anterior.
  */
 export function shouldAutoAdvance(input: AutoAdvanceInput): boolean {
+  if (!input.canAdvance) return false;
   if (!input.armed) return false;
   if (input.playbackStatus === "paused") return false;
   if (!input.currentVideoId) return input.queueLength > 0;
@@ -169,6 +177,8 @@ export type ClaimFromIdleInput = {
   queueLength: number;
   /** A TV já foi ARMADA pelo toque? Desarmada, ninguém está assistindo. */
   armed: boolean;
+  /** Esta tela pode puxar a próxima? Só a TV (que tem o token) pode. */
+  canAdvance: boolean;
 };
 
 /**
@@ -186,8 +196,12 @@ export type ClaimFromIdleInput = {
  * nunca: pedir a próxima sem ninguém olhando faria a fila andar sozinha e cada
  * item sairia do estado `approved` para `playing` (e depois `played`) sem nunca
  * ter passado pela tela — o host perde a faixa sem ninguém perceber.
+ *
+ * `canAdvance: false` nunca, pelo mesmo motivo de `shouldAutoAdvance`: quem
+ * assiste não disputa a fila com a TV.
  */
 export function shouldClaimFromIdle(input: ClaimFromIdleInput): boolean {
+  if (!input.canAdvance) return false;
   if (!input.armed) return false;
   if (input.playbackStatus === "paused") return false;
   if (input.currentItemId) return false;

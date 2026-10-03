@@ -40,17 +40,6 @@ type EntryApprovalWaitProps = {
   mesa?: number | null;
   initialStatus?: MemberStatus;
   /**
-   * Para onde cair depois da aprovação. Default: `/salas/<código>` — a rota onde
-   * a pessoa escolhe a mesa (`MesaPicker`) e busca música. Quem entrou **fora do
-   * raio** não tem nem uma nem outra coisa, e é para esse caso que o chamador
-   * passa `/player/<código>` explicitamente.
-   *
-   * Antes esta prop aceitava `null` como "não navegue", o que produzia uma tela
-   * presa girando para sempre: `null` desligava o `router.replace` e sobrava só o
-   * `router.refresh()`, e quem chamasse assim nunca saía de lá.
-   */
-  destination?: string;
-  /**
    * `navigate` (default) troca de rota na aprovação. `refresh` fica onde está —
    * para o chamador que já **está** na sala: o `router.refresh()` do servidor é o
    * que retira o card da tela, porque a linha deixa de ser `pending` e a página
@@ -76,13 +65,14 @@ export function EntryApprovalWait({
   barName,
   mesa = null,
   initialStatus = "pending",
-  destination,
   mode = "navigate",
   cancelHref,
   onRetry,
 }: EntryApprovalWaitProps) {
   const backToEntry = cancelHref ?? `/entrar?code=${roomCode}`;
-  const target = destination ?? `/salas/${roomCode}`;
+  // Sempre a sala: quem entrou fora do raio também cai aqui, em modo somente
+  // leitura, e abre o player pelo botão "Ver o player" da própria sala.
+  const target = `/salas/${roomCode}`;
   const router = useRouter();
   const [status, setStatus] = useState<WaitStatus>(initialStatus);
   const [currentMesa, setCurrentMesa] = useState<number | null>(mesa);

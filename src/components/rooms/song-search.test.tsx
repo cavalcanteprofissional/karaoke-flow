@@ -210,7 +210,7 @@ describe("SongSearch — modo troca (Bloco D)", () => {
     expect(screen.getByPlaceholderText("Buscar música no YouTube…")).toBeInTheDocument();
   });
 
-  it("leva o participante para o player da sala depois de pedir a música", async () => {
+  it("devolve o participante para a tela da sala depois de pedir a música", async () => {
     renderSearch();
 
     fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
@@ -226,14 +226,14 @@ describe("SongSearch — modo troca (Bloco D)", () => {
       await Promise.resolve();
     });
 
-    // Sem token na URL: o player abre pela sessão do participante.
-    expect(mocks.push).toHaveBeenCalledWith("/player/KARAOKE");
+    // Pedir música não é assistir: volta para a mesa, onde o player é escolha.
+    expect(mocks.push).toHaveBeenCalledWith("/salas/KARAOKE");
     // E a sala é avisada: era o aviso que não existia, e a lista alheia não
     // atualizava quando alguém pedia/trocava uma música.
     expect(mocks.announceQueueChange).toHaveBeenCalledWith("KARAOKE");
   });
 
-  it("não manda para o player quando a música não entrou na fila", async () => {
+  it("não sai da busca quando a música não entrou na fila", async () => {
     mocks.addSongToQueueAction.mockResolvedValue({
       ok: false,
       error: "Você já tem 3 pedidos aguardando.",

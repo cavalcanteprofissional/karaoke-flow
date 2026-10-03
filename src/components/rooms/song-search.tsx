@@ -170,14 +170,10 @@ export function SongSearch({
       const label =
         result.item.status === "pending" ? "aguardando aprovação do host" : "na fila";
       toast.success(`${video.title} — ${label}`);
-      // Pediu a música: a watch party é o destino. O player abre pela SESSÃO
-      // (`/player/<código>` sem token), então o participante nunca vê o token
-      // da TV; se a música foi para `pending`, a tela mostra o contador de
-      // aguardando aprovação e o quiosque puxa sozinha quando o host aprovar.
-      // TODO(Bloco 2/E): o destino passa a ser a tela da mesa
-      // (`/salas/<código>`), com fila realtime, status da minha música e as
-      // métricas — não a tela do player.
-      router.push(`/player/${roomCode}`);
+      // Não empurra mais para o player: pedir música não é "assistir". Quem pede
+      // volta para a tela da mesa, onde vê a fila realtime, o status do pedido e
+      // o botão de abrir o player — e quem não quiser assistir, não é levado.
+      router.push(`/salas/${roomCode}`);
     } else {
       if (result.geoRequired) {
         toast.error(result.error);

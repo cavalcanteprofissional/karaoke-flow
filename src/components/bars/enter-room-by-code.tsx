@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DoorOpen,
+  Eye,
   LoaderCircle,
   LogIn,
   RotateCcw,
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/card";
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { enterRoomByCodeAction } from "@/lib/bars/actions";
-import { isOutsideBar } from "@/lib/bars/geo";
+import { isOutsideBar, PRESENCE_VIEWER_NOTICE } from "@/lib/bars/geo";
 import type { PresenceDecision } from "@/lib/bars/geo";
 import type { EntryBarPreview } from "@/types/bar";
 import type { EntryMembership } from "@/types/room";
@@ -33,8 +34,8 @@ type EnterRoomByCodeProps = {
   membership?: EntryMembership;
   /**
    * A mesma decisão que o preview recebeu da server action: quem está fora do
-   * raio entra como espectador e vai para o player depois da aprovação, porque
-   * lá não há mesa para escolher nem busca de música.
+   * raio entra como espectador — sem mesa, sem busca de música e com o aviso
+   * visível antes de entrar, porque o corte é do servidor.
    */
   presence?: PresenceDecision;
 };
@@ -79,9 +80,10 @@ export function EnterRoomByCode({ code, preview, membership, presence }: EnterRo
         barName={preview.bar_nome}
         mesa={membership?.mesa_numero ?? null}
         initialStatus={status}
-        // Default é a sala — é lá que a mesa é escolhida (o texto do card abaixo
-        // promete isso). Fora do raio não há mesa nem busca: vai para o player.
-        destination={isOutsideBar(presence) ? `/player/${preview.room_code}` : undefined}
+        // Default é a sala, inclusive para quem está fora do raio: é lá que a
+        // fila fica ao vivo e que o player abre pelo botão "Ver o player".
+        // Mandar direto ao player tiraria a pessoa da fila e, sem token de TV,
+        // ela cairia no modo espectador sem explicação.
         onRetry={enter}
       />
     );
@@ -143,8 +145,18 @@ export function EnterRoomByCode({ code, preview, membership, presence }: EnterRo
           </>
         )}
 
+        {isOutsideBar(presence) && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            <Eye className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <span>{PRESENCE_VIEWER_NOTICE}</span>
+          </div>
+        )}
+
         <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <LogIn className="size-3.5" />A mesa é escolhida depois, já dentro da sala.
+          <LogIn className="size-3.5" />
+          {isOutsideBar(presence)
+            ? "Você entra sem mesa e acompanha a fila pela tela da sala."
+            : "A mesa é escolhida depois, já dentro da sala."}
         </p>
       </CardContent>
     </Card>

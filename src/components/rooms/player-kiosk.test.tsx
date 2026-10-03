@@ -454,7 +454,11 @@ describe("PlayerKiosk — tela da TV", () => {
     expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
   });
 
-  it("abre por sessão quando não há token (participante aprovado)", async () => {
+  it("quem abre sem token só assiste: não pede a próxima música", async () => {
+    // O `/player/<código>` sem token é a tela do CONVIDADO (participante
+    // aprovado ou espectador). Antes, ele podia puxar a próxima faixa — dois
+    // claimeadores disputando o mesmo item sob advisory lock, e cada um
+    // terminalizando o item que o outro acabou de pegar. Quem manda é a TV.
     const onInvalid = vi.fn();
     render(
       <PlayerKiosk
@@ -477,15 +481,44 @@ describe("PlayerKiosk — tela da TV", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    // O gate vale para todo mundo, participante incluído: o celular também
-    // bloqueia áudio sem gesto, e um código só é mais simples que dois.
-    expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
-    armPlayer();
 
-    // Sem token: a action manda `null` e o banco decide pela sessão (migration
-    // 20260927000029). O token da TV não aparece em nenhum lugar.
-    expect(mocks.claimNextSongAction).toHaveBeenCalledWith(ROOM, null, null);
+    // Sala ociosa com música aprovada esperando: a TV puxaria. O celular não.
+    expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
+
+    // Nem depois do "toque de partida" — e, sem token, nem existe gate para
+    // armar: o player do convidado já nasce montado e mudo.
+    armPlayer();
+    expect(mocks.claimNextSongAction).not.toHaveBeenCalled();
     expect(onInvalid).not.toHaveBeenCalled();
+  });
+
+  it("quem abre sem token vê a faixa tocando, sem gate e sem som", async () => {
+    render(
+      <PlayerKiosk
+        roomCode={ROOM}
+        token={null}
+        initialState={makeState({
+          current: CURRENT,
+          queue: [NEXT],
+          room: {
+            code: ROOM,
+            status: "active",
+            playback_status: "playing",
+            queue_approval_mode: "manual",
+            require_song_confirmation: true,
+          },
+        })}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // O gate ("Começar") é da TV: no celular seria um botão para destravar um
+    // áudio que não existe. E o "Trancar TV" também não é do convidado.
+    expect(screen.queryByRole("button", { name: /Começar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Trancar TV/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ativar o som/i })).toBeNull();
   });
 
   it("relê o estado pelo aviso do host (realtime) e pelo poll de segurança", async () => {

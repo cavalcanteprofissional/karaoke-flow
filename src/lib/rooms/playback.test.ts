@@ -188,6 +188,7 @@ describe("shouldAutoAdvance", () => {
         endedVideoId: "abc123",
         queueLength: 2,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(true);
   });
@@ -200,6 +201,7 @@ describe("shouldAutoAdvance", () => {
         endedVideoId: null,
         queueLength: 1,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(true);
   });
@@ -212,6 +214,7 @@ describe("shouldAutoAdvance", () => {
         endedVideoId: null,
         queueLength: 0,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(false);
   });
@@ -224,6 +227,7 @@ describe("shouldAutoAdvance", () => {
         endedVideoId: "abc123",
         queueLength: 2,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(false);
   });
@@ -236,6 +240,7 @@ describe("shouldAutoAdvance", () => {
         endedVideoId: "abc123",
         queueLength: 3,
         armed: false,
+        canAdvance: true,
       })
     ).toBe(false);
   });
@@ -248,6 +253,36 @@ describe("shouldAutoAdvance", () => {
         endedVideoId: "outro",
         queueLength: 2,
         armed: true,
+        canAdvance: true,
+      })
+    ).toBe(false);
+  });
+
+  it("quem só assiste não avança: a fila anda na TV", () => {
+    // O `/player/<código>` sem token mostra a mesma faixa, mas dois claimeadors
+    // disputariam o mesmo item sob advisory lock — e cada um tentaria terminar o
+    // item do outro.
+    expect(
+      shouldAutoAdvance({
+        playbackStatus: "playing",
+        currentVideoId: "abc123",
+        endedVideoId: "abc123",
+        queueLength: 4,
+        armed: true,
+        canAdvance: false,
+      })
+    ).toBe(false);
+  });
+
+  it("quem só assiste também não puxa música aprovada no boot", () => {
+    expect(
+      shouldAutoAdvance({
+        playbackStatus: "idle",
+        currentVideoId: null,
+        endedVideoId: null,
+        queueLength: 4,
+        armed: true,
+        canAdvance: false,
       })
     ).toBe(false);
   });
@@ -261,6 +296,7 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         currentItemId: null,
         queueLength: 1,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(true);
   });
@@ -272,6 +308,7 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         currentItemId: "11111111-1111-4111-8111-111111111111",
         queueLength: 3,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(false);
   });
@@ -283,6 +320,7 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         currentItemId: null,
         queueLength: 0,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(false);
   });
@@ -294,6 +332,7 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         currentItemId: null,
         queueLength: 2,
         armed: true,
+        canAdvance: true,
       })
     ).toBe(false);
   });
@@ -307,6 +346,19 @@ describe("shouldClaimFromIdle (Fase 8a)", () => {
         currentItemId: null,
         queueLength: 5,
         armed: false,
+        canAdvance: true,
+      })
+    ).toBe(false);
+  });
+
+  it("quem só assiste não puxa nada da fila ociosa", () => {
+    expect(
+      shouldClaimFromIdle({
+        playbackStatus: "idle",
+        currentItemId: null,
+        queueLength: 5,
+        armed: true,
+        canAdvance: false,
       })
     ).toBe(false);
   });

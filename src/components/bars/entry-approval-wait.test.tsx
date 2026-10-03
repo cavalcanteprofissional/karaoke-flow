@@ -168,15 +168,20 @@ describe("EntryApprovalWait", () => {
 
     await waitFor(() => {
       // Default é `/salas/<código>`: é lá que ficam a escolha da mesa
-      // (`MesaPicker`) e a busca. O player é só para quem entrou fora do raio,
-      // e quem entra fora do raio passa o destino explicitamente.
+      // (`MesaPicker`) e a busca — e o player abre por um botão da sala.
       expect(mocks.router.replace).toHaveBeenCalledWith("/salas/ABC123");
     });
     expect(screen.getByText("Entrada aprovada!")).toBeInTheDocument();
   });
 
-  it("usa o destino informado por quem chama (espectador fora do raio)", async () => {
-    render(<EntryApprovalWait {...defaultProps} destination="/player/ABC123" />);
+  /**
+   * O espectador fora do raio **também** cai na sala: a fila ao vivo fica lá, e o
+   * player abre pelo botão "Ver o player" da própria sala. Mandar direto para o
+   * `/player` tirava a pessoa da fila e a deixava no modo espectador sem
+   * explicação — o destino virou fixo justamente para isso não voltar.
+   */
+  it("leva o espectador fora do raio para a sala, não para o player", async () => {
+    render(<EntryApprovalWait {...defaultProps} />);
     await waitFor(() => expect(mocks.state.realtimeHandler).toBeDefined());
 
     mocks.state.membership = { status: "approved", mesa_numero: null };
@@ -185,8 +190,9 @@ describe("EntryApprovalWait", () => {
     });
 
     await waitFor(() =>
-      expect(mocks.router.replace).toHaveBeenCalledWith("/player/ABC123")
+      expect(mocks.router.replace).toHaveBeenCalledWith("/salas/ABC123")
     );
+    expect(mocks.router.replace).not.toHaveBeenCalledWith("/player/ABC123");
   });
 
   /**

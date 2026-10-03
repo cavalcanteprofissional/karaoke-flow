@@ -104,7 +104,12 @@ begin
     ('05 usuario de fora nao assiste', jsonb_build_object('ok', v_out ->> 'ok'));
 
   ------------------------------------------------------------------
-  -- 2. Claim por sessão (o mesmo corpo do token, porta diferente)
+  -- 2. Claim: só a TV (migration 00041, 03/10)
+  --
+  -- Antes desta migration, o `claim_next_song` aceitando a porta da sessão
+  -- (a "porta 2" que a 00029 criou para o player VER) fazia cada celular com
+  -- `/player/<código>` ser um segundo claimeador. O par dos casos é o que
+  -- importa: o celular recusa E a TV continua andando.
   ------------------------------------------------------------------
   insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
   values (v_room, v_membro, 'smoke8a', 'Smoke 8a');
@@ -112,7 +117,15 @@ begin
   perform set_config('request.jwt.claim.sub', v_membro::text, true);
   v_out := public.claim_next_song(v_code, null, null);
   insert into smoke8a values
-    ('06 claim por sessao', jsonb_build_object(
+    ('06 celular nao avanca a fila', jsonb_build_object(
+      'ok', v_out ->> 'ok',
+      'erro', v_out ->> 'error',
+      'obs', 'deveria ser false: quem so assiste nao puxa a proxima'
+    ));
+
+  v_out := public.claim_next_song(v_code, v_token, null);
+  insert into smoke8a values
+    ('06b tv com token avanca', jsonb_build_object(
       'ok', v_out ->> 'ok',
       'tocando', v_out -> 'item' ->> 'title'
     ));
@@ -239,12 +252,13 @@ begin
 
   -- Sala encerrada: `get_player_state` continua respondendo (o quiosque mostra
   -- o aviso de sala encerrada a partir de `room.status`); quem recusa é o
-  -- `claim_next_song`, com 'sala encerrada'. Same contrato do token.
+  -- `claim_next_song`, com 'sala encerrada'. O claim vai pelo TOKEN (a porta da
+  -- sessão foi fechada na 00041), senão o caso mediria 'só a TV avança a fila'.
   update public.rooms set status = 'closed' where id = v_room;
   v_out := public.get_player_state(v_code, null);
-  v_estado := public.claim_next_song(v_code, null, null);
+  v_estado := public.claim_next_song(v_code, v_token, null);
   insert into smoke8a values
-    ('14 sala encerrada por sessao', jsonb_build_object(
+    ('14 sala encerrada (tv)', jsonb_build_object(
       'le_ok', v_out ->> 'ok',
       'claim_ok', v_estado ->> 'ok',
       'claim_erro', v_estado ->> 'error'

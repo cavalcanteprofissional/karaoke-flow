@@ -62,6 +62,7 @@ import {
 } from "@/lib/rooms/queue-actions";
 import { announcePlaybackChange } from "@/lib/rooms/player-channel";
 import { announceQueueChange, subscribeToQueueChanges } from "@/lib/rooms/room-channel";
+import { SPECTATOR_QUEUE_NOTICE } from "@/lib/rooms/spectator";
 import { formatDurationSeconds } from "@/lib/youtube/format";
 
 export type QueueItem = {
@@ -81,6 +82,12 @@ type QueueListProps = {
   initial: QueueItem[];
   isHost: boolean;
   currentUserId: string;
+  /**
+   * A tela pode pedir música? `false` para o espectador (entrou fora do raio):
+   * ele acompanha a fila, mas não recebe os botões de pedir/trocar. A regra mora
+   * em `canRequestSongs` — aqui só chega a resposta.
+   */
+  canRequest?: boolean;
 };
 
 /**
@@ -96,6 +103,7 @@ export function QueueList({
   initial,
   isHost,
   currentUserId,
+  canRequest = true,
 }: QueueListProps) {
   const [items, setItems] = useState<QueueItem[]>(initial);
   const [names, setNames] = useState<Map<string, string | null>>(new Map());
@@ -313,7 +321,10 @@ export function QueueList({
   /** D1: o autor troca a própria música e o host troca qualquer uma; D3: nunca o que já tocou. */
   function canReplace(item: QueueItem) {
     const mine = item.added_by_user_id === currentUserId;
-    return (mine || isHost) && ["pending", "approved"].includes(item.status);
+    // O espectador não tem o botão: trocar aponta para a tela de solicitação, que
+    // ele não acessa. Tirar a própria música continua liberado — retirar não é
+    // pedir, e o item dele precisa poder sair da fila.
+    return canRequest && (mine || isHost) && ["pending", "approved"].includes(item.status);
   }
 
   function replaceButton(item: QueueItem) {
@@ -358,7 +369,7 @@ export function QueueList({
         <CardTitle className="flex items-center gap-2 text-base">
           <ListMusic className="text-muted-foreground size-4" />
           Fila de músicas
-          {!isHost && (
+          {!isHost && canRequest && (
             <Link href={`/salas/${roomCode}/buscar`}>
               <Button size="sm" variant="outline">
                 <Mic2 className="size-3.5" />
@@ -367,13 +378,21 @@ export function QueueList({
             </Link>
           )}
         </CardTitle>
-        <CardDescription>
-          {isHost
-            ? pending.length > 0
+        {isHost ? (
+          <CardDescription>
+            {pending.length > 0
               ? `${pending.length} música${pending.length > 1 ? "s" : ""} aguardando sua aprovação.`
-              : "As músicas pedidas chegam aqui na hora."
-            : "Sua sala atualiza ao vivo conforme o host aprova e o player toca."}
-        </CardDescription>
+              : "As músicas pedidas chegam aqui na hora."}
+          </CardDescription>
+        ) : canRequest ? (
+          <CardDescription>
+            Sua sala atualiza ao vivo conforme o host aprova e o player toca.
+          </CardDescription>
+        ) : (
+          /* Sem botão desabilitado: um controle que a pessoa vê e não funciona
+             lê como defeito. A regra em uma frase, e a lista segue viva. */
+          <CardDescription>{SPECTATOR_QUEUE_NOTICE}</CardDescription>
+        )}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
@@ -429,9 +448,11 @@ export function QueueList({
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-4 text-center">
             <p className="text-muted-foreground text-sm">
-              A fila está vazia — peça a primeira música!
+              {canRequest
+                ? "A fila está vazia — peça a primeira música!"
+                : "Nada tocando agora. A fila aparece aqui assim que o dono liberar uma música."}
             </p>
-            {!isHost && (
+            {!isHost && canRequest && (
               <Link href={`/salas/${roomCode}/buscar`}>
                 <Button>
                   <Mic2 className="size-4" />

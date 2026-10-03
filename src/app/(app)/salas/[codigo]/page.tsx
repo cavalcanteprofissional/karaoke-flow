@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DoorOpen, Lock, Power, QrCode, Store, Table2, User } from "lucide-react";
+import { DoorOpen, Lock, Power, QrCode, Store, Table2, Tv, User } from "lucide-react";
 
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { MesaPicker } from "@/components/rooms/mesa-picker";
@@ -16,6 +16,7 @@ import { CloseRoomButton } from "@/components/rooms/close-room-button";
 import { LeaveRoomButton } from "@/components/rooms/leave-room-button";
 import { MesaQrDialog } from "@/components/rooms/mesa-qr-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -24,11 +25,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getEntryPreviewAction } from "@/lib/bars/actions";
-import { isOutsideBar } from "@/lib/bars/geo";
 import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
+import { canPickMesa, canRequestSongs } from "@/lib/rooms/spectator";
 import type { Bar } from "@/types/bar";
 import type { MemberEntryState } from "@/types/room";
 
@@ -88,14 +89,10 @@ export default async function RoomPage({ params }: RoomPageProps) {
           barName={entryResult.preview.bar_nome}
           mesa={entryResult.membership.mesa_numero}
           initialStatus={entryResult.membership.status}
-          // Fora do raio não há mesa para escolher nem busca: vai para o player.
-          // Dentro do raio o default (a sala) é o certo — é dela que vem o
-          // `MesaPicker` e a busca.
-          destination={
-            isOutsideBar(entryResult.presence)
-              ? `/player/${entryResult.preview.room_code}`
-              : undefined
-          }
+          // O destino é a própria sala, aprovada ou não: fora do raio a sala já
+          // é uma visão válida de espectador (fila viva, sem mesa, sem pedido de
+          // música). Mandar para o `/player` punia quem assistia de celular com a
+          // tela cheia da TV — texto grande e alto contraste para 3 metros.
         />
       );
     }
@@ -157,12 +154,17 @@ export default async function RoomPage({ params }: RoomPageProps) {
   }
   const myMesa = myMembership?.mesa_numero ?? null;
   const isPendingMember = myMembership?.status === "pending";
-  // Espectador fora do raio NUNCA tem mesa (o join manda `null`), então o teste
-  // antigo — "aprovado sem mesa precisa escolher uma" — abria o `MesaPicker`
-  // para quem entrou de fora, que não pode nem usar a mesa que escolher. Agora a
-  // gravação do join é o critério (migration 20261003000040).
-  const isOutsideViewer = myMembership?.fora_do_raio === true;
-  const needsMesa = (myMembership?.status ?? null) === "approved" && myMesa == null && !isOutsideViewer;
+  // O que a tela pode **oferecer** é uma função só, e mora em `spectator.ts`:
+  // fora do raio (gravado no join, migration 20261003000040), nem mesa nem
+  // pedido de música — a pessoa assiste.
+  const podePedir = canRequestSongs({ isHost, membership: myMembership ?? null });
+  const podeEscolherMesa = canPickMesa({ isHost, membership: myMembership ?? null });
+  const needsMesa = (myMembership?.status ?? null) === "approved" && myMesa == null && podeEscolherMesa;
+  // Assistir é opt-in e liberado para qualquer membro aprovado — dentro ou fora
+  // do raio. A porta do player (a migration 20260927000029) exige `approved`, por
+  // isso o botão não aparece para quem está pendente. Sem token: o quiosque
+  // nesse caminho é só leitura, e ninguém vê a credencial da TV.
+  const podeVerPlayer = !isHost && (myMembership?.status ?? null) === "approved";
 
   let pendingInitial: PendingEntry[] = [];
   if (isHost) {
@@ -279,6 +281,14 @@ export default async function RoomPage({ params }: RoomPageProps) {
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-1.5">
+            {podeVerPlayer && (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/player/${room.code}`}>
+                  <Tv className="size-3" />
+                  Ver o player
+                </Link>
+              </Button>
+            )}
             <Badge variant="secondary">
               {room.entry_mode === "open" ? (
                 <DoorOpen className="size-3" />
@@ -395,6 +405,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
           initial={queueInitial}
           isHost={isHost}
           currentUserId={user.id}
+          canRequest={podePedir}
         />
       )}
 

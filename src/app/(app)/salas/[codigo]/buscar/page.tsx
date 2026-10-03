@@ -16,6 +16,9 @@ import { requirePresence } from "@/lib/bars/presence";
 import type { PresenceDecision } from "@/lib/bars/geo";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
+import { getMemberEntryState } from "@/lib/rooms/entry-state";
+import { canRequestSongs } from "@/lib/rooms/spectator";
+import type { MemberStatus } from "@/types/room";
 
 type BuscarPageProps = {
   params: Promise<{ codigo: string }>;
@@ -65,20 +68,20 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
 
   const isHost = room.host_id === user.id;
 
-  let membership: "host" | "approved" | "pending" | "none";
-  if (isHost) {
-    membership = "host";
-  } else {
-    const { data: member } = await supabase
-      .from("room_members")
-      .select("status")
-      .eq("room_id", room.id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    membership = (member?.status as "approved" | "pending" | "none") ?? "none";
-  }
+  /**
+   * O estado de entrada vem da MESMA função que a página da sala lê
+   * (`member_entry_state`) e não de `select status` em `room_members`: o status
+   * guardado é o que o host aprovou, e a pré-aprovação de 24h pode ter vencido —
+   * ler a linha crua dava "aprovado" para quem já não está. Uma regra só, sem
+   * cópia no app.
+   */
+  const entry = isHost ? null : await getMemberEntryState(room.id);
+  const entryState = entry?.ok === true ? (entry.state ?? null) : null;
+  const membership: MemberStatus | "host" | "none" = isHost
+    ? "host"
+    : (entryState?.status ?? "none");
 
-  if (membership === "none" || membership === "pending") {
+  if (membership === "none" || membership === "pending" || membership === "rejected") {
     return (
       <div className="flex flex-col gap-4">
         <BackLink code={code} />
@@ -113,6 +116,17 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
         </div>
       </div>
     );
+  }
+
+  /**
+   * O espectador (entrou fora do raio do bar) não tem esta tela — nem offerta,
+   * nem recusa: uma tela de busca que ele não pode usar é beco sem saída, e
+   * `canRequestSongs` é a mesma resposta que a fila da sala usa. De volta para a
+   * sala, que é onde ele acompanha tudo. O redirect (e não um aviso aqui)
+   * porque o link é alcançável digitado, favoritado ou vindo de `?trocar=`.
+   */
+  if (!canRequestSongs({ isHost, membership: entryState })) {
+    redirect(`/salas/${code}`);
   }
 
   let presence: PresenceDecision = { ok: true };

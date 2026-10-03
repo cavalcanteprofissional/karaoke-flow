@@ -132,7 +132,12 @@ function item(over: Partial<TestItem> = {}): TestItem {
 }
 
 function renderList(
-  props: { isHost?: boolean; currentUserId?: string; initial?: QueueItem[] } = {}
+  props: {
+    isHost?: boolean;
+    currentUserId?: string;
+    initial?: QueueItem[];
+    canRequest?: boolean;
+  } = {}
 ) {
   return render(
     <QueueList
@@ -141,6 +146,7 @@ function renderList(
       initial={(props.initial ?? mocks.state.items) as QueueItem[]}
       isHost={props.isHost ?? true}
       currentUserId={props.currentUserId ?? HOST_ID}
+      canRequest={props.canRequest ?? true}
     />
   );
 }
@@ -615,5 +621,61 @@ describe("QueueList — a lista volta a atualizar sozinha (2026-09-27)", () => {
     unmount();
 
     expect(mocks.state.queueSubscribe[0].unsubscribe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("QueueList — o espectador que entrou fora do raio", () => {
+  /** Links para a tela de solicitação: é o que a regra precisa tirar do caminho. */
+  function botaoPedir(): HTMLElement[] {
+    return screen.queryAllByRole("button", { name: /Pedir música/i });
+  }
+
+  it("não oferece o pedido de música no cabeçalho", async () => {
+    renderList({ isHost: false, currentUserId: "user-9", canRequest: false });
+    await screen.findByText("Evidências");
+
+    expect(botaoPedir()).toHaveLength(0);
+    expect(screen.queryByRole("link", { name: /Pedir música/i })).toBeNull();
+  });
+
+  it("não oferece o pedido de música com a fila vazia (o segundo ponto do vazamento)", async () => {
+    mocks.state.items = [];
+    renderList({ isHost: false, currentUserId: "user-9", canRequest: false, initial: [] });
+    await waitFor(() => expect(screen.getByText(/Nada tocando agora/i)).toBeInTheDocument());
+
+    expect(botaoPedir()).toHaveLength(0);
+    expect(screen.queryByText(/peça a primeira música/i)).toBeNull();
+  });
+
+  it("diz a regra em uma frase, em vez de sumir com o card", async () => {
+    renderList({ isHost: false, currentUserId: "user-9", canRequest: false });
+    await screen.findByText("Evidências");
+
+    expect(screen.getByText(/fora do raio do bar/i)).toBeInTheDocument();
+    expect(screen.getByText(/não para pedir música/i)).toBeInTheDocument();
+  });
+
+  it("não mostra o botão de trocar, que levaria à tela de solicitação", async () => {
+    renderList({
+      isHost: false,
+      currentUserId: "user-2",
+      canRequest: false,
+      initial: [item({ status: "approved" })] as QueueItem[],
+    });
+    await screen.findByText("Evidências");
+
+    expect(screen.queryByRole("link", { name: /Trocar Evidências/i })).toBeNull();
+    // Tirar da própria música continua: retirar não é pedir.
+    expect(screen.getByRole("button", { name: /Tirar da fila/i })).toBeInTheDocument();
+  });
+
+  it("quem está dentro do raio continua com o pedido nos dois lugares", async () => {
+    mocks.state.items = [];
+    renderList({ isHost: false, currentUserId: "user-9", canRequest: true, initial: [] });
+    await waitFor(() => expect(screen.getByText(/peça a primeira música/i)).toBeInTheDocument());
+
+    // Cabeçalho + estado vazio: era exatamente esse o vazamento do espectador.
+    expect(botaoPedir()).toHaveLength(2);
+    expect(screen.getByText(/atualiza ao vivo/i)).toBeInTheDocument();
   });
 });

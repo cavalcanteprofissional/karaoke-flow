@@ -13,7 +13,9 @@ import {
   buildQueueSongReplacement,
   reorderSchema,
 } from "./queue";
-import type { QueueSongInput, QueueSongVideo } from "./queue";
+import type { MembershipStatus, QueueSongInput, QueueSongVideo } from "./queue";
+import { getMemberEntryState } from "@/lib/rooms/entry-state";
+import { canRequestSongs } from "@/lib/rooms/spectator";
 
 type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -132,17 +134,38 @@ export async function addSongToQueueAction(
   }
 
   const isHost = room.host_id === user.id;
-  let membership = "none" as "host" | "approved" | "pending" | "none";
-  if (isHost) {
-    membership = "host";
-  } else {
-    const { data: member } = await supabase
-      .from("room_members")
-      .select("status")
-      .eq("room_id", room.id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    membership = (member?.status as typeof membership) ?? "none";
+  /**
+   * Estado efetivo pela função que a tela da sala e a busca leem
+   * (`member_entry_state`), nunca `select status` em `room_members`: a linha
+   * crua é o que o host aprovou, e a pré-aprovação de 24h pode ter vencido —
+   * tratá-la como "aprovado" devolvia a busca para quem não está mais na sala.
+   */
+  const entry = isHost ? null : await getMemberEntryState(room.id);
+  const entryState = entry?.ok === true ? (entry.state ?? null) : null;
+  const membership: MembershipStatus =
+    isHost || entryState?.status === "approved"
+      ? isHost
+        ? "host"
+        : "approved"
+      : entryState?.status === "pending"
+        ? "pending"
+        : "none";
+
+  /**
+   * O espectador entrou fora do raio: a regra vale na tela **e** na fila. Se
+   * morasse só na tela, o botão sumiria mas o `add` continuaria aceitando — e a
+   * UI deixaria de ser a parte honesta da regra, que é exatamente o que a
+   * migration 20261003000040 tentou evitar quando gravou a decisão no join.
+   *
+   * Só entra aqui o membro aprovado; `pending` e `none` seguem para as mensagens
+   * que já existiam, em `buildQueueSongItem`.
+   */
+  if (entryState?.status === "approved" && !canRequestSongs({ isHost, membership: entryState })) {
+    return {
+      ok: false,
+      error: "Você entrou de fora do raio do bar: acompanha a fila, mas não pode pedir música.",
+      code: "OUTSIDE_BAR",
+    };
   }
 
   const cookieStore = await cookies();

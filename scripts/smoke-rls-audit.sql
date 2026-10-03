@@ -19,7 +19,9 @@
 --   6. `profiles` não vaza e-mail para a API; `profiles_public` continua
 --     -readable por `anon`;
 --   7. Regressão do `00036`: as cotas de bar/sala e o `bar_id` continuam
---      barrados no INSERT/UPDATE direto, não só dentro das RPCs.
+--      barrados no INSERT/UPDATE direto, não só dentro das RPCs;
+--   8. A regra do espectador (`00041`): `claim_next_song` só pelo token da TV e
+--      `pick_mesa` recusando quem entrou fora do raio (série S, no fim).
 --
 -- COMO LER O RESULTADO
 --   classe `ATAQUE`   → precisa ser BARRADO. Ok = a parede existe.
@@ -69,6 +71,14 @@
 --   Ou seja: este arquivo fica **vermelho de propósito** até a migration
 --   `20260930000038` fechar F1–F6. Um `LEGITIMO` vermelho é o alarme sério:
 --   significa que a correção quebrou o produto.
+--
+-- ESTADO MEDIDO (2026-10-03, projeto Cloud `kskoipyzqcacccepcqpc`)
+--   62 casos · 62 ok · 0 ataques passando · 0 legítimos quebrados.
+--   A série S (a regra "quem entra de fora do raio só assiste", migration
+--   `20261003000041`) é a única que não é sobre RLS de tabela: S1 é um `claim`
+--   por sessão e S3/S4 um `pick_mesa` — duas RPCs que já eram `security
+--   definer` e, sem a checagem nova, deixavam o espectador mandar na fila e
+--   sentar numa mesa com DevTools aberto.
 
 begin;
 
@@ -96,9 +106,13 @@ declare
   v_estranho uuid;   -- logado, sem nenhum vínculo
   v_n integer;
   v_rec record;
+  v_json jsonb;
   v_ok boolean;
   v_err text;
   v_txt text;
+  -- Só o S1/S2 (a TV), lidos antes de trocar o papel.
+  v_code_a text;
+  v_token_a uuid;
 begin
   select host_id into v_host_a   from public.bars where code = 'ZEHBAR';
   select id      into v_bar_a    from public.bars where code = 'ZEHBAR';
@@ -1083,14 +1097,138 @@ begin
 
   -- Perna 3: `search_path` fixado, senao um objeto sombra criado no schema
   -- `public` por outro papel trocaria a resolucao dentro da funcao definer.
-  v_n := 0;
+v_n := 0;
   select count(*) into v_n
-    from pg_proc p
+   from pg_proc p
    where p.oid = 'public.admin_room_occupancy(uuid)'::regprocedure
      and (p.proconfig is null
           or not exists (select 1 from unnest(p.proconfig) c where c like 'search\_path=%'));
   insert into smoke_rls values ('H8 admin_room_occupancy: search_path fixado (anti shadowing)',
     'ATAQUE', 'F1/F2', v_n::text || ' funcao(es) sem search_path no proconfig', v_n = 0);
+
+  ------------------------------------------------------------------
+  -- S — "quem entra de fora do raio só assiste" (Fase 9, migration 00041)
+  --
+  -- A UI esconde o botão (Bloco 1) e a action recusa no servidor
+  -- (`addSongToQueueAction`), mas a regra que VALE é a do banco: enquanto
+  -- `claim_next_song` aceitasse a porta da sessão e `pick_mesa` não olhasse
+  -- `fora_do_raio`, um espectadorApproved com DevTools aberto ainda mandava na
+  -- fila e ainda sentava numa mesa. Estes quatro casos contam linhas e mensagens,
+  -- nunca "não exception".
+  ------------------------------------------------------------------
+
+  -- S1 ATAQUE: celular do convidado tentando puxar a próxima faixa. Precisa
+  -- recusar — e o erro tem que dizer que é a TV que avança, senão o quiosque
+  -- mostra "player inválido" e o diagnóstico perde o motivo real.
+  --
+  -- Sem `set_playback` antes: a nova 00041 recusa o token nulo ANTES de olhar a
+  -- sala, então o estado de reprodução não é parte da pergunta. (E `set_playback`
+  -- aqui levantava 'não autenticado', porque o claim do JWT que sobrou do bloco H
+  -- não era de ninguém — o teste estava medindo o `set_playback`, não o claim.)
+  v_n := 1; v_err := ''; v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    v_json := public.claim_next_song(v_code_a, null, null);
+    set local role postgres;
+    v_n := case when (v_json ->> 'ok') = 'false' then 0 else 1 end;
+    v_txt := coalesce(v_json ->> 'error', '');
+  exception when others then
+    set local role postgres; v_err := 'erro: ' || sqlerrm;
+  end;
+  insert into smoke_rls values ('S1 claim_next_song por sessao e recusado',
+    'ATAQUE', 'F1/F2',
+    case when v_err <> '' then v_err
+         else v_n::text || ' (erro devolvido: ' || coalesce(nullif(v_txt, ''), '-') || ')' end,
+    v_n = 0);
+
+  -- S2 LEGITIMO: a TV (token) continua avançando a fila. É o par do S1 — sem
+  -- ele, "recusar tudo" também deixaria o teste verde.
+  --
+  -- Código e token saem lidos como `postgres`: como `anon` (que é o papel real da
+  -- TV) a RLS de `rooms` esconde `player_token` — ler ali dentro dava
+  -- "permission denied for table rooms" e o teste media o RLS, não o claim.
+  v_n := 0; v_err := ''; v_txt := '';
+  begin
+    select code, player_token into v_code_a, v_token_a
+      from public.rooms where id = v_room_a;
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_membro, 'smokeS', 'Smoke S')
+    on conflict do nothing;
+    update public.queue_items
+       set status = 'approved'
+     where room_id = v_room_a and youtube_video_id = 'smokeS';
+    set local role anon;
+    perform set_config('request.jwt.claims', '{"role":"anon"}', true);
+    v_json := public.claim_next_song(v_code_a, v_token_a, null);
+    set local role postgres;
+    v_n := case when (v_json ->> 'ok') = 'true' then 1 else 0 end;
+    v_txt := coalesce(v_json ->> 'error', 'sem erro');
+  exception when others then
+    set local role postgres; v_err := 'erro: ' || sqlerrm;
+  end;
+  insert into smoke_rls values ('S2 TV com token continua avancando a fila',
+    'LEGITIMO', '',
+    case when v_err <> '' then v_err else v_n::text || ' (claim: ' || v_txt || ')' end,
+    v_n = 1);
+
+  -- S3 ATAQUE: o espectador aprovado escolhendo a própria mesa pela RPC. A
+  -- chamada tem de RECUSAR, e `mesa_numero` tem de continuar NULL.
+  --
+  -- Os `update` ficam FORA do bloco com `exception` de propósito: o bloco é uma
+  -- subtransação, e a recusa do `pick_mesa` desfazia junto o `set mesa_numero =
+  -- null` preparado logo antes — o teste via "sentou" numa mesa que ele mesmo
+  -- tinha posto, e o vermelho era do teste, não da regra. (Erro de 03/10,
+  -- corrigido aqui: o estado é posto antes de entrar no bloco.)
+  update public.room_members
+     set fora_do_raio = true, status = 'approved', mesa_numero = null
+   where room_id = v_room_a and user_id = v_membro;
+  update public.rooms set bar_id = v_bar_a where id = v_room_a;
+  v_n := 1; v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    perform public.pick_mesa(v_room_a, 1);
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_txt := sqlerrm;
+  end;
+  v_n := (select count(*) from public.room_members
+           where room_id = v_room_a and user_id = v_membro and mesa_numero is not null);
+  insert into smoke_rls values ('S3 espectador nao senta (pick_mesa)',
+    'ATAQUE', 'F1/F2',
+    case when v_txt = ''
+         then 'a RPC NAO recusou e deixou ' || v_n::text || ' linha(s) sentada(s)'
+         else v_txt end,
+    v_n = 0);
+
+  -- S4 LEGITIMO: quem está dentro do raio continua escolhendo a mesa. É o par
+  -- do S3 — se a correção trancasse todo mundo, S3 ficaria verde sem meaning.
+  update public.room_members
+     set fora_do_raio = false, status = 'approved', mesa_numero = null
+   where room_id = v_room_a and user_id = v_membro;
+  v_n := 0; v_err := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    perform public.pick_mesa(v_room_a, 1);
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_err := 'erro: ' || sqlerrm;
+  end;
+  v_n := (select count(*) from public.room_members
+           where room_id = v_room_a and user_id = v_membro and mesa_numero = 1);
+  insert into smoke_rls values ('S4 quem esta no raio ainda senta',
+    'LEGITIMO', '',
+    case when v_err <> '' then v_err else v_n::text || ' linha(s) com mesa 1' end,
+    v_n = 1);
+
+  -- Limpeza do item criado pelo S2 (o rollback desfaz, mas deixar explícito
+  -- mantém o smoke legível para quem roda por partes).
+  delete from public.queue_items where room_id = v_room_a and youtube_video_id = 'smokeS';
 end;
 $$;
 

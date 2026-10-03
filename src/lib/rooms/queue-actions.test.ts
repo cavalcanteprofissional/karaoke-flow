@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  addSongToQueueAction,
   removeQueueItemAction,
   replaceQueueSongAction,
   setQueueItemStatusAction,
@@ -18,6 +19,7 @@ import {
 const HOST = "00000000-0000-0000-0000-000000000001";
 const ITEM = "11111111-1111-4111-8111-111111111111";
 const ROOM = { host_id: HOST, code: "KARAOKE" };
+const ROOM_ID = "22222222-2222-4222-8222-222222222222";
 
 type Result = {
   data: unknown;
@@ -28,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   results: {} as Record<string, Result>,
   log: [] as { op: string; select: string; eq: [string, unknown][] }[],
   revalidate: [] as string[],
+  /** Cookies do request (`kf-geo`): o gate de presença lê daqui. */
+  cookies: new Map<string, { value: string }>(),
   /** Quem está logado; o padrão é o host, mas o autor do pedido também entra. */
   user: "00000000-0000-0000-0000-000000000001",
   client: null as unknown,
@@ -38,7 +42,7 @@ vi.mock("next/cache", () => ({
     mocks.revalidate.push(String(args[0]));
   },
 }));
-vi.mock("next/headers", () => ({ cookies: async () => new Map() }));
+vi.mock("next/headers", () => ({ cookies: async () => mocks.cookies }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => mocks.client,
 }));
@@ -97,7 +101,104 @@ function installSupabase() {
 beforeEach(() => {
   mocks.results = {};
   mocks.revalidate.length = 0;
+  mocks.cookies.clear();
   installSupabase();
+});
+
+/**
+ * `addSongToQueueAction` — a porta de entrada da fila.
+ *
+ * O teste que faltava: a tela esconde o "Pedir música" para quem entrou fora do
+ * raio, mas esconder botão não é regra. Aqui a recusa acontece no servidor — e
+ * o `insert` nem é tentado.
+ */
+describe("addSongToQueueAction", () => {
+  const GUEST = "00000000-0000-0000-0000-000000000002";
+  const INSERTED = [{ id: "item-novo", status: "pending", position: 1 }];
+  const SONG = {
+    roomCode: ROOM.code,
+    video: {
+      videoId: "dQw4w9WgXcQ",
+      title: "Evidências",
+      thumbnailUrl: null,
+      durationSeconds: 240,
+    },
+  };
+
+  /** Sala sem GPS exigido (sem bar) ou com coordenadas de referência. */
+  function installRoom(bar: unknown | null) {
+    mocks.results["rooms.maybeSingle"] = {
+      data: { id: ROOM_ID, host_id: HOST, bar_id: bar === null ? null : "bar-1" },
+      error: null,
+    };
+    mocks.results["bars.maybeSingle"] = bar === null
+      ? { data: null, error: null }
+      : { data: bar, error: null };
+    mocks.results["queue_items.select"] = { data: INSERTED, error: null };
+  }
+
+  function entryState(state: Record<string, unknown> | null) {
+    mocks.results.rpc = { data: state, error: null };
+  }
+
+  function dentroDoRaio() {
+    mocks.cookies.set("kf-geo", {
+      value: JSON.stringify({ status: "granted", coords: { latitude: 0, longitude: 0 } }),
+    });
+  }
+
+  it("aprovado dentro do raio entra na fila", async () => {
+    mocks.user = GUEST;
+    installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+    dentroDoRaio();
+    entryState({ status: "approved", fora_do_raio: false });
+
+    const result = await addSongToQueueAction(SONG);
+
+    expect(result).toEqual({ ok: true, item: { status: "pending", position: 1 } });
+    // O estado efetivo vem de member_entry_state, não de room_members cru.
+    expect(mocks.log.map((entry) => entry.select)).toContain("member_entry_state");
+  });
+
+  it("espectador fora do raio é recusado com OUTSIDE_BAR e não tenta inserir", async () => {
+    mocks.user = GUEST;
+    installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+    entryState({ status: "approved", fora_do_raio: true, distancia_m: 1200 });
+
+    const result = await addSongToQueueAction(SONG);
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.stringContaining("fora do raio"),
+      code: "OUTSIDE_BAR",
+    });
+    expect(mocks.log.map((entry) => entry.select)).not.toContain("queue_items");
+    expect(mocks.revalidate).toEqual([]);
+  });
+
+  it("quem nunca entrou recebe a mensagem de membro, não a de espectador", async () => {
+    mocks.user = GUEST;
+    installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+    entryState(null);
+
+    const result = await addSongToQueueAction(SONG);
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.any(String),
+      code: "NONE",
+    });
+    expect(mocks.log.map((entry) => entry.select)).not.toContain("queue_items");
+  });
+
+  it("o host não depende de member_entry_state", async () => {
+    installRoom(null);
+
+    const result = await addSongToQueueAction(SONG);
+
+    expect(result).toEqual({ ok: true, item: { status: "pending", position: 1 } });
+    expect(mocks.log.map((entry) => entry.select)).not.toContain("member_entry_state");
+  });
 });
 
 describe("setQueueItemStatusAction", () => {

@@ -27,6 +27,8 @@ Nós não construímos para o YouTube construir em nosso lugar. Construímos **p
 (de quem é o esforço e a conta), **para o cantor** (de quem é a coragem) e **para a cidade**
 (que é quem aplaude ao fundo).
 
+**Princípio de engenharia:** operamos com **barreiras medidas no banco** (RLS auditado + RPCs `security definer` + gatilhos bypass-proof) e **isolamento operacional** (player/kiosk isolado por token, gate humano obrigatório) — não por fé, mas por prova ([`docs/decisions/ADR-002`](./docs/decisions/ADR-002-player-isolated-by-token-and-kiosk-only.md), [`ADR-003`](./docs/decisions/ADR-003-rls-as-primary-wall-plus-rpcs-security-definer.md)). A arquitetura é **YouTube-first** pragmático e **reversível** para catálogo licenciado/híbrido ([`ADR-001`](./docs/decisions/ADR-001-youtube-first-vs-licensed-catalog.md)).
+
 ---
 
 ## 2. Nós acreditamos

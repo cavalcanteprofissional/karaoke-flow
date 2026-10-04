@@ -22,6 +22,7 @@
 | **Smoke `smoke-rls-audit`**         | 55 casos, **0 vermelho**, **14/14 legítimos** verdes (era 45 casos, 8 vermelhos)                                        |
 | **Outros smokes**                   | `smoke-playback` 20/20, `smoke-player-session` 17/17, `smoke-dev-role` 15/15, `smoke-profiles-public` 9/9             |
 | **Gates locais**                    | 424 testes/35 arquivos, tsc, lint, build e `scan:secrets` verdes                                                            |
+| **Medição mais recente (2026-10-04)** | **69 casos, 0 vermelho, 0 legítimos quebrados** — o placar acima é o do fechamento da auditoria; depois dele entraram as séries **S** (regra do espectador, `20261003000041`) e **Q** (uma música ativa por participante, `20261004000042`), que são **regras de produto**, não defeitos: por isso a coluna `ref` delas aponta para a série e não para F1–F7 |
 | **Custo real**                      | 3 defeitos do **instrumento** (não do produto) descobertos ao rodar, que estavam mascarando leitura de segurança — §6     |
 | **Continua sem verificação**        | o player real numa TV (Playwright) e as 37 funções `public` que ainda herdam `EXECUTE` de `PUBLIC` — §7                  |
 

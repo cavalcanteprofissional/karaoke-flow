@@ -490,6 +490,58 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 > do claim no `smoke-player-session`. O que falta é o **aparelho**, e o primeiro
 > item é o que bugou nesta semana.
 
+> **ATENÇÃO — o primeiro item já foi executado e achou um P0 (2026-10-04).** A
+> entrada de participante estava **quebrada para todo mundo**: a distância do
+> haversine ia fracionária para o `join_room`, cujo `p_distancia_m` é `int`, e o
+> Postgres recusava com `invalid input syntax for type integer: "42.4732269333666"`.
+> Corrigido arredondando em `checkPresence` (`src/lib/bars/geo.ts`) — ver
+> `CHANGELOG.md`. **Se a entrada falhar de novo com esse texto, é regressão do
+> conserto, não do roteiro.** O bloco do espectador só ficou executável depois
+> disso; o "dentro do raio" já dá para rodar desde já (receita abaixo).
+
+**Geo determinístico por console (sem depender da geolocalização do aparelho)**
+
+> O `console` abaixo é o que torna este roteiro repetível: o gate de presença lê
+> o cookie `kf-geo` (`src/lib/bars/presence.ts`), e **o que foi gravado no join
+> manda para sempre** — quem entrou de fora continua "de fora" mesmo que o
+> celular passe a apontar para dentro. Por isso "dentro" e "fora" precisam de
+> **janelas/sessões diferentes**, e trocar o cookie na mesma sessão não troca a
+> decisão. Recarregue a página depois de gravar: o valor é lido no servidor, a
+> cada request.
+
+```js
+// DENTRO: coordenada idêntica à do bar → distância 0 exato → "0" é inteiro válido.
+document.cookie = 'kf-geo=' + encodeURIComponent(JSON.stringify(
+  {status:'granted',coords:{latitude:-3.771963,longitude:-38.514619}})) + '; path=/; max-age=3600';
+
+// FORA: ~2 km ao norte (Fortaleza, bar em -3.771963 / -38.514619).
+document.cookie = 'kf-geo=' + encodeURIComponent(JSON.stringify(
+  {status:'granted',coords:{latitude:-3.753963,longitude:-38.514619}})) + '; path=/; max-age=3600';
+
+// Sem consentimento: é o único caso que BLOQUEIA de verdade.
+document.cookie = 'kf-geo=' + encodeURIComponent(JSON.stringify(
+  {status:'denied',ts:'manual'})) + '; path=/; max-age=3600';
+```
+
+> O raio gravado no Cloud para o `ZEHBAR` é **150 m** (o padrão do produto é
+> 500 m). As coordenadas acima são as do bar como estão na tabela `bars` — 6
+> casas, sem arredondar, que é o que faz a distância dar 0 em vez de `0,4`.
+
+**Ruído de dev conhecido (2026-10-04) — o que NÃO é falha**
+
+| Mensagem | Como é | O que fazer |
+| --- | --- | --- |
+| `TypeError: Cannot write to a CLOSED writable stream` | Turbopack, geração/cache do RSC | Reiniciar `dev` + hard reload + limpar dados do site |
+| `Failed to fetch RSC payload … chunk.reason.enqueueModel is not a function` | idem, costuma vir logo em seguida | idem; se persistir: `npm run dev -- --webpack` |
+| `Fast Refresh` que não completa | idem | idem |
+
+> Todas as três são de **geração do grafo de módulos do RSC** (o Turbopack
+> recompila a rota na primeira visita e a navegação pega o bundle velho), não de
+> hydration nem do app — o sinal que as distingue de falha real é a página
+> **continuar respondendo** depois delas. Nenhuma delas foi reproduzida em
+> `build` + `start`, e nenhuma delas impede o roteiro; o que importa é o item
+> "console limpo" do bloco do espectador, medido **depois** dessas três saírem.
+
 **Dev na LAN (reiniciar o servidor antes — o `next.config.ts` só vale no start)**
 >
 > O IP deste roteiro (`192.168.100.28`) é o da máquina **na hora em que foi
@@ -505,6 +557,12 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [ ] **"Copiar link da TV"** idem, e o link colado no celular abre `/player/<código>?token=…`
 - [ ] Trocar de rede (outro Wi-Fi, 4G no notebook) continua funcionando sem hardcode de IP — a config pega o IPv4 da máquina agora
 
+**Entrada do participante (o P0 de 04/10 — rode isto antes do espectador)**
+
+- [ ] **Dentro do raio:** com o cookie `kf-geo` de coordenada idêntica, `/entrar?code=KARAOKE` **entra** e abre a sala — **antes** disso, esta tela era o bloco do P0 (`invalid input syntax for type integer`)
+- [ ] **Fora do raio:** com o cookie de ~2 km, a mesma entrada **entra também** (é espectador, não é bloqueio) — e é este item que só ficou executável com o conserto
+- [ ] Sem consentimento (`status: denied`): a entrada é **recusada** com a mensagem de geo — é o único dos três desfechos que bloqueia de verdade
+
 **O espectador na tela (aparelho, com DevTools em coordenadas ~2 km do bar)**
 
 - [ ] Entrar de fora: a fila aparece, **sem** "Pedir música" no cabeçalho **e** sem o botão do estado vazio — os dois pontos de entrada, porque o vazamento do botão do estado vazio era o mais fácil de esquecer
@@ -516,7 +574,7 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [ ] **A TV continua tocando** enquanto o celular assiste: aprovada uma música na sala, ela começa na TV **sem** o celular tocar nada — e o celular não "puxa" a próxima nem derruba a música que a TV começou (a prova de que os dois lados do `claim_next_song` estão fechados)
 - [ ] Pedir música **não** leva mais para o player: depois de pedir, volta para a **tela da sala** (antes ia para `/player/<código>`)
 - [ ] Fim da faixa: a **TV** avança sozinha; o celular só acompanha
-- [ ] `console` limpo nas duas janelas
+- [ ] `console` limpo nas duas janelas — medido **depois** de o ruído de dev da tabela acima sair: a primeira navegação numa rota nova do Turbopack sempre produz as três, e elas **não** contam como falha
 
 **O banco (para quem tem acesso ao Management API)**
 
@@ -527,6 +585,45 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 
 - [ ] Com o `qrcode` quebrado (DevTools ▸ bloquear `qrcode`), a tela **não** fica num skeleton piscando: mostra o erro **e o código da sala** para digitar à mão
 - [ ] `console` mostra `[RoomQr] falha ao gerar o QR` com o `value` — antes o erro era engolido sem log
+
+### 3.14 Uma música ativa por participante (2026-10-04)
+
+> **Por que este bloco existe:** a regra virou migration (`20261004000042`), e os
+> smokes já mediram a trigger no Cloud (série **Q**, 7 casos). O que falta é o
+> **aparelho** — e o caso reportado foi justamente o que a suíte não pegaria: um
+> visitante **sem login autenticado** deixando várias músicas suas em `ZEHBAR`.
+>
+> **O que a regra é, em uma frase:** uma música **ativa** por participante, por
+> sala. Ativa = `pending` + `approved` + `playing` (é o que a fila mostra).
+> Depois que a música **tocou** (`played`), a vaga abre e o pedido entra.
+
+**Participante (celular anônimo, dentro do raio)**
+
+- [ ] Entrar em `ZEHBAR` sem login (o botão de visitante) e abrir **"Pedir música"**: pede a primeira → ela **entra** na fila, sem aviso de substituição
+- [ ] A busca mostra, **antes** do clique, que já existe uma música sua e que o próximo pedido a substitui — com o **título dela**
+- [ ] Pedir a segunda: o toast diz que a nova entrou **e nomeia a que saiu**; na fila do celular, **a antiga some** e só a nova fica
+- [ ] **Com uma música tocando na TV**, o botão de adicionar fica **travado** e a tela explica que dá para pedir outra quando ela terminar — e **a TV não é interrompida** em momento algum (é o ponto do desenho: substituir a `playing` cortaria o áudio)
+- [ ] Forçar o pedido por outra via (DevTools, chamando a action direto) ainda devolve a mesma recusa — o aviso é conveniência, a regra é do banco
+- [ ] Fim da faixa: quando a música vira `played`, o botão **destrava** e o próximo pedido entra
+
+**Host (na própria sala)**
+
+- [ ] O host pede três músicas: as **três** ficam na fila, sem aviso e sem recusa
+- [ ] O host continua podendo **trocar** o item de qualquer participante **no lugar** (posição e aprovação mantidas) — a regra de "uma ativa" é por participante, e a troca do host é outra operação
+
+**Outro participante**
+
+- [ ] Com duas pessoas no celular, uma pedir não mexe na fila da outra — nem com a mesma sala
+
+**O banco (para quem tem acesso ao Management API)**
+
+- [ ] `node scripts/apply-sql.mjs scripts/smoke-rls-audit.sql 15000` → série **Q**: Q1 entrou · Q2 substituiu e sobrou só a nova · Q3 tocando **recusou** · Q4 a que tocava **continua** · Q5 depois de `played` entrou · Q6 host com 2 de 2 · Q7 a fila do colega intacta; placar **69 casos · 0 falhas · 0 legítimos quebrados**
+- [ ] Legado: agrupar `queue_items` por `room_id + added_by_user_id` sobre as ativas e contar `> 1` → **nenhuma linha** (medido 04/10: zero violações)
+
+> **Limite conhecido, para não confundir com falha:** a identidade do visitante
+> é do **navegador** (`signInAnonymously`). Limpar os dados do site cria uma
+> identidade nova, e o browser dá para apagar a cada pedido — fechar isso é prova
+> de identidade, não uma trigger.
 
 ---
 

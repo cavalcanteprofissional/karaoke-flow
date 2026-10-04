@@ -189,6 +189,34 @@ entregue em `spectator.test.ts`, `queue-actions.test.ts`, `queue-list.test.ts` e
 
 ---
 
+## Adendo 2026-10-04 — Uma música ativa por participante
+
+> **Entregue (migration `20261004000042`)**, e é uma regra de **permissão** como
+> a da Fase 10: o motivo declarado do pedido era um visitante sem login autenticado
+> com várias músicas suas em `ZEHBAR`, e a fila da TV ia Walkman sem que ninguém
+> soubesse qual era o pedido ativo de quem.
+>
+> **Regra:** uma música **ativa** por participante, por sala. Ativa = `pending` +
+> `approved` + `playing` — o que a fila mostra, não um estado novo. Pedir outra
+> **substitui**; pedir com uma **tocando** é **recusado** (trocar a que toca
+> cortaria o áudio da TV), e a vaga abre quando ela vira `played`. Vale para o
+> anônimo, que é usuário Supabase de verdade. O host é isento **na própria sala**.
+>
+> **Sobeu para o banco pelo mesmo motivo da Fase 10:** o pedido é um `INSERT`
+> direto e a policy só exige membro/host — um botão desabilitado seria furado
+> por qualquer chamada autenticada. A trigger roda **sem `security definer`**,
+> porque a policy do autor já autoriza o `delete` da substituição.
+>
+> **A tela avisa nos dois sentidos** (antes e depois), que é a parte que o banco
+> não dá: o aviso cita o **título** da música que sai.
+>
+> **Limite declarado:** a identidade do visitante anônimo é **do navegador** —
+> limpar os dados do site cria outra. Fechar isso é prova de identidade, não uma
+> trigger. Detalhe em [`../flows/fluxos-do-sistema.md`](../flows/fluxos-do-sistema.md)
+> §3.1.2 e roteiro em [`../../TESTING.md`](../../TESTING.md) §3.14.
+
+---
+
 ## Fase 11 — Visibilidade em dois níveis: agregado da sala + detalhe da mesa
 
 **Decidido com o PO (2026-09-25) — D3:** quem está fora do raio (após aprovado
@@ -422,8 +450,9 @@ Fase 9 (toggle + lista) ─→ Fase 10 (permissão sem música)
 | D9  | "Músicas da mesa": join em tempo real ou **coluna desnormalizada** `queue_items.mesa_numero`?                                               | Custo/performance em salas cheias.                 |
 | D10 | A **recompensa** dá badge, desconto no consumo do bar, ou tempo extra de canto?                                                             | Define o valor e amarra a Fase 14 à Fase 15.       |
 | D12 | Pagamento: **assinatura do bar** (mensal) ou **pago pelo participante**? Provedor (Pix/cartão)?                                             | Decide modelo e implementação.                     |
-| D13 | O "teste grátis" é **por bar**, por participante, ou uma janela única do app? E o que é "canto": músicas pedidas ou **minutos**?            | Define o contador e o alarme.                      |
-| D14 | A "distância em metros" da lista do dono: arredondada (100 m, 500 m) ou exata? E quem pode vê-la (só o dono que é o bar? também um gestor?) | Dado sensível; granularidade muda o risco de LGPD. |
+| D13 | Estratégia de conteúdo: manter **YouTube-first** pragmático ou migrar para **catálogo licenciado/híbrido**? (gatilhos + caminho reversível)   | Formalizado em [`ADR-001`](../decisions/ADR-001-youtube-first-vs-licensed-catalog.md); reavaliar por gatilhos comerciais/TOS. |
+| D14 | O "teste grátis" é **por bar**, por participante, ou uma janela única do app? E o que é "canto": músicas pedidas ou **minutos**?            | Define o contador e o alarme.                      |
+| D15 | A "distância em metros" da lista do dono: arredondada (100 m, 500 m) ou exata? E quem pode vê-la (só o dono que é o bar? também um gestor?) | Dado sensível; granularidade muda o risco de LGPD. |
 
 > As Fases 9–15 já estão registradas no `TODO.md` como pendentes, com esses
 > mesmos blocos de decisão.

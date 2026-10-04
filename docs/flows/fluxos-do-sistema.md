@@ -286,6 +286,44 @@ flowchart TD
     I --> J
 ```
 
+### 3.1.2 Uma música ativa por participante — migration `20261004000042` (2026-10-04)
+
+**Regra:** um participante tem no máximo **uma** música **ativa** por sala. Ativa
+não é um estado novo — é exatamente o que a fila mostra
+(`QUEUE_VISIBLE_STATUSES`): `pending` + `approved` + `playing`. `played`,
+`rejected`, `skipped` e `cancelled` são terminais e não ocupam vaga. Pedir outra
+**substitui** a ativa anterior; **pedir com uma tocando é recusado**.
+
+**Por que no banco.** O pedido é um `INSERT` direto em `queue_items` com a sessão
+de quem pede, governado só pela policy `queue_items_insert_member_or_host`. Uma
+regra no botão seria furada por qualquer chamada autenticada. A trigger
+`queue_items_one_active_per_participant` (`before insert`, em `queue_items`) é a
+autoridade:
+
+1. `auth.uid()` nulo → sai fora (seed / Management API / migration).
+2. `is_host(new.room_id, auth.uid())` → sai fora: o host é isento **na sala dele**
+   (`is_host` responde por sala, então dono de uma e participante de outra
+   recebe a regra como participante).
+3. Existe uma `playing` do próprio participante → `raise exception … errcode =
+   'KF001'`. **Não** substitui: cortar o áudio da TV para a música que todo mundo
+   está ouvindo é pior do que recusar o pedido.
+4. `delete` das ativas `pending`/`approved` do próprio participante.
+5. Recontagem: sobrou ativa? → `KF001` também. Sem `security definer`, o
+   `delete` passa pela policy `queue_items_delete_own` (`20260927000031`), que já
+   autoriza o autor sobre o próprio item nesses dois status — RLS real em vez de
+   privilégio novo. Se a RLS barrar, a trigger falha em vez de deixar duas ativas.
+
+**Espelho no app (não é a fonte da verdade):** `resolveOwnActiveSong`
+(`src/lib/rooms/queue.ts`) dá a **mensagem** e permite o aviso prévio da tela;
+`readOwnActiveSong` monta o estado que a busca mostra. A action
+`addSongToQueueAction` lê antes de inserir e mapeia `KF001` para a mesma frase, o
+que cobre a corrida entre a leitura e o INSERT.
+
+**Limite declarado:** o visitante sem login autenticado é usuário Supabase
+anônimo de verdade (`signInAnonymously`), com `auth.uid()` estável **por
+navegador** — limpar os dados do site cria uma identidade nova. Fechar isso é
+prova de identidade, não uma trigger.
+
 ## 3.1.1 Busca de música no YouTube (Fase 4 — implementado)
 
 Rota `/api/youtube/search` consumida pelo `SongSearch` (rota filha `/salas/[codigo]/buscar`). Credencial é resolvida **apenas no servidor** (service role); cache `song_cache` compartilhado entre karaokês; rate limit independente da cota da Google.

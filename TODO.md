@@ -23,6 +23,146 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-10-04, noite)
+
+> ### Fase 8d·ter — uma música ativa por participante (migration `20261004000042`)
+>
+> **O problema reportado:** um visitante **sem login autenticado** entrou em
+> `ZEHBAR` e deixou **várias músicas suas** na fila. A regra pedida: quem não é
+> host tem **no máximo uma música ativa**, e pedir outra substitui a anterior.
+>
+> **"Ativa" não é um estado novo** — é o que a fila já mostra:
+> `QUEUE_VISIBLE_STATUSES` = `pending` + `approved` + `playing`. Quem já ouviu
+> (`played`) não ocupa vaga, e por isso consegue pedir de novo. Essa é a
+> fronteira que os testes de `queue` cobrem de propósito: "qualquer item meu na
+> fila" trancaria o participante para sempre depois da primeira música.
+>
+> **Por que foi para o banco, e não ficou na tela.** O pedido é um `INSERT`
+> direto em `queue_items` com a sessão de quem pede, governado só pela
+> `queue_items_insert_member_or_host`. Botão desabilitado não é regra — é a
+> **terceira** vez que isso aparece nesta fase (a `00040`/`00041` foi a segunda).
+> A trigger `queue_items_one_active_per_participant` é a autoridade.
+>
+> **A decisão que mais importa:** com a música **tocando**, o pedido é
+> **recusado** (`KF001`), não substituído. Trocar a `playing` cortaria o áudio
+> na TV — a música que todo mundo está ouvindo morrindo porque o dono mudou de
+> ideia. Música tocando se resolve com "Pular", do host; a vaga abre quando ela
+> vira `played`.
+>
+> **A trigger roda como invólucro (sem `security definer`) de propósito:** a RLS
+> já autoriza o autor a apagar o próprio item `pending`/`approved`
+> (`queue_items_delete_own`, `20260927000031`). Sem o `definer`, o `delete` passa
+> por essa policy — RLS real em vez de privilégio novo — e sobra exceção `KF001`
+> se sobrar ativa depois (RLS barrou), em vez de fingir que substituiu.
+>
+> **Medido no Cloud `kskoipyzqcacccepcqpc`:**
+>
+> - **Smoke: 69 casos, 0 vermelho, 0 legítimos quebrados** (62 → 69). Série nova
+>   **Q**: Q1 primeira música entra · Q2 pedir de novo substitui e **sobra só a
+>   nova** · Q3 tocando recusa · Q4 a que tocava **não** foi apagada na recusa ·
+>   Q5 depois de `played` o próximo entra · Q6 host mantém várias na própria sala
+>   · Q7 a fila de outro participante não é tocada. `ref` vazio de propósito: as
+>   outras séries apontam para defeito da auditoria F1–F7, e Q é regra de produto.
+> - **Legado: zero violações** no agrupamento `room_id + added_by_user_id` sobre
+>   as ativas — não havia duplicata pendente de limpeza.
+>
+> **Testes:** `queue` +11 (a regra pura com a fronteira dos terminais; o leitor
+> da tela, incluindo que **leitura quebrada não trava ninguém** — a trigger
+> segue sendo o portão), `queue-actions` +4, `song-search` +5. Suíte:
+> **554 → 574 testes / 46 arquivos**. Gates `lint`, `typecheck`, `test`, `build` e
+> `scan:secrets` (258) verdes.
+>
+> **Limite declarado:** o visitante sem login é usuário Supabase **de verdade**
+> (`signInAnonymously`), com `auth.uid()` estável **por navegador**. Limpar os
+> dados do navegador cria uma identidade nova. Fechar isso é prova de identidade,
+> não uma trigger — registrado aqui para não virar surpresa.
+>
+> **Falta:**
+>
+> - [ ] **Validar no aparelho, em `ZEHBAR`:** pedir duas músicas com o celular
+>       anônimo e ver a fila (a antiga some, a nova aparece); pedir de novo com
+>       uma tocando (recusa com a frase); e a troca pelo host, que continua
+>       trocando no lugar.
+> - [ ] Registrar na `Fase 8d` (§`TESTING.md` §3.13) junto com o resto do roteiro.
+>
+> **Nada foi commitado ainda.** O allowlist do OAuth (`uri_allow_list`, 9 entradas
+> com a LAN `192.168.100.28`) e esta migration já estão **aplicados no Cloud**.
+
+## Retomada — contexto da próxima sessão (2026-10-04)
+
+> ### Fase 8d·bis — o P0 que a validação manual encontrou: ninguém entrava em sala
+>
+> A rodada de ontem (2026-10-03) parou no primeiro item de aparelho: **entrar na
+> sala sem login autenticado falhava**, com `invalid input syntax for type integer:
+> "42.4732269333666"`. Não era o apparatus, nem a regra do espectador: era o
+> **gate de presença inteiro quebrado**.
+>
+> **Causa.** `haversineDistanceMeters` devolve float, `checkPresence` repassava
+> sem arredondar, e os dois call sites da entrada (`bars/actions.ts`) mandavam o
+> número cru para o `join_room` — cujo `p_distancia_m` é `int`, alimentando o
+> `distancia_m integer` da migration `20261003000040`. Como 42,47 m é o caso
+> **comum** (só a coordenada idêntica à do bar dá 0 exato), **nenhum participante
+> entrava, dentro ou fora do raio**; o host é isento e por isso nunca passou por
+> ali. Quebrou em 03/10 e ninguém tinha entrado por aparelho desde então.
+>
+> **Conserto.** Arredondar na **origem** (`checkPresence`), não nos dois call
+> sites: `Math.round` uma vez, porque o destino é inteiro e fração de metro não
+> diz nada a uma trava de raio de 50 a 1000 m. `haversineDistanceMeters` continua
+> fracionária (é a medida crua, e `withinRadius` compara com ela). O tipo
+> `distanceMeters` documenta o contrato nos dois ramos.
+>
+> **Auditoria dos outros `int` das RPCs** — `p_distancia_m` era o único buraco:
+> `p_quantidade_mesas`/`p_raio_permitido_metros` e `p_duration_seconds` são
+> `.int()` no zod; `p_mesa` passa por `Number.isInteger` em `parseEntryToken` (um
+> `?mesa=3.7` digitado à mão é descartado, não repassado).
+>
+> **Por que o portão estava verde — e o que isso ensina.** (a) o host é isento e
+> não produz distância; (b) os smokes da 00040 gravam **literal inteiro** ("30 m",
+> "2400 m") porque chamam o SQL direto, sem passar pelo app, que é quem produz o
+> float; (c) o `seed` não escreve `distancia_m`; (d) **a suíte afirmava o
+> contrato errado** — `geo.test.ts` esperava `closeTo(22.24, 1)`, ou seja,
+> *exigia* a fração. É o **terceiro** caso da sessão em que suíte e smokes
+> passavam e só o aparelho achou (403 dos chunks na LAN, clipboard sem secure
+> context, agora a fronteira app→banco). O buraco de cobertura agora tem nome:
+> **nada testava a fronteira app→banco de `distancia_m`**.
+>
+> **Testes:** as duas asserções que exigiam fração passam a exigir `22`, e
+> entram **inteiro nos dois ramos** (`ok` e `outside`) e **sub-metro → `0`**.
+> Suíte: **552 → 554 testes / 46 arquivos**.
+>
+> **Também:** `scan:secrets` estava **vermelho no `HEAD`** por causa da entrada de
+> 03/10 que citava a chave de teste falsa na íntegra (a citação aciona a regra
+> `chave-conhecida`, que por desenho não pula nem documento nem fixture). Literal
+> fora do texto; **a regra não foi tocada**. Voltar a **OK (258 arquivos)**.
+>
+> **Gates:** `lint`, `typecheck`, **554 testes / 46 arquivos**, `build` e
+> `scan:secrets` (258 arquivos) verdes.
+>
+> **Falta (continua não dando para fazer daqui):**
+>
+> - [ ] **Reiniciar `npm run dev`** (o `next.config.ts` só vale no start) e
+>       repetir o §3.13: primeiro o bloco "**dentro** do raio" — que agora dá
+>       para fazer com a coordenada **idêntica** à do bar, distância `0` exato —
+>       e depois o bloco do **espectador**, que só ficou executável com o
+>       conserto (qualquer offset produz float e era recusado pelo banco).
+> - [ ] Registrar os resultados em `TESTING.md` §3.13 / §3.12 / §3.9·quater e
+>       fechar a Fase 8d **só com os itens que passarem** marcados.
+> - [ ] **Rotacionar o link da TV** ("gerar novo link"): um `?token=` real caiu
+>       nesta conversa. Nunca mais colar link de player em log, issue ou doc.
+>
+> **Ruído de dev conhecido (04/10), para não confundir com falha real:** três
+> mensagens do Turbopack em desenvolvimento — `Cannot write to a CLOSED writable
+> stream`, `Failed to fetch RSC payload … enqueueModel is not a function` e o
+> `Fast Refresh` que não completa. São de **geração/cache do RSC** (o grafo de
+> módulos é recompilado na primeira visita a uma rota), não de hydration nem do
+> app: somem com `dev` reiniciado + hard reload + dados do site limpos. Fallback
+> se persistirem: `npm run dev -- --webpack`. Registrado no `CHANGELOG.md` e no
+> `TESTING.md` §3.13 com a tabela ruído × falha real.
+>
+> **Depois da Fase 8d:** Fase 8e — canal de longa duração para fila e playback
+> (`src/lib/rooms/room-channel.ts`, `src/lib/rooms/player-channel.ts`), que hoje
+> são recriados por mutação e morrem com o advisory lock.
+
 ## Retomada — contexto da próxima sessão (2026-10-03, tarde)
 
 > ### Rodada do dia: LAN + a regra do espectador virou regra de banco

@@ -45,6 +45,13 @@ type SongSearchProps = {
   replaceItemId?: string;
   /** Título do item trocado, só para o texto do modal. */
   replaceItemTitle?: string | null;
+  /**
+   * Uma música ativa por participante (migration `20261004000042`). Vem pronto do
+   * servidor (`resolveOwnActiveSong`): `{ playing: true }` trava os botões — é a
+   * sua música tocando e trocá-la cortaria o áudio da TV — e `{ replaced }`
+   * avisa que aquele pedido sai da fila quando o próximo entrar.
+   */
+  ownActiveSong?: { playing: boolean; replacedTitle: string | null };
 };
 
 const DEBOUNCE_MS = 500;
@@ -56,8 +63,15 @@ export function SongSearch({
   requireSongConfirmation,
   replaceItemId,
   replaceItemTitle,
+  ownActiveSong,
 }: SongSearchProps) {
   const isReplace = Boolean(replaceItemId);
+  /**
+   * A trava do player não vale para a troca autorizada (Bloco D): ali quem troca é
+   * o host, ou o próprio autor em item que não está tocando, e a ação segue valendo
+   * — é a fila do participante que a regra limita, não o texto da busca.
+   */
+  const ownSongPlaying = !isReplace && Boolean(ownActiveSong?.playing);
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
@@ -135,6 +149,15 @@ export function SongSearch({
   function handleAdd(video: YouTubeVideo) {
     if (adding) return;
     if (!isReplace && added.has(video.videoId)) return;
+    // Há de vir na prop, mas a trava é repetida aqui: é o botão que a pessoa
+    // realmente toca, e um clique no tempo certo entre o render e o clique
+    // mostraria uma busca que aceita pedidos que o servidor vai recusar.
+    if (ownSongPlaying) {
+      toast.error(
+        "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar."
+      );
+      return;
+    }
     if (requireSongConfirmation || isReplace) {
       setConfirming(video);
       return;
@@ -169,7 +192,17 @@ export function SongSearch({
       void announceQueueChange(roomCode);
       const label =
         result.item.status === "pending" ? "aguardando aprovação do host" : "na fila";
-      toast.success(`${video.title} — ${label}`);
+      /**
+       * O aviso pós-ação cita a música que SAIU, não só a que entrou: sem o
+       * título anterior o participante vê o pedido novo e só percebe a troca
+       * quando a música some da lista. `result.replaced` vem do servidor porque
+       * foi a trigger que apagou — a tela não pode adivinhar o que o banco fez.
+       */
+      toast.success(
+        result.replaced
+          ? `${video.title} — ${label}. “${result.replaced.title}” saiu da fila: cada participante tem uma música ativa por vez.`
+          : `${video.title} — ${label}`
+      );
       // Não empurra mais para o player: pedir música não é "assistir". Quem pede
       // volta para a tela da mesa, onde vê a fila realtime, o status do pedido e
       // o botão de abrir o player — e quem não quiser assistir, não é levado.
@@ -254,13 +287,19 @@ export function SongSearch({
                     <Button
                       size="icon"
                       onClick={() => handleAdd(video)}
-                      disabled={adding === video.videoId}
+                      disabled={adding === video.videoId || ownSongPlaying}
                       aria-label={
                         isReplace
                           ? `Trocar por ${video.title}`
                           : `Adicionar ${video.title} à fila`
                       }
-                      title={isReplace ? "Trocar por esta música" : "Adicionar à fila"}
+                      title={
+                        ownSongPlaying
+                          ? "Você já tem uma música tocando nesta sala"
+                          : isReplace
+                            ? "Trocar por esta música"
+                            : "Adicionar à fila"
+                      }
                     >
                       {adding === video.videoId ? (
                         <LoaderCircle className="size-4 animate-spin" />
@@ -321,6 +360,51 @@ export function SongSearch({
               </Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/**
+       * Aviso ANTES da ação (a escolha do usuário foi avisar nos dois momentos):
+       * quando existe uma ativa, o próximo pedido sai da fila. Sem esta frase a
+       * substituição só apareceria no toast depois do clique, e a pessoa já teria
+       * clicado achando que as duas iam tocar.
+       */}
+      {!isReplace && !ownActiveSong?.playing && ownActiveSong?.replacedTitle && (
+        <div
+          className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
+          data-testid="aviso-substituicao"
+        >
+          <Repeat2 className="mt-0.5 size-4 shrink-0 text-amber-400" />
+          <p>
+            Você já tem{" "}
+            <span className="text-foreground font-medium">
+              {ownActiveSong.replacedTitle}
+            </span>{" "}
+            na fila. Pedir outra música substitui esse pedido — cada participante
+            tem uma música ativa por vez.
+          </p>
+        </div>
+      )}
+
+      {ownSongPlaying && (
+        <div
+          className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
+          data-testid="aviso-tocando"
+        >
+          <Music2 className="mt-0.5 size-4 shrink-0 text-amber-400" />
+          <p>
+            {ownActiveSong?.replacedTitle ? (
+              <>
+                <span className="text-foreground font-medium">
+                  {ownActiveSong.replacedTitle}
+                </span>{" "}
+                está tocando agora.
+              </>
+            ) : (
+              "Sua música está tocando agora."
+            )}{" "}
+            Dá para pedir outra quando ela terminar.
+          </p>
         </div>
       )}
 

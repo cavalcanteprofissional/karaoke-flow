@@ -270,3 +270,97 @@ describe("SongSearch — modo troca (Bloco D)", () => {
     expect(mocks.announceQueueChange).toHaveBeenCalledWith("KARAOKE");
   });
 });
+
+/**
+ * A regra de "uma música ativa por participante" (migration `20261004000042`)
+ * tem duas metades: o banco decide, e a tela **avisa**. Este bloco cobre a
+ * segunda. O que NÃO está aqui, e por quê: a decisão final — a action e a
+ * trigger recusam de qualquer jeito (`queue-actions.test.ts` e a série Q do smoke
+ * cobrem isso), então um teste de tela "provando a regra" provaria a coisa errada.
+ */
+describe("SongSearch — uma música ativa por participante", () => {
+  /** Busca na API (debounce de 500 ms) e devolve o botão de adicionar. */
+  async function searchAndGetAddButton() {
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    return screen.getByRole("button", { name: `Adicionar ${VIDEO.title} à fila` });
+  }
+
+  it("avisa ANTES que o próximo pedido substitui a música que está na fila", async () => {
+    renderSearch({ ownActiveSong: { playing: false, replacedTitle: "Já pedi essa" } });
+
+    const aviso = screen.getByTestId("aviso-substituicao");
+    expect(aviso).toHaveTextContent("Já pedi essa");
+    expect(aviso).toHaveTextContent("substitui esse pedido");
+    // O aviso informa, não impede: ainda dá para pedir.
+    expect(await searchAndGetAddButton()).toBeEnabled();
+  });
+
+  it("depois do pedido, o toast nomeia a música que saiu da fila", async () => {
+    mocks.addSongToQueueAction.mockResolvedValue({
+      ok: true,
+      item: { status: "pending" },
+      replaced: { id: "item-1", title: "Já pedi essa" },
+    });
+    renderSearch({ ownActiveSong: { playing: false, replacedTitle: "Já pedi essa" } });
+
+    fireEvent.click(await searchAndGetAddButton());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const texto = mocks.toast.success.mock.calls[0][0] as string;
+    expect(texto).toContain(VIDEO.title);
+    expect(texto).toContain("Já pedi essa");
+    expect(texto).toContain("saiu da fila");
+  });
+
+  it("com a música tocando, trava o botão e explica que é para esperar", async () => {
+    renderSearch({ ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" } });
+
+    const aviso = screen.getByTestId("aviso-tocando");
+    expect(aviso).toHaveTextContent("Tocando pra mim");
+    expect(aviso).toHaveTextContent("quando ela terminar");
+    expect(await searchAndGetAddButton()).toBeDisabled();
+    // Nada de aviso de substituição: só uma regra por vez.
+    expect(screen.queryByTestId("aviso-substituicao")).toBeNull();
+  });
+
+  it("sem música ativa, nenhum aviso aparece — o caso comum não muda", async () => {
+    renderSearch({ ownActiveSong: { playing: false, replacedTitle: null } });
+
+    expect(screen.queryByTestId("aviso-substituicao")).toBeNull();
+    expect(screen.queryByTestId("aviso-tocando")).toBeNull();
+
+    fireEvent.click(await searchAndGetAddButton());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.addSongToQueueAction).toHaveBeenCalled();
+    expect(mocks.toast.success.mock.calls[0][0] as string).not.toContain("saiu da fila");
+  });
+
+  it("a troca autorizada ignora a trava — ali o limite é outro", async () => {
+    renderSearch({
+      replaceItemId: "item-1",
+      replaceItemTitle: "Tocando pra mim",
+      ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" },
+    });
+
+    // Sem botão de adicionar e sem o aviso de "toca agora": a trava é do pedido.
+    expect(screen.queryByRole("button", { name: /Adicionar/ })).toBeNull();
+    expect(screen.queryByTestId("aviso-tocando")).toBeNull();
+
+    fireEvent.click(await searchAndGetReplaceButton());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Trocar" }));
+    });
+
+    expect(mocks.replaceQueueSongAction).toHaveBeenCalled();
+  });
+});

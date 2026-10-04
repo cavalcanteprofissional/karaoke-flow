@@ -29,6 +29,8 @@ type Result = {
 const mocks = vi.hoisted(() => ({
   results: {} as Record<string, Result>,
   log: [] as { op: string; select: string; eq: [string, unknown][] }[],
+  /** Filtros `.in()` das leituras em lista (itens ativos do próprio usuário). */
+  ins: [] as [string, unknown][],
   revalidate: [] as string[],
   /** Cookies do request (`kf-geo`): o gate de presença lê daqui. */
   cookies: new Map<string, { value: string }>(),
@@ -49,6 +51,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 function installSupabase() {
   mocks.log.length = 0;
+  mocks.ins.length = 0;
   mocks.user = HOST;
   mocks.client = {
     auth: { getUser: async () => ({ data: { user: { id: mocks.user } }, error: null }) },
@@ -56,6 +59,7 @@ function installSupabase() {
       let mode: "read" | "write" = "read";
       let selected = "";
       const eqs: [string, unknown][] = [];
+      const ins: [string, unknown][] = [];
       const api: Record<string, unknown> = {
         select(cols: string) {
           selected = cols;
@@ -69,6 +73,22 @@ function installSupabase() {
         eq(col: string, value: unknown) {
           eqs.push([col, value]);
           return api;
+        },
+        /** Leitura em lista (a dos itens ativos do próprio usuário). */
+        in(col: string, value: unknown) {
+          ins.push([col, value]);
+          return api;
+        },
+        /** Awaits em modo leitura resolvem a lista — é como o PostgREST se comporta. */
+        then(
+          onFulfilled: (value: Result) => unknown,
+          onRejected?: (reason: unknown) => unknown
+        ) {
+          mocks.log.push({ op: "list", select: selected, eq: eqs });
+          mocks.ins.push(...ins);
+          return Promise.resolve(
+            mocks.results[`${table}.list`] ?? { data: [], error: null }
+          ).then(onFulfilled, onRejected);
         },
         maybeSingle() {
           mocks.log.push({ op: "select", select: selected, eq: eqs });
@@ -84,8 +104,9 @@ function installSupabase() {
           mode = "write";
           return api;
         },
-        insert() {
+        insert(cols: Record<string, unknown> = {}) {
           mode = "write";
+          mocks.log.push({ op: "insert", select: selected, eq: Object.entries(cols) });
           return api;
         },
       };
@@ -114,7 +135,14 @@ beforeEach(() => {
  */
 describe("addSongToQueueAction", () => {
   const GUEST = "00000000-0000-0000-0000-000000000002";
+  const OWN_ITEM = "44444444-4444-4444-8444-444444444444";
   const INSERTED = [{ id: "item-novo", status: "pending", position: 1 }];
+  /**
+   * A MESMA frase da action (`queue-actions.ts`) e da regra pura (`queue.ts`) — se
+   * uma mudar, o usuário passa a ver duas recusas diferentes para o mesmo caso.
+   */
+  const OWN_SONG_PLAYING_ERROR =
+    "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar.";
   const SONG = {
     roomCode: ROOM.code,
     video: {
@@ -155,7 +183,11 @@ describe("addSongToQueueAction", () => {
 
     const result = await addSongToQueueAction(SONG);
 
-    expect(result).toEqual({ ok: true, item: { status: "pending", position: 1 } });
+    expect(result).toEqual({
+      ok: true,
+      item: { status: "pending", position: 1 },
+      replaced: null,
+    });
     // O estado efetivo vem de member_entry_state, não de room_members cru.
     expect(mocks.log.map((entry) => entry.select)).toContain("member_entry_state");
   });
@@ -196,8 +228,114 @@ describe("addSongToQueueAction", () => {
 
     const result = await addSongToQueueAction(SONG);
 
-    expect(result).toEqual({ ok: true, item: { status: "pending", position: 1 } });
+    expect(result).toEqual({
+      ok: true,
+      item: { status: "pending", position: 1 },
+      replaced: null,
+    });
     expect(mocks.log.map((entry) => entry.select)).not.toContain("member_entry_state");
+  });
+
+  /**
+   * A regra de "uma música ativa por participante" (migration `20261004000042`).
+   * A autoridade é a trigger; estas são as portas da aplicação — e a última traz o
+   * caso que só o banco consegue responder: a música começou a tocar entre a
+   * leitura e o INSERT, e aí quem recusa é a trigger com `KF001`.
+   */
+  describe("uma música ativa por participante", () => {
+    const ativas = (status: string, id: string, position: number) => ({
+      id,
+      title: `Música ${id.slice(0, 4)}`,
+      status,
+      position,
+    });
+
+    it("participante com uma pending recebe o pedido e ela é anunciada como substituída", async () => {
+      mocks.user = GUEST;
+      installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+      dentroDoRaio();
+      entryState({ status: "approved", fora_do_raio: false });
+      mocks.results["queue_items.list"] = {
+        data: [ativas("pending", OWN_ITEM, 3)],
+        error: null,
+      };
+
+      const result = await addSongToQueueAction(SONG);
+
+      expect(result).toEqual({
+        ok: true,
+        item: { status: "pending", position: 1 },
+        replaced: { id: OWN_ITEM, title: "Música 4444" },
+      });
+      // A leitura é dos PRÓPRIOS itens e só dos ativos: os `played` não ocupam vaga.
+      const leitura = mocks.log.find((entry) => entry.op === "list");
+      expect(leitura?.eq).toEqual(
+        expect.arrayContaining([
+          ["room_id", ROOM_ID],
+          ["added_by_user_id", GUEST],
+        ])
+      );
+      expect(mocks.ins).toContainEqual(["status", ["pending", "approved", "playing"]]);
+    });
+
+    it("participante com uma tocando é recusado sem tentar inserir", async () => {
+      mocks.user = GUEST;
+      installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+      dentroDoRaio();
+      entryState({ status: "approved", fora_do_raio: false });
+      mocks.results["queue_items.list"] = {
+        data: [ativas("playing", OWN_ITEM, 1)],
+        error: null,
+      };
+
+      const result = await addSongToQueueAction(SONG);
+
+      expect(result).toEqual({
+        ok: false,
+        error: OWN_SONG_PLAYING_ERROR,
+        code: "SONG_PLAYING",
+      });
+      // Nenhum INSERT saiu: recusar antes de escrever é o que impede o item duplicado.
+      expect(mocks.log.some((entry) => entry.op === "list")).toBe(true);
+      expect(mocks.log.some((entry) => entry.op === "insert")).toBe(false);
+      expect(mocks.revalidate).toEqual([]);
+    });
+
+    it("KF001 da trigger vira a mesma recusa — a corrida entre ler e inserir", async () => {
+      mocks.user = GUEST;
+      installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+      dentroDoRaio();
+      entryState({ status: "approved", fora_do_raio: false });
+      mocks.results["queue_items.list"] = { data: [], error: null };
+      mocks.results["queue_items.select"] = {
+        data: null,
+        error: {
+          code: "KF001",
+          message: OWN_SONG_PLAYING_ERROR,
+        },
+      };
+
+      const result = await addSongToQueueAction(SONG);
+
+      expect(result).toEqual({
+        ok: false,
+        error: OWN_SONG_PLAYING_ERROR,
+        code: "SONG_PLAYING",
+      });
+    });
+
+    it("o host não gasta leitura: nenhuma música dele é substituída", async () => {
+      installRoom(null);
+
+      const result = await addSongToQueueAction(SONG);
+
+      expect(result).toEqual({
+        ok: true,
+        item: { status: "pending", position: 1 },
+        replaced: null,
+      });
+      expect(mocks.log.some((entry) => entry.op === "list")).toBe(false);
+    });
   });
 });
 

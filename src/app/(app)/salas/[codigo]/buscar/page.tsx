@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
 import { canRequestSongs } from "@/lib/rooms/spectator";
+import { readOwnActiveSong } from "@/lib/rooms/queue-actions";
 import type { MemberStatus } from "@/types/room";
 
 type BuscarPageProps = {
@@ -166,6 +167,16 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
     }
   }
 
+  /**
+   * Uma música ativa por participante (migration `20261004000042`). O estado vem
+   * do servidor pelo mesmo leitor que a action usa, para que o aviso da tela e a
+   * regra do servidor não contem histórias diferentes. `reading` (não-detectado)
+   * fica fora: aí a tela não trava ninguém, e a trigger ainda recusa no banco.
+   */
+  const ownActiveSong = replaceItem
+    ? undefined
+    : await readOwnActiveSong({ supabase, roomId: room.id, userId: user.id, isHost });
+
   return (
     <div className="flex flex-col gap-4">
       <BackLink code={code} />
@@ -182,7 +193,9 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
           <CardDescription>
             {replaceItem
               ? "Escolha a música que substitui a atual. A posição na fila e a aprovação são mantidas."
-              : "Pesquise no YouTube e adicione à fila. A duração e a miniatura aparecem automaticamente."}
+              : ownActiveSong?.playing
+                ? "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar."
+                : "Pesquise no YouTube e adicione à fila. A duração e a miniatura aparecem automaticamente."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -193,6 +206,12 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
             requireSongConfirmation={room.require_song_confirmation}
             replaceItemId={replaceItem?.id}
             replaceItemTitle={replaceItem?.title ?? null}
+            ownActiveSong={
+              ownActiveSong && {
+                playing: ownActiveSong.playing,
+                replacedTitle: ownActiveSong.title,
+              }
+            }
           />
         </CardContent>
       </Card>

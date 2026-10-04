@@ -1229,6 +1229,192 @@ v_n := 0;
   -- Limpeza do item criado pelo S2 (o rollback desfaz, mas deixar explícito
   -- mantém o smoke legível para quem roda por partes).
   delete from public.queue_items where room_id = v_room_a and youtube_video_id = 'smokeS';
+
+  ------------------------------------------------------------------
+  -- Q — "uma música ativa por participante" (migration 00042)
+  --
+  -- A UI avisa e a action recusa, mas quem garante é a trigger: o pedido é um
+  -- INSERT direto com a sessão de quem pede, governado só pela
+  -- `queue_items_insert_member_or_host`. Estes casos contam LINHAS depois do
+  -- INSERT, porque "não exception" provaria pouco — a trigger precisa deixar
+  -- exatamente uma ativa, e a que ficou tem que ser a nova.
+  --
+  -- A coluna `ref` fica VAZIA de propósito nesta série: as outras apontam para
+  -- um defeito da auditoria F1–F7 (docs/engenharia/auditoria-rls.md), e a Q é uma
+  -- regra de produto nova, não um achado de auditoria.
+  --
+  -- A identidade é a de um participante real da sala (`v_membro`), e a limpeza
+  -- é por `youtube_video_id` para não encostar na fila do domínio.
+  ------------------------------------------------------------------
+
+  -- Q1 LEGITIMO (o caminho feliz, e o que a regra NÃO pode quebrar): o
+  -- participante pede a primeira vez e a música entra como estava.
+  v_n := 1; v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_membro, 'smokeQ1', 'Smoke Q1');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_txt := sqlerrm;
+  end;
+  select count(*) into v_n from public.queue_items
+   where room_id = v_room_a and added_by_user_id = v_membro
+     and youtube_video_id = 'smokeQ1';
+  insert into smoke_rls values ('Q1 primeira musica do participante entra',
+    'LEGITIMO', '',
+    case when v_txt = '' then v_n::text || ' linha(s)' else v_txt end,
+    v_n = 1);
+
+  -- Q2 ATAQUE: pedir de NOVO enquanto a primeira está na fila. A trigger apaga
+  -- a antiga e deixa só a nova — e o smoke mede as DUAS coisas: quantas ativas
+  -- sobraram, e se a que sobrou é a nova. Uma trigger que apenas recusasse
+  -- (ou que deixasse as duas) deixaria este caso vermelho.
+  v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_membro, 'smokeQ2', 'Smoke Q2');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_txt := sqlerrm;
+  end;
+  select count(*) into v_n from public.queue_items
+   where room_id = v_room_a and added_by_user_id = v_membro
+     and status in ('pending', 'approved', 'playing');
+  if v_n = 1 then
+    v_ok := exists (select 1 from public.queue_items
+                     where room_id = v_room_a and added_by_user_id = v_membro
+                       and youtube_video_id = 'smokeQ2');
+  else
+    v_ok := false;
+  end if;
+  insert into smoke_rls values ('Q2 pedir de novo substitui a musica ativa',
+    'ATAQUE', '',
+    case when v_txt = ''
+         then v_n::text || ' ativa(s) sobrando' || case when v_ok then ' (a nova)' else '' end
+         else v_txt end,
+    v_n = 1 and v_ok);
+
+  -- Q3 ATAQUE: com a música TOCANDO, o novo pedido é recusado — trocar cortaria
+  -- o áudio na TV. O estado `playing` é posto como `postgres` (é o que o player
+  -- faz pela RPC) e o INSERT vem na sessão do participante, para que a única
+  -- coisa em teste seja a trigger.
+  update public.queue_items
+     set status = 'playing'
+   where room_id = v_room_a and youtube_video_id = 'smokeQ2';
+  v_n := 0; v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_membro, 'smokeQ3', 'Smoke Q3');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_txt := sqlerrm;
+  end;
+  -- Nenhuma linha nova pode existir: a recusa tem de ser no INSERT.
+  select count(*) into v_n from public.queue_items
+   where room_id = v_room_a and added_by_user_id = v_membro
+     and youtube_video_id = 'smokeQ3';
+  insert into smoke_rls values ('Q3 musica tocando recusa o novo pedido',
+    'ATAQUE', '',
+    case when v_txt = ''
+         then v_n::text || ' linha(s) inserida(s) apesar de haver uma tocando'
+         else 'recusado: ' || v_txt end,
+    v_n = 0);
+
+  -- Q4 ATAQUE: a `playing` continua INTACTA depois da recusa. Um `delete` antes
+  -- do `raise` produziria uma sala silenciosa — todo mundo achando que a música
+  -- tinha acabado, e ninguém tocando.
+  v_n := 0;
+  select count(*) into v_n from public.queue_items
+   where room_id = v_room_a and added_by_user_id = v_membro
+     and youtube_video_id = 'smokeQ2' and status = 'playing';
+  insert into smoke_rls values ('Q4 a musica que tocava nao e apagada na recusa',
+    'ATAQUE', '',
+    v_n::text || ' linha(s) playing sobreviventes', v_n = 1);
+
+  -- Q5 LEGITIMO: quando a tocando vira `played`, a vaga abre. É o par do Q3 — sem
+  -- ele, "recusar sempre" também deixaria este smoke verde.
+  update public.queue_items set status = 'played'
+   where room_id = v_room_a and youtube_video_id = 'smokeQ2';
+  v_n := 0; v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_membro || '","role":"authenticated"}', true);
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_membro, 'smokeQ5', 'Smoke Q5');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_txt := sqlerrm;
+  end;
+  select count(*) into v_n from public.queue_items
+   where room_id = v_room_a and added_by_user_id = v_membro
+     and youtube_video_id = 'smokeQ5';
+  insert into smoke_rls values ('Q5 depois de played o proximo pedido entra',
+    'LEGITIMO', '',
+    case when v_txt = '' then v_n::text || ' linha(s)' else v_txt end,
+    v_n = 1);
+
+  -- Q6 LEGITIMO: o host não tem limite na PRÓPRIA sala. Duas pending dele, e as
+  -- duas ficam — a regra do host é isenção, não "uma por vez".
+  v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_host_a || '","role":"authenticated"}', true);
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_host_a, 'smokeQ6a', 'Smoke Q6a');
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_host_a, 'smokeQ6b', 'Smoke Q6b');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_txt := sqlerrm;
+  end;
+  select count(*) into v_n from public.queue_items
+   where room_id = v_room_a and added_by_user_id = v_host_a
+     and youtube_video_id in ('smokeQ6a', 'smokeQ6b');
+  insert into smoke_rls values ('Q6 host mantem varias musicas na propria sala',
+    'LEGITIMO', '',
+    case when v_txt = '' then v_n::text || ' linha(s) de 2' else v_txt end,
+    v_n = 2);
+
+  -- Q7 ATAQUE: a regra é POR SALA, não por pessoa. `v_colega` é outro
+  -- participante de KARAOKE e tem a MESMA sala — pedir o dele não pode tocar na
+  -- fila do `v_membro` (que tem uma ativa). Se a trigger filtrasse só por
+  -- `added_by_user_id` sem `room_id`, este caso viraria a reddish do grupo.
+  v_txt := '';
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims',
+      '{"sub":"' || v_colega || '","role":"authenticated"}', true);
+    insert into public.queue_items (room_id, added_by_user_id, youtube_video_id, title)
+    values (v_room_a, v_colega, 'smokeQ7', 'Smoke Q7');
+    set local role postgres;
+  exception when others then
+    set local role postgres; v_txt := sqlerrm;
+  end;
+  v_n := 0;
+  select count(*) into v_n from public.queue_items
+   where room_id = v_room_a and added_by_user_id = v_membro
+     and youtube_video_id = 'smokeQ5';
+  insert into smoke_rls values ('Q7 a fila de outro participante nao e tocada',
+    'ATAQUE', '',
+    case when v_txt = ''
+         then v_n::text || ' linha(s) do membro sobreviveram'
+         else v_txt end,
+    v_n = 1);
+
+  delete from public.queue_items
+   where room_id = v_room_a
+     and youtube_video_id in ('smokeQ1','smokeQ2','smokeQ3','smokeQ5','smokeQ6a','smokeQ6b','smokeQ7');
 end;
 $$;
 

@@ -252,6 +252,73 @@ export function buildQueueRemoval(ctx: QueueRemovalContext): QueueRemovalResult 
   return { ok: true, itemId: id.data };
 }
 
+/**
+ * Um participante tem no máximo UMA música **ativa** por sala (migration
+ * `20261004000042`): `pending` + `approved` + `playing`, que é exatamente
+ * `QUEUE_VISIBLE_STATUSES` — o que a fila mostra. Quem já `played`,
+ * `rejected`, `skipped` ou `cancelled` não ocupa vaga, e é por isso que dá para
+ * pedir de novo depois de a música terminar.
+ *
+ * O host é a exceção, e **só na sala dele**: `isHost` aqui é o dono DAQUELA
+ * sala, então quem é dono de uma e participante de outra recebe a regra como
+ * participante. O visitante anônimo também entra: ele é um usuário autenticado de
+ * verdade (`signInAnonymously`, `login-form.tsx`), com id estável por navegador,
+ * então a regra pega anônimo e autenticado pelo mesmo caminho.
+ *
+ * Por que isso é espelho de uma trigger e não a fonte da verdade: a trigger
+ * `queue_items_one_active_per_participant` é quem garante no banco (o INSERT é
+ * direto e a policy não contém esta regra). Esta função existe para dar a
+ * **mensagem certa** e para a tela avisar antes — mesma divisão de trabalho de
+ * `buildQueueRemoval` com a policy `queue_items_delete_own`.
+ *
+ * E por que a música `playing` **recusa** em vez de ser substituída: trocá-la
+ * cortaria o áudio na TV, matando a música que todo mundo está ouvindo porque o
+ * dono dela mudou de ideia. Música tocando não se cancela da fila — se pula, e
+ * quem pulou é o host.
+ */
+export type OwnActiveSongContext = {
+  isHost: boolean;
+  /** Itens do próprio usuário nesta sala, em qualquer estado da fila. */
+  ownSongs: { id: string; title: string; status: string; position: number }[];
+};
+
+export type OwnActiveSongResult =
+  /** `replaced` é a música que sai da fila: o aviso "a anterior foi substituída" depende dela. */
+  | { ok: true; replaced: { id: string; title: string } | null }
+  | { ok: false; error: string; code: string };
+
+/** Não-entra: status terminais (`played`, `rejected`, `skipped`, `cancelled`). */
+function isActiveSong(status: string): boolean {
+  return QUEUE_VISIBLE_STATUSES.includes(status as QueueItemStatus);
+}
+
+export function resolveOwnActiveSong(ctx: OwnActiveSongContext): OwnActiveSongResult {
+  // Host: quantas quiser, na própria sala.
+  if (ctx.isHost) return { ok: true, replaced: null };
+
+  const mine = ctx.ownSongs
+    .filter((song) => isActiveSong(song.status))
+    .sort((a, b) => a.position - b.position);
+
+  const tocando = mine.find((song) => song.status === "playing");
+  if (tocando) {
+    return {
+      ok: false,
+      error:
+        "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar.",
+      code: "SONG_PLAYING",
+    };
+  }
+
+  // Mais antiga entre as que não tocam. Se houver legado com várias ativas, a
+  // trigger apaga todas e sobra só o pedido novo — aqui o aviso cita a primeira.
+  const substituivel = mine[0] ?? null;
+  return {
+    ok: true,
+    replaced: substituivel ? { id: substituivel.id, title: substituivel.title } : null,
+  };
+}
+
 export type QueueStatusView = {
   label: string;
   variant: "default" | "secondary" | "outline" | "destructive";

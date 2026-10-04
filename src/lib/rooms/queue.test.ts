@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { BarLocation } from "@/lib/bars/geo";
 import {
@@ -9,10 +9,12 @@ import {
   composeQueueOrder,
   moveQueueItem,
   reorderSchema,
+  resolveOwnActiveSong,
   QUEUE_ITEM_STATUSES,
   QUEUE_VISIBLE_STATUSES,
   queueStatusView,
 } from "./queue";
+import { readOwnActiveSong } from "./queue-actions";
 
 const BAR: BarLocation = {
   latitude: -23.5613,
@@ -406,6 +408,158 @@ describe("buildQueueSongReplacement (Bloco D)", () => {
       buildQueueSongReplacement(context({ input: { video: { ...VIDEO, title: "  " } } }))
     ).toMatchObject({
       code: "VALIDATION",
+    });
+  });
+});
+
+/**
+ * `readOwnActiveSong` — o leitor que alimenta o aviso da tela de busca. Aqui o
+ * contrato é outro do da regra pura: o que interessa é **o título que o usuário
+ * vai ler**. Uma falha de leitura precisa devolver `undefined` (ninguém fica
+ * travado por causa de rede) e nunca um título inventado.
+ */
+describe("readOwnActiveSong (aviso da tela de busca)", () => {
+  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+  function fakeSupabase(result: { data: unknown } | { error: unknown }) {
+    const spy = vi.fn().mockReturnValue(result);
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ eq: () => ({ in: () => Promise.resolve(result) }) }),
+        }),
+      }),
+      spy,
+    };
+  }
+
+  it("traz o título da que está tocando", async () => {
+    const supabase = fakeSupabase({ data: [song("Tocando agora", "playing")] });
+    await expect(
+      readOwnActiveSong({
+        supabase: supabase as never,
+        roomId: "sala",
+        userId: "visitante",
+        isHost: false,
+      })
+    ).resolves.toEqual({ playing: true, title: "Tocando agora" });
+  });
+
+  it("com uma pendente, avisa que o próximo pedido substitui — sem travar", async () => {
+    const supabase = fakeSupabase({ data: [song("Já pedi essa", "pending")] });
+    await expect(
+      readOwnActiveSong({
+        supabase: supabase as never,
+        roomId: "sala",
+        userId: "visitante",
+        isHost: false,
+      })
+    ).resolves.toEqual({ playing: false, title: "Já pedi essa" });
+  });
+
+  it("sem nada na fila, não há aviso nenhum", async () => {
+    const supabase = fakeSupabase({ data: [] });
+    await expect(
+      readOwnActiveSong({
+        supabase: supabase as never,
+        roomId: "sala",
+        userId: "visitante",
+        isHost: false,
+      })
+    ).resolves.toEqual({ playing: false, title: null });
+  });
+
+  it("o host nunca é avisado (não tem limite na própria sala)", async () => {
+    const supabase = fakeSupabase({ data: [song("minha", "playing")] });
+    await expect(
+      readOwnActiveSong({
+        supabase: supabase as never,
+        roomId: "sala",
+        userId: "host",
+        isHost: true,
+      })
+    ).resolves.toEqual({ playing: false, title: null });
+    expect(supabase.spy).not.toHaveBeenCalled();
+  });
+
+  it("leitura quebrada não trava ninguém: a trigger segue sendo o portão", async () => {
+    const supabase = fakeSupabase({ error: { message: "timeout" } });
+    await expect(
+      readOwnActiveSong({
+        supabase: supabase as never,
+        roomId: "sala",
+        userId: "visitante",
+        isHost: false,
+      })
+    ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * `resolveOwnActiveSong` — a regra de "uma música ativa por participante"
+ * (migration `20261004000042`). Aqui o que importa é a **fronteira**: o que
+ * ocupa vaga e o que não ocupa. Sem o teste de `played`, um dia alguém "simplifica"
+ * a regra para "qualquer item meu na fila" e o participante fica trancado para
+ * sempre depois da primeira música.
+ */
+describe("resolveOwnActiveSong (uma música ativa por participante)", () => {
+  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+  const ctx = (over: Partial<Parameters<typeof resolveOwnActiveSong>[0]> = {}) => ({
+    isHost: false,
+    ownSongs: [] as { id: string; title: string; status: string; position: number }[],
+    ...over,
+  });
+
+  it("sem nada na fila, nada é substituído", () => {
+    expect(resolveOwnActiveSong(ctx())).toEqual({ ok: true, replaced: null });
+  });
+
+  it("devolve a mais antiga entre as ativas, para o aviso dizer qual saiu", () => {
+    const result = resolveOwnActiveSong(
+      ctx({ ownSongs: [song("b", "pending", 5), song("a", "approved", 2)] })
+    );
+    expect(result).toEqual({ ok: true, replaced: { id: "a", title: "a" } });
+  });
+
+  it("uma tocando recusa, e recusa vence a troca (a TV não é cortada)", () => {
+    const result = resolveOwnActiveSong(
+      ctx({ ownSongs: [song("velha", "pending", 1), song("tocando", "playing", 2)] })
+    );
+    expect(result).toMatchObject({ ok: false, code: "SONG_PLAYING" });
+    if (!result.ok) expect(result.error).toContain("já tem uma música tocando");
+  });
+
+  it("quem já ouviu não ocupa vaga: terminal é exatamente o inverso de ativo", () => {
+    const terminais = ["played", "rejected", "skipped", "cancelled"];
+    expect(
+      terminais.every((status) => !QUEUE_VISIBLE_STATUSES.includes(status as never))
+    ).toBe(true);
+    expect(
+terminais.every(
+        (status) => resolveOwnActiveSong(ctx({ ownSongs: [song("antiga", status)] })).ok
+      )
+    ).toBe(true);
+  });
+
+  it("cada status visível ocupa vaga, inclusive o approved esperando o host", () => {
+    for (const status of QUEUE_VISIBLE_STATUSES) {
+      if (status === "playing") continue;
+      expect(resolveOwnActiveSong(ctx({ ownSongs: [song("minha", status)] }))).toEqual({
+        ok: true,
+        replaced: { id: "minha", title: "minha" },
+      });
+    }
+  });
+
+  it("o host não tem limite — nem para tocar, nem para acumular", () => {
+    const lotacao = [
+      song("1", "pending"),
+      song("2", "approved"),
+      song("3", "playing"),
+      song("4", "playing"),
+    ];
+    expect(resolveOwnActiveSong(ctx({ isHost: true, ownSongs: lotacao }))).toEqual({
+      ok: true,
+      replaced: null,
     });
   });
 });

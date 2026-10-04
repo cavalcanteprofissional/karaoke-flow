@@ -13,6 +13,13 @@ export type PresenceDecision =
        * Distância medida até o bar, quando deu para medir (host não mede: é
        * isento). É o que o `join_room` grava em `room_members.distancia_m` para o
        * contador do host — a decisão que o browser tomou vira número consultável.
+       *
+       * **Metros inteiros, sempre.** A coluna é `integer` e o parâmetro da RPC
+       * é `int` (migration `20261003000040`): mandar `42.4732…` recusa a entrada
+       * com `invalid input syntax for type integer` — ou seja, o erro não era de
+       * "quem está fora", era de **todo mundo que não fosse o host** (o host é
+       * isento e não produz distância). Ver `haversineDistanceMeters`, que
+       * continua fracionária por ser a medida crua.
        */
       distanceMeters?: number;
     }
@@ -23,7 +30,7 @@ export type PresenceDecision =
       error: string;
       /** Sinaliza o client para oferecer o fluxo de "permitir localização de novo". */
       geoRequired: true;
-      /** Só o `outside` tem número: sem coordenada dos dois lados não há o que medir. */
+      /** Só o `outside` tem número: sem coordenada dos dois lados não há o que medir. Inteiro, como no `ok`. */
       distanceMeters?: number;
     };
 
@@ -146,6 +153,13 @@ export function isOutsideBar(presence?: PresenceDecision): presence is OutsideDe
  * A distância sai junto da decisão quando dá para medir: quem decide de fora
  * precisa saber *quanto* longe está, e é ela que o `join_room` persiste em
  * `room_members.distancia_m` para o contador do host.
+ *
+ * **O arredondamento é aqui, e não nos chamadores.** A decisão é arredondada uma
+ * vez porque o destino é inteiro (`distancia_m integer`, `p_distancia_m int` na
+ * migration `20261003000040`) e a medida crua do haversine nunca é — 42,47 m é o
+ * caso comum, não o raro. Arredondar nos dois call sites da entrada resolveria o
+ * erro de hoje e deixaria a próxima porta aberta; a fração de metro não diz nada
+ * a uma trava de atrito com raio de 50 a 1000 m, então ela não se perde.
  */
 export function checkPresence(params: {
   isHost: boolean;
@@ -165,7 +179,7 @@ export function checkPresence(params: {
     };
   }
 
-  const distanceMeters = haversineDistanceMeters(userCoords, barCoords);
+  const distanceMeters = Math.round(haversineDistanceMeters(userCoords, barCoords));
 
   if (distanceMeters > radiusMeters) {
     return {

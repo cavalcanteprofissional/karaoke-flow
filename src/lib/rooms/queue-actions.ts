@@ -12,6 +12,7 @@ import {
   buildQueueSongItem,
   buildQueueSongReplacement,
   reorderSchema,
+  resolveOwnActiveSong,
 } from "./queue";
 import type { MembershipStatus, QueueSongInput, QueueSongVideo } from "./queue";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
@@ -23,6 +24,20 @@ function friendlyError(message: string, fallback: string): string {
   if (/row-level security|permission denied|policy/i.test(message)) return fallback;
   return message;
 }
+
+/**
+ * A regra de "uma música ativa por participante" mora em dois lugares de propósito:
+ * a trigger `queue_items_one_active_per_participant` (migration `20261004000042`,
+ * que é a autoridade — o INSERT é direto e passa pela RLS) e a função pura
+ * `resolveOwnActiveSong`. A divisão é: o que a action **vê** é o
+ * que a tela mostra, e o que o banco **faz** é a regra.
+ *
+ * `KF001` é o errcode que a trigger levanta, e a mensagem que ela manda é a
+ * mesma que a regra pura devolve — uma frase só para o usuário, mesmo quando a
+ * recusa veio do banco e não da aplicação.
+ */
+const OWN_SONG_PLAYING_MESSAGE =
+  "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar.";
 
 type ModerationTarget = {
   item: { id: string; status: string; added_by_user_id: string };
@@ -49,6 +64,47 @@ type ModerationTargetResult =
  * mensagem real em vez de ser descartado. Reproduza com `npm run
  * diagnose:queue` (scripts/diagnose-queue-actions.mjs).
  */
+/**
+ * Estado da música ativa do próprio participante, para a tela avisar antes de
+ * pedir (migration `20261004000042`).
+ *
+ * É um leitor, não uma regra: devolve o que o banco tem e o que a regra pura faz
+ * com isso é dela. `undefined` quando o host pergunta (sem limite) ou quando a
+ * leitura falha — aí a tela não trava ninguém e a trigger segue sendo o portão.
+ */
+export async function readOwnActiveSong(input: {
+  supabase: ServerSupabase;
+  roomId: string;
+  userId: string;
+  isHost: boolean;
+}): Promise<{ playing: boolean; title: string | null } | undefined> {
+  const { isHost } = input;
+  if (isHost) return { playing: false, title: null };
+
+  const { data } = await input.supabase
+    .from("queue_items")
+    .select("id, title, status, position")
+    .eq("room_id", input.roomId)
+    .eq("added_by_user_id", input.userId)
+    .in("status", ["pending", "approved", "playing"]);
+  if (!data) return undefined;
+
+  const resolved = resolveOwnActiveSong({ isHost, ownSongs: data });
+  /**
+   * O título vem da própria leitura, não da regra pura: a regra devolve `code` e
+   * frase, e o nome da música que está tocando é o que o aviso da tela mostra.
+   * Quando o resultado é `ok`, `replaced` existe por construção do tipo — o `ok`
+   * estreita o union, e é ele que separa "toca logo" de "troca quando terminar".
+   */
+  const tocando = data.find((song) => song.status === "playing");
+  return {
+    playing: !resolved.ok,
+    title: tocando ? tocando.title : resolved.ok && resolved.replaced
+      ? resolved.replaced.title
+      : null,
+  };
+}
+
 async function readModerationTarget(
   supabase: ServerSupabase,
   itemId: string
@@ -93,7 +149,8 @@ async function readModerationTarget(
 export async function addSongToQueueAction(
   input: QueueSongInput
 ): Promise<
-  | { ok: true; item: { status: string; position: number } }
+  /** `replaced` é a música anterior que saiu da fila, quando este pedido a substituiu. */
+  | { ok: true; item: { status: string; position: number }; replaced: { id: string; title: string } | null }
   | { ok: false; error: string; geoRequired?: boolean; code?: string }
 > {
   const supabase = await createClient();
@@ -182,6 +239,32 @@ export async function addSongToQueueAction(
   });
   if (!built.ok) return built;
 
+  /**
+   * Uma música ativa por participante (migration `20261004000042`). A trigger é a
+   * autoridade — ela apaga as ativas que não tocam e recusa quando há uma
+   * tocando — mas esta leitura é o que permite **dizer o que vai acontecer**:
+   * sem ela a tela descobriria a substituição só depois, quando o item antigo
+   * sumisse do Realtime, e o "a anterior saiu da fila" chegaria sem contexto.
+   *
+   * Uma consulta só, e só quando pode haver conflito: host não tem limite, e
+   * quem não tem nada ativo não gasta round-trip.
+   */
+  let replaced: { id: string; title: string } | null = null;
+  if (!isHost) {
+    const { data: ownSongs } = await supabase
+      .from("queue_items")
+      .select("id, title, status, position")
+      .eq("room_id", room.id)
+      .eq("added_by_user_id", user.id)
+      .in("status", ["pending", "approved", "playing"]);
+
+    const ownActive = resolveOwnActiveSong({ isHost, ownSongs: ownSongs ?? [] });
+    if (!ownActive.ok) {
+      return { ok: false, error: ownActive.error, code: ownActive.code };
+    }
+    replaced = ownActive.replaced;
+  }
+
   const { data, error } = await supabase
     .from("queue_items")
     .insert({
@@ -194,10 +277,19 @@ export async function addSongToQueueAction(
     })
     .select("id, status, position");
   if (error) {
+    /**
+     * `KF001` é o errcode da trigger. Chega aqui quando a leitura acima estava
+     * desatualizada (a música começou a tocar entre a consulta e o INSERT), e a
+     * recusa é exatamente a mesma frase da regra pura — o usuário não deve
+     * distinguir "o banco recusou" de "a aplicação recusou".
+     */
+    const race = /KF001|tocando nesta sala/i.test(error.message);
     return {
       ok: false,
-      error: friendlyError(error.message, "Você não pode adicionar músicas nesta sala."),
-      code: "INSERT_FAILED",
+      error: race
+        ? OWN_SONG_PLAYING_MESSAGE
+        : friendlyError(error.message, "Você não pode adicionar músicas nesta sala."),
+      code: race ? "SONG_PLAYING" : "INSERT_FAILED",
     };
   }
   if (!data || data.length === 0) {
@@ -210,7 +302,12 @@ export async function addSongToQueueAction(
 
   revalidatePath(`/salas/${input.roomCode}`);
   revalidatePath(`/salas/${input.roomCode}/buscar`);
-  return { ok: true, item: { status: data[0].status, position: data[0].position } };
+  return {
+    ok: true,
+    item: { status: data[0].status, position: data[0].position },
+    /** Música que saiu da fila por este pedido, para o toast ser honesto. */
+    replaced,
+  };
 }
 /**
  * Aprova ou rejeita uma música da fila (Fase 5, Bloco A).

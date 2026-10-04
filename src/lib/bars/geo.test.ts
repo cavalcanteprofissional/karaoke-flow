@@ -125,9 +125,54 @@ describe("checkPresence (gate de presença física — Requisito)", () => {
       barCoords: BAR,
       radiusMeters: 150,
     });
-    // 0.0002° de latitude ≈ 22 m — dentro do raio, e a metragem volta junto
-    // para o `join_room` guardar.
-    expect(decision).toEqual({ ok: true, distanceMeters: expect.closeTo(22.24, 1) });
+    // 0.0002° de latitude ≈ 22,24 m — dentro do raio, e a metragem volta junto
+    // para o `join_room` guardar. Inteira: 22 m, porque `distancia_m` é `integer`.
+    expect(decision).toEqual({ ok: true, distanceMeters: 22 });
+  });
+
+  /**
+   * O P0 de 04/10: a distância ia fracionária para o `join_room`, cuja
+   * `p_distancia_m` é `int`, e o Postgres recusava a **entrada** com
+   * `invalid input syntax for type integer: "42.4732269333666"`. Como o host é
+   * isento (não produz distância) e os smokes chamam o SQL com literal inteiro,
+   * suíte e banco ficavam verdes e o defeito só aparecia no aparelho — para
+   * qualquer participante, dentro ou fora do raio. Estes casos existem para o
+   * contrato "metros inteiros" não voltar a ser implícito.
+   */
+  it("devolve a distância em metros inteiros nos dois ramos (contrato do banco)", () => {
+    const dentro = checkPresence({
+      isHost: false,
+      userCoords: { latitude: BAR.latitude + 0.0002, longitude: BAR.longitude },
+      barCoords: BAR,
+      radiusMeters: 150,
+    });
+    expect(dentro.ok).toBe(true);
+    expect(Number.isInteger(dentro.distanceMeters)).toBe(true);
+
+    const fora = checkPresence({
+      isHost: false,
+      userCoords: NO_BAR,
+      barCoords: BAR,
+      radiusMeters: 150,
+    });
+    expect(fora.ok).toBe(false);
+    if (!fora.ok) {
+      expect(fora.reason).toBe("outside");
+      expect(Number.isInteger(fora.distanceMeters)).toBe(true);
+      expect(fora.distanceMeters).toBeGreaterThan(150);
+    }
+  });
+
+  it("arredonda para 0 quem está a menos de meio metro do bar", () => {
+    // Coordenada idêntica é o caso-limite: o haversine dá 0 exato, e uma
+    // diferença de meio metro já tem que virar 0 (e não 0,5 — que o banco recusa).
+    const decision = checkPresence({
+      isHost: false,
+      userCoords: BAR,
+      barCoords: BAR,
+      radiusMeters: 150,
+    });
+    expect(decision).toEqual({ ok: true, distanceMeters: 0 });
   });
 });
 
@@ -182,7 +227,7 @@ describe("requirePresence", () => {
             : undefined,
       },
     });
-    expect(decision).toEqual({ ok: true, distanceMeters: expect.closeTo(22.24, 1) });
+    expect(decision).toEqual({ ok: true, distanceMeters: 22 });
   });
 
   it("sempre libera host (mesmo com coords erradas)", () => {

@@ -163,6 +163,161 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > (`src/lib/rooms/room-channel.ts`, `src/lib/rooms/player-channel.ts`), que hoje
 > são recriados por mutação e morrem com o advisory lock.
 
+---
+
+## Fase 8f — a busca no YouTube parou na Vercel, e a chave do dono estava no bar dos outros (2026-10-05)
+
+> **Relato:** a busca respondia *"Não foi possível buscar no YouTube agora. Tente
+> de novo em instantes."* para um dono que nunca configurou chave nenhuma e só
+> entrava pelo GitHub. Um 502 genérico, sem causa, num produto que já tem 649
+> testes verdes.
+>
+> **O que a investigação achou — dois defeitos independentes, e só um aparecia
+> na tela:**
+>
+> 1. **A causa era jogada fora.** `YouTubeApiError.reason` existia desde a Fase
+>    4 e ninguém lia; `toFriendlyYouTubeError` testava dois regex na mensagem e
+>    caía num texto genérico. Quatro causas com consertos diferentes — cota,
+>    chave inválida, **chave com restrição de origem**, API não habilitada —
+>    saíam como o mesmo texto.
+> 2. **A cadeia de credencial não tinha dono.** Os degraus "OAuth do app" e
+>    `YOUTUBE_API_KEY` eram alcançados por **qualquer** bar sem nada nos três
+>    primeiros, porque a única condição era "a env existe". Na prática, todo bar
+>    que aparecia gastava a cota pessoal do dono.
+>
+> **Entregue** (detalhe em `CHANGELOG.md` §Corrigido e §Adicionado):
+>
+> - [x] `classifyYouTubeError` com `reason` → código + **passo escrito para o
+>       humano** (`QUOTA_EXHAUSTED`, `KEY_INVALID`, `KEY_RESTRICTED`,
+>       `API_NOT_ENABLED`, `SCOPES_INSUFFICIENT`, `RATE_LIMITED_BY_YOUTUBE`,
+>       `YOUTUBE_UNREACHABLE`, `UNKNOWN`), e `Retry-After` propagado do header.
+> - [x] **`toFriendlyYouTubeError` removida** — existia só porque a informação
+>       não chegava até a decisão.
+> - [x] Portão `is_dev` nos dois últimos degraus, com falha fechada. Testes dos
+>       dois lados na rota: participante sem chave **com** `YOUTUBE_API_KEY` na
+>       env recebe `CREDENTIAL_NOT_CONFIGURED` **sem tocar no Google**.
+> - [x] `resolveCredential` no mesmo tratamento de falha da chamada à API, e a
+>       rota responde **sempre JSON** (`SERVER_MISCONFIGURED`, `503`). No
+>       cliente, só `fetch` recusado diz "falha de rede" — um 500 com HTML não
+>       vira mais rede.
+> - [x] Migration `20261005000043`: `bars.youtube_credential_policy`
+>       (`own_only` | `platform_pool`, default `own_only`),
+>       `bars.youtube_pool_id`, tabela `youtube_credential_pools` (RLS sem
+>       policy, só service role) e a RPC dev-only
+>       `admin_youtube_credential_health(bar_id)`. **A coerência policy↔pool é
+>       trigger**, não `if` de TypeScript.
+> - [x] Textos de configuração corrigidos: **não existe cota por pessoa**, e
+>       conectar a conta do YouTube **não cria cota separada** (o OAuth autoriza
+>       leitura; a cobrança fica no projeto da credencial).
+> - [x] `GET /api/youtube/diagnostics`, só `dev`: estado do ambiente **sem gastar
+>       cota**, `?probe=1` para a chamada real, `?room=CODIGO` para a credencial
+>       de uma sala. Chave, token e id de projeto nunca saem.
+> - [x] `createAdmin()` memoizado (era chamado 2× por requisição), cache do token
+>       do host com `in-flight`, e `/api` fora do matcher do proxy (cada busca
+>       pagava `auth.getUser()` duas vezes).
+> - [x] Aviso no log quando `NEXT_PUBLIC_APP_URL` falta em ambiente Vercel
+>       (`redirect_uri_mismatch` não se explica sozinho).
+>
+> **2ª rodada — a revisão do próprio diff achou cinco coisas que a 1ª deixou:**
+>
+> - [x] **O log prometia o `reason` e não logava** — a exceção nunca existia no
+>       caminho do `YouTubeApiError` (o serviço classifica e devolve, não lança).
+>       `SearchFailure.reason` + log do servidor; o corpo da resposta continua
+>       montado campo a campo, sem ele.
+> - [x] **`safeDiagnosticDetail` só filtrava o `YouTubeApiError`** e o `catch`
+>       do endpoint devolvia `error.message` cru. Agora há `SECRET_PATTERNS`
+>       (chave `AIza…`, `?key=`/`access_token=`, `ya29.`/`1//0`, `Bearer`, JWT,
+>       `sb_secret_`) e o campo `redacted` explica a omissão em vez de devolver
+>       `null` e parecer que não houve erro.
+> - [x] **Desconectar a conta não tirava o token do bar** (cache de 55 min sem
+>       invalidação), e invalidar **durante** um refresh não bastava — o refresh
+>       resolvia depois e reescrevia o token revogado no cache. Geração por host.
+> - [x] **`ON DELETE SET NULL` anulava a invariante do trigger** (apagar o pool
+>       deixava `platform_pool` sem pool, por fora do trigger). FK `RESTRICT`.
+> - [x] **`?room=` devolvia `hint: null`** justo na sala que existe e não resolve
+>       credencial — o caso que o endpoint existe para diagnosticar.
+> - [x] **`scripts/smoke-youtube-credential.sql`** (19 passos, transação +
+>       `rollback`): default, as quatro recusas de coerência, o FK `RESTRICT`, os
+>       pools invisíveis ao cliente autenticado, a RPC de saúde recusada para
+>       não-dev e sem chave no corpo, e o `auth.uid() is null` **não** barrado.
+> - [x] `route.test.ts` do diagnóstico (18): o portão 401/403 é o que impede um
+>       participante logado de ler o estado do servidor, e não tinha teste.
+>
+> **Gates após a 2ª rodada:** `lint`, `typecheck`, **677 testes / 51 arquivos**,
+> `build` e `scan:secrets` (264 arquivos) verdes.
+>
+> **3ª rodada — aplicada no banco e no deploy (2026-10-06).** O código estava
+> pronto desde 05/10; o que faltava era rodar, e foi aí que apareceram coisas que
+> nenhum teste previa:
+>
+> - [x] Migration `20261005000043` **aplicada no Supabase Cloud**.
+> - [x] `scripts/smoke-youtube-credential.sql` **19/19 no Cloud** — e o smoke
+>       tinha dois defeitos próprios que só apareceram por rodar: `using` é
+>       palavra reservada no Postgres (a coluna do `pg_policies` é `qual`), e o
+>       passo do bypass de service role apontava para o pool que um passo
+>       anterior apagava (quem recusava era o FK, não o trigger).
+> - [x] **Causa raiz do 502 achada, e não era a esperada.** Não era restrição de
+>       origem nem de IP: a `YOUTUBE_API_KEY` da Production tinha **198 dias** e o
+>       Google respondia `400` / `badRequest` / "API key not valid". Chave trocada
+>       (como `Secret`) em `production` e `preview`.
+> - [x] **`?probe=1` rodado no deploy de preview** (o item que fechava a fase):
+>       `ok: true`, `resolvedFrom: "dev"`, HTTP 200 do Google, sem segredo no
+>       corpo; e o host do outro bar, fora de `dev_accounts`, recebeu **403** sem
+>       gastar cota. Os dois sentidos do portão, no runtime real.
+> - [x] O payload real do deploy virou teste em `errors.test.ts`, com o
+>       contrapeso de que `badRequest` sem mensagem tem que dar `UNKNOWN`.
+> - [x] `?probe=1` com sala inexistente não pode mais dizer "sem credencial"
+>       (o `note` só ia no ramo sem `probe`).
+> - [x] **`YOUTUBE_OAUTH_CLIENT_ID`/`SECRET` adicionadas em `production` e
+>       `preview`** — sem elas o botão "conectar conta do YouTube" não trocava
+>       `code` por token em produção. O `?probe=1` no preview passou a mostrar as
+>       quatro variáveis presentes e sem `nextSteps` reclamando.
+> - [ ] **`YOUTUBE_APP_REFRESH_TOKEN` está expirado/revogado** (`400 · "Token has
+>       been expired or revoked"`). O degrau `app_oauth` não contribui nada hoje e a
+>       cadeia degrada para a chave de dev, que funciona. O conserto é refazer o
+>       consentimento no OAuth client e trocar a env — **precisa do dono no
+>       navegador**, por isso ficou de fora. O sinal de que está morto é o
+>       `resolvedFrom` vir `dev` onde se esperaria `app_oauth`: `envPresent` só
+>       prova presença, nunca validade.
+> - [ ] `vercel deploy --prod` da Fase 8f: **não feito**, e é decisão do dono
+>       (recomendo commitar antes — a árvore inteira da fase está fora do git).
+> - [ ] Limpeza de infra: sobrou uma `YOUTUBE_API_KEY` de 198 dias no alvo
+>       `development` da Vercel (o app não usa), e o `vercel link` injetou um
+>       `VERCEL_OIDC_TOKEN` no `.env.local`.
+>
+> **Método, anotado em `TESTING.md` §3.15:** `vercel pull` **não** serve para
+> conferir credencial — `Secret` volta como `[SECRET]` e `?decrypt=true` devolve o
+> envelope cifrado (1072 caracteres para uma chave de 39). Só a função que usa o
+> segredo o revela: sondar o YouTube (`maxResults=1`) ou `?probe=1` no deploy.
+>
+> **Gates após a 3ª rodada:** `lint`, `typecheck`, **680 testes / 51 arquivos**,
+> `build` e `scan:secrets` (264 arquivos) verdes.
+>
+> **Limites declarados, para não vender o que não é:**
+>
+> - O **cache do token do host é por instância** em serverless, como o
+>   `MemoryRateLimiter`. O ganho é real na mesma instância e no dev local; a
+>   correção definitiva é estado distribuído (Fase 8e/escala), não este cache.
+> - `youtube_credential_pools.daily_search_budget` é teto de **configuração**,
+>   não contador: nada impede o bar de estourá-lo, ele apenas não é contabilizado
+>   por request. E o pool **não tem rotação automática** de chave.
+> - **O diagnóstico não foi exercitado no deploy.** O código fecha o ciclo
+>   (reason classificado e logado, rota JSON, sanitização do detalhe), mas a
+>   confirmação de que a chave da Vercel é aceita pelo Google depende de rodar
+>   `?probe=1` no ambiente real. **Pendência para a próxima sessão** — precisa de
+>   acesso ao projeto.
+- **O `smoke-youtube-credential.sql` foi escrito, não executado.** Ele precisa de
+>   `node scripts/apply-sql.mjs scripts/smoke-youtube-credential.sql 8000` contra o
+>   Cloud. Sem ele, o invariante do trigger e o `RESTRICT` do FK são código
+>   revisado a olho — que é exatamente o nível de confiança que a `20261004000042`
+>   (uma música ativa) não teve.
+>
+> **Ordem depois da 8f:** Fase 8e (canal de longa duração para fila e playback) e
+> depois a escala — Supabase pago, Railway para estado distribuído, e o painel do
+> dev. **Cuidado de numeração:** a "Fase 9" da spec (entrada fora do raio) **já foi
+> entregue** em `20261004000041`; não reaproveitar o número para o plano de escala
+> sem renomear explicitamente.
+
 ## Retomada — contexto da próxima sessão (2026-10-03, tarde)
 
 > ### Rodada do dia: LAN + a regra do espectador virou regra de banco
@@ -214,6 +369,13 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 >       Cloud incluso): entrar de fora, não ver "Pedir música", `/buscar`
 >       devolver para a sala, nenhum `MesaPicker`, player mudo sem passar a
 >       música alheia. Falta **executar** no aparelho.
+> - [x] **`TESTING.md` §3.15** escrito (o que a tela mostra × o que só o
+>       diagnóstico mostra, com a lista dos quatro motivos que a tela passa a
+>       distinguir): participante sem credencial, chave inválida **vs**
+>       restrita, projeto sem a API habilitada, cota do projeto estourada,
+>       OAuth por conta (texto honesto), e o endpoint de diagnóstico nos três
+>       formatos (`?room=`, `?probe=1`, sem query). Falta **executar** no
+>       aparelho e no deploy.
 > - [ ] Reprodução simultânea em vários dispositivos (áudio em cada aparelho)
 >       continua **fora de escopo** por enquanto — anotado no roadmap.
 >

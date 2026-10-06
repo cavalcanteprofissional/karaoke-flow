@@ -200,3 +200,40 @@ npm run measure:limits -- --json       # despeja os números em JSON
 Só precisa de `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` no
 `.env.local`; com `SUPABASE_ACCESS_TOKEN` a seção do Postgres aparece inteira.
 **Não imprime nenhuma chave, senha ou token de player.**
+
+## 7. A cota que a Fase 8f tornou visível — a do YouTube Data API
+
+Este documento mede o free tier **do Supabase**, e a busca de músicas não passa
+por ele. A busca tem o próprio teto, do outro lado da integração, e ele é o que
+transformou um 502 genérico em "o dono do produto está pagando a cota de todos os
+barros" (Fase 8f, 2026-10-05).
+
+**Os números publicados** (documentação da YouTube Data API v3, plano padrão sem
+faturamento — o mesmo critério de "publicado × medido" do §5, sem medição
+própria aqui):
+
+- **10.000 unidades por dia**, por **projeto** do Google Cloud. Não por usuário,
+  não por chave, não por sala.
+- `search.list` custa **100 unidades** por requisição. Um `maxResults=25` não
+  encarece mais que um `maxResults=5`: o custo é da chamada.
+- Uma busca por segundo no dia inteiro passaria do teto em pouco mais de um dia;
+  o uso real de um bar (uma busca a cada poucos segundos, por/bar) é uma fração
+  pequena disso **por bar** — mas **somar** alguns bars no mesmo projeto é o que
+  estoura.
+
+**O que a Fase 8f mudou em cima disto:**
+
+- O default `own_only` (`bars.youtube_credential_policy`) impede que um bar use a
+  cota de outro: cada dono traz a chave do **seu** projeto, ou conecta a conta
+  dele. `platform_pool` existe como opt-in explícito, para chave de conta de
+  empresa — com teto de **configuração** por bar, que ainda não é contador.
+- O portão `is_dev` impede o degrau final da cadeia (OAuth do app e
+  `YOUTUBE_API_KEY`) de virar custo silencioso de terceiros.
+- **`GET /api/youtube/diagnostics` não gasta cota** por padrão; `?probe=1` gasta
+  100 unidades de propósito e de forma explícita. Por isso o relatório de
+  ambiente pode ser rodado à vontade num incidente.
+
+**O que este documento não afirma sobre a cota do YouTube:** que exista cota
+separada por conta conectada via OAuth (**não existe** — o OAuth autoriza leitura
+e a cobrança fica no projeto da credencial), nem que `daily_search_budget` de um
+pool seja aplicado por requisição (hoje é rótulo, ver `TODO.md` Fase 8f).

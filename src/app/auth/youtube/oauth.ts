@@ -7,8 +7,46 @@ import { normalizeRoomCode } from "@/lib/rooms/utils";
 export const YOUTUBE_OAUTH_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 export const YOUTUBE_OAUTH_STATE_COOKIE = "kf-yt-oauth";
 
+/**
+ * Base URL usada no `redirect_uri` do OAuth do YouTube.
+ *
+ * A ordem é env PRIMEIRO, e isso é deliberado ao contrário do que parece certo:
+ * o Google exige que o `redirect_uri` case caractere a caractere com o que está
+ * registrado no console. Registrar `https://seudominio.com.br/...` e mandar o
+ * host do deploy de preview (`karaoke-xyz.vercel.app`) faz o Google recusar com
+ * `redirect_uri_mismatch` — sem chance de bypass e sem mensagem útil. Então a env
+ * é a fonte da verdade, e o host da requisição é o fallback para o dev local.
+ *
+ * O que o diagnóstico ganhou na Fase 8f: o caso "env ausente na Vercel" é
+ * invisível sem um log, e é exatamente o que produz o erro de OAuth que ninguém
+ * sabe explicar. `logMissingAppUrl` avisa uma vez, no servidor.
+ */
 export function oauthBaseUrl(request: NextRequest): string {
-  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? request.nextUrl.origin;
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  if (process.env.VERCEL_ENV) {
+    logMissingAppUrl();
+  }
+  return request.nextUrl.origin;
+}
+
+let warnedMissingAppUrl = false;
+
+function logMissingAppUrl(): void {
+  if (warnedMissingAppUrl) return;
+  warnedMissingAppUrl = true;
+  console.warn(
+    JSON.stringify({
+      event: "youtube_oauth_missing_app_url",
+      message:
+        "NEXT_PUBLIC_APP_URL ausente em ambiente Vercel: o redirect_uri do OAuth do YouTube está sendo montado com o host da requisição. Se o Google recusar com redirect_uri_mismatch, registre o host do deploy em NEXT_PUBLIC_APP_URL.",
+    })
+  );
+}
+
+/** Só para teste: permite rearmar o aviso de env ausente. */
+export function resetMissingAppUrlWarning(): void {
+  warnedMissingAppUrl = false;
 }
 
 export function makeOauthState(roomCode: string | undefined): string {

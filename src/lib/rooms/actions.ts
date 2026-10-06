@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revokeGoogleToken } from "@/lib/youtube/app-oauth";
+import { invalidateCachedHostToken } from "@/lib/youtube/host-oauth";
 import { isValidRoomCode, normalizeRoomCode } from "@/lib/rooms/utils";
 import type { MemberStatus, RoomEntryMode, RoomQueueApprovalMode } from "@/types/room";
 
@@ -332,6 +333,12 @@ export async function youtubeDisconnectAction(
       error: friendlyError(error.message, "Não foi possível remover a conexão."),
     };
   }
+
+  // A conta foi desconectada e o refresh_token revogado no Google, mas esta
+  // instância ainda pode ter o access token em cache (55 min). Sem esta linha,
+  // o bar continuaria buscando com a conta que o dono acabou de remover — e o
+  // botão "desconectar" pareceria não ter efeito.
+  invalidateCachedHostToken(user.id);
 
   revalidatePath("/salas/[codigo]", "page");
   return { ok: true };

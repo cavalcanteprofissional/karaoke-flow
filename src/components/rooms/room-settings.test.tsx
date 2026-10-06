@@ -98,3 +98,55 @@ describe("RoomSettings — pré-aprovação de 24h", () => {
     });
   });
 });
+
+/**
+ * Fase 8f — o texto do card de YouTube.
+ *
+ * Estes testes existem porque o texto antigo afirmava coisas falsas sobre cota, e
+ * texto falso em tela de configuração custa mais que texto ausente: o host lê,
+ * acredita, e perde tempo configuring a coisa errada (ou achando que conectar a
+ * conta resolveu o problema de cota).
+ */
+describe("RoomSettings — textos honestos sobre a busca no YouTube", () => {
+  it("não promete cota por pessoa", () => {
+    renderSettings();
+
+    expect(screen.queryByText(/cota do dia por usuário/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/a cota é desse/i)).toBeInTheDocument();
+  });
+
+  it("não diz que conectar a conta tira a busca do seu projeto", () => {
+    renderSettings();
+
+    expect(screen.queryByText(/sua cota/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/não cria uma cota separada/i)).toBeInTheDocument();
+  });
+
+  it("o botão diz 'conta do YouTube', não 'Google'", () => {
+    renderSettings();
+
+    // "Conectar com o Google" parecia o mesmo botão de login do app, que não
+    // tem relação com a YouTube Data API.
+    expect(
+      screen.queryByRole("link", { name: /Conectar com o Google/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Conectar conta do YouTube/i })).toBeInTheDocument();
+  });
+
+  it("a chave deixou de ser 'opcional'", () => {
+    renderSettings();
+
+    expect(screen.queryByText(/Chave de API \(opcional\)/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Chave da YouTube Data API v3/i)).toBeInTheDocument();
+  });
+
+  // O passo que faltava: onde nasce a chave e por que restrição quebra o site.
+  it("explica onde criar a chave e o problema de restrição", () => {
+    renderSettings();
+
+    // "Google Cloud" aparece no card (projeto da chave) e no passo (onde criar).
+    expect(screen.getAllByText(/Google Cloud/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/sem restrição/i)).toBeInTheDocument();
+    expect(screen.getByText(/não envia Referer/i)).toBeInTheDocument();
+  });
+});

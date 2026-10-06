@@ -85,6 +85,21 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /**
+     * `/api` ficou de fora na Fase 8f, e o motivo é custo duplicado: o proxy
+     * roda em TODA requisição casada e chama `supabase.auth.getUser()` — que é
+     * uma ida ao Supabase Auth, não uma leitura de cookie. A rota
+     * `/api/youtube/search` já chama `getUser()` para a mesma sessão, logo cada
+     * busca pagava a validação duas vezes. Em busca com debounce de 500 ms e
+     * 50–100 pessoas no bar, isso é latência somada em cima de latência.
+     *
+     * Nenhuma regra deste arquivo vale para `/api`: as prefixes são
+     * `/dashboard`, `/salas`, `/entrar` e `/login`, e cada rota de API faz a
+     * própria autenticação (`createClient()` + `getUser()`) e devolve 401
+     * sozinha. O que se perde é o `Cache-Control: private, no-store` que a linha
+     * 81 aplica — e as rotas de API já o enviam explicitamente, porque resposta
+     * de API sem `no-store` é cache compartilhável por CDN.
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

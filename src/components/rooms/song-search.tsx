@@ -11,6 +11,7 @@ import {
   Plus,
   Repeat2,
   Search,
+  Settings2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -29,7 +30,19 @@ type SearchState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "results"; results: YouTubeVideo[] }
-  | { kind: "error"; message: string; code?: string; geoRequired?: boolean };
+  | {
+      kind: "error";
+      message: string;
+      code?: string;
+      geoRequired?: boolean;
+      /**
+       * O passo a seguir escrito no servidor (`hint`). Só aparece para quem
+       * pode agir: o host da sala. Ver `OWNER_ACTIONS`.
+       */
+      hint?: string | null;
+      /** Esta falha é de configuração do bar, não da rede nem do Google. */
+      ownerAction?: boolean;
+    };
 
 type SongSearchProps = {
   roomCode: string;
@@ -52,9 +65,59 @@ type SongSearchProps = {
    * avisa que aquele pedido sai da fila quando o próximo entrar.
    */
   ownActiveSong?: { playing: boolean; replacedTitle: string | null };
+  /**
+   * Esta pessoa é o host da sala? Decide se o passo de configuração vem
+   * acompanhado do atalho para as configurações — porque só o host tem onde
+   * salvar a chave (ver `OWNER_ACTION_CODES`).
+   */
+  isHost?: boolean;
 };
 
 const DEBOUNCE_MS = 500;
+
+/**
+ * Códigos que a busca devolve quando o problema é CONFIGURAÇÃO DO BAR, e não a
+ * rede nem o Google (Fase 8f).
+ *
+ * A distinção importa porque cada grupo tem um interlocutor e um conserto
+ * diferentes:
+ *
+ *  - `CREDENTIAL_NOT_CONFIGURED`: o bar nunca configurou credencial. Quem
+ *    resolve é o host, em `/salas/<código>` (Configurações).
+ *  - `KEY_INVALID`, `KEY_RESTRICTED`, `API_NOT_ENABLED`, `SCOPES_INSUFFICIENT`:
+ *    existe credencial, e ela é rejeitada. O conserto é no Google Cloud ou
+ *    reconectando a conta — repetir a busca não muda nada.
+ *  - `QUOTA_EXHAUSTED`: conserto é de infraestrutura (chave nova ou pool).
+ *
+ * Antes, todos caíam no mesmo texto genérico e a pessoa achava que era a
+ * internet dela.
+ */
+const OWNER_ACTION_CODES = new Set([
+  "CREDENTIAL_NOT_CONFIGURED",
+  "KEY_INVALID",
+  "KEY_RESTRICTED",
+  "API_NOT_ENABLED",
+  "SCOPES_INSUFFICIENT",
+  "QUOTA_EXHAUSTED",
+]);
+
+/**
+ * Lê a resposta como JSON sem deixar a exceção escapar.
+ *
+ * A rota responde JSON sempre (Fase 8f), mas um proxy ou o próprio Next pode
+ * devolver HTML num 500 — e `response.json()` nesse caso lança, caindo no
+ * `catch` de rede com uma mentira. Aqui o parse é tolerante e o corpo vira
+ * objeto vazio, então a tela mostra a mensagem padrão e o status continua
+ * disponíveis.
+ */
+async function readJson(response: Response): Promise<Record<string, unknown>> {
+  try {
+    const parsed = await response.json();
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
 
 export function SongSearch({
   roomCode,
@@ -64,6 +127,7 @@ export function SongSearch({
   replaceItemId,
   replaceItemTitle,
   ownActiveSong,
+  isHost = false,
 }: SongSearchProps) {
   const isReplace = Boolean(replaceItemId);
   /**
@@ -98,11 +162,12 @@ export function SongSearch({
           `/api/youtube/search?room=${encodeURIComponent(roomCode)}&q=${encodeURIComponent(trimmed)}`,
           { signal: controller.signal, headers: { Accept: "application/json" } }
         );
-        const body = (await response.json()) as {
+        const body = (await readJson(response)) as {
           results?: YouTubeVideo[];
           error?: string;
           code?: string;
           geoRequired?: boolean;
+          hint?: string;
         };
         if (!controller.signal.aborted) {
           if (!response.ok) {
@@ -111,12 +176,18 @@ export function SongSearch({
               message: body.error ?? "Não foi possível buscar agora.",
               code: body.code,
               geoRequired: body.geoRequired,
+              hint: body.hint ?? null,
+              ownerAction: body.code ? OWNER_ACTION_CODES.has(body.code) : false,
             });
           } else {
             setState({ kind: "results", results: body.results ?? [] });
           }
         }
       } catch {
+        // Só aqui — `fetch` recusado, offline, DNS — "falha de rede" é a
+        // descrição correta. Qualquer resposta HTTP, mesmo 500 com HTML, tem
+        // que sair pelo caminho de cima com o código: foi isso que fazia um
+        // erro de configuração do bar aparecer como "falha de rede".
         if (!controller.signal.aborted) {
           setState({ kind: "error", message: "Falha de rede ao buscar músicas." });
         }
@@ -331,6 +402,29 @@ export function SongSearch({
                 )}
                 Permitir localização
               </Button>
+            )}
+            {/**
+             * O passo do host. Só aparece quando o código é de configuração, e o
+             * texto vem do servidor (`hint`): a tela não inventa instrução sobre
+             * Google Cloud, porque errar o passo aqui manda a pessoa procurar
+             * coisa que não existe.
+             *
+             * Sem link para o participante não-dev: ele não tem onde salvar
+             * chave nenhuma, e um botão que leva a uma tela onde ele não pode
+             * agir é pior que nenhum.
+             */}
+            {state.ownerAction && state.hint && (
+              <div className="border-border bg-muted/40 flex flex-col gap-2 rounded-xl border p-3">
+                <p className="text-sm">{state.hint}</p>
+                {isHost && (
+                  <Button asChild size="sm" variant="outline" className="w-fit">
+                    <Link href={`/salas/${roomCode}`}>
+                      <Settings2 className="size-3.5" />
+                      Abrir configurações da sala
+                    </Link>
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         );

@@ -4,6 +4,7 @@ import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 
 import { clearCachedAppToken } from "@/lib/youtube/app-oauth";
+import { clearCachedHostTokens } from "@/lib/youtube/host-oauth";
 
 const h = vi.hoisted(() => {
   type Row = Record<string, unknown>;
@@ -14,11 +15,16 @@ const h = vi.hoisted(() => {
     geo: new Map<string, GeoValue>(),
     songCache: new Map<string, { results: Row[]; created_at: string }>(),
     hostTokens: new Map<string, { refresh_token: string }>(),
+    // Papel `dev` da sessão — a trava da Fase 8f. Fica no banco
+    // (`dev_accounts`), não numa env, então o mock responde a `is_dev`.
+    isDev: false,
     tables: {
 rooms: [] as Row[],
         bars: [] as Row[],
         members: [] as Row[],
       },
+      // Pools da plataforma (migration 20261005000043): só service role lê.
+      pools: [] as Row[],
     };
 
     type WalkableQuery = {
@@ -61,7 +67,9 @@ rooms: [] as Row[],
         const rows =
           table === "room_members"
             ? state.tables.members
-            : (state.tables[key as keyof typeof state.tables] ?? []);
+            : table === "youtube_credential_pools"
+              ? state.pools
+              : (state.tables[key as keyof typeof state.tables] ?? []);
         const match = rows.find(
           (row: Row) => conditions.every(([field, value]) => row[field] === value)
         );
@@ -86,10 +94,18 @@ rooms: [] as Row[],
 
   return {
     state,
-    reset(config: { rooms?: Row[]; bars?: Row[]; members?: Row[] }) {
+    reset(config: {
+      rooms?: Row[];
+      bars?: Row[];
+      members?: Row[];
+      pools?: Row[];
+      isDev?: boolean;
+    }) {
       state.tables.rooms = config.rooms ?? [];
       state.tables.bars = config.bars ?? [];
       state.tables.members = config.members ?? [];
+      state.pools = config.pools ?? [];
+      state.isDev = config.isDev ?? false;
       state.user = { id: "member-id" };
       state.geo.clear();
       state.songCache.clear();
@@ -98,6 +114,13 @@ rooms: [] as Row[],
     makeSupabase: () => ({
       auth: {
         getUser: async () => ({ data: { user: state.user } }),
+      },
+      // `is_dev` é a RPC que decide se os degraus "dono do produto" da cadeia
+      // de credencial são alcançáveis. `isDevAccount` falha fechada em erro,
+      // então o mock de `rpc` precisa devolver o papel explicitamente.
+      rpc: async (name: string) => {
+        if (name === "is_dev") return { data: state.isDev, error: null };
+        return { data: null, error: { message: `rpc ${name} não mockada` } };
       },
       from: (table: string) => createQuery(table, false),
     }),
@@ -235,6 +258,9 @@ afterEach(() => {
   googleMode = "ok";
   searchCalls.length = 0;
   clearCachedAppToken();
+  // O cache de token do host é por instância de módulo (Fase 8f); sem limpar
+  // aqui, o caso do OAuth do host contaminaria o seguinte.
+  clearCachedHostTokens();
   vi.unstubAllEnvs();
   h.reset({});
 });
@@ -322,33 +348,40 @@ describe("GET /api/youtube/search", () => {
     expect(searchCalls).toHaveLength(1);
   });
 
-  it("cota esgotada do YouTube vira 502 com mensagem amigável", async () => {
+  // `API_ERROR` era o rótulo que escondia a causa (Fase 8f). A recusa do
+  // Google agora chega nomeada, e o `hint` diz o passo — que é o que permite ao
+  // dono do bar distinguir "cota acabou" de "minha chave está restrita".
+  it("cota esgotada do YouTube vira 502 QUOTA_EXHAUSTED com passo", async () => {
     seedRoom();
     googleMode = "quota";
     const response = await GET(requestFor());
     expect(response.status).toBe(502);
-    const body = (await response.json()) as { error: string; code?: string };
-    expect(body.code).toBe("API_ERROR");
+    const body = (await response.json()) as { error: string; code?: string; hint?: string };
+    expect(body.code).toBe("QUOTA_EXHAUSTED");
     expect(body.error).toContain("cota");
+    expect(body.hint).toBeTruthy();
   });
 
-  it("erro do YouTube sem cota vira 502 genérico", async () => {
+  it("erro do YouTube sem cota recusa nomeada, não texto genérico", async () => {
     seedRoom();
     googleMode = "search-error";
     const response = await GET(requestFor());
     expect(response.status).toBe(502);
-    const body = (await response.json()) as { error: string };
+    const body = (await response.json()) as { error: string; code?: string };
+    expect(body.code).toBe("UNKNOWN");
     expect(body.error).toContain("YouTube");
   });
 
-  it("sem credencial configurada retorna 502 NO_CREDENTIAL", async () => {
+  it("sem credencial configurada retorna 503 CREDENTIAL_NOT_CONFIGURED", async () => {
     seedRoom({ youtube_api_key: null });
     const previous = process.env.YOUTUBE_API_KEY;
     delete process.env.YOUTUBE_API_KEY;
     const response = await GET(requestFor());
     if (previous !== undefined) process.env.YOUTUBE_API_KEY = previous;
-    expect(response.status).toBe(502);
-    expect((await response.json()).code).toBe("NO_CREDENTIAL");
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { code: string; hint?: string };
+    expect(body.code).toBe("CREDENTIAL_NOT_CONFIGURED");
+    expect(body.hint).toContain("configurações da sala");
     expect(searchCalls).toHaveLength(0);
   });
 
@@ -438,6 +471,7 @@ describe("GET /api/youtube/search", () => {
 
   it("token OAuth do app é enviado como Bearer (sem chave de dev)", async () => {
     seedRoom({ youtube_api_key: null });
+    h.state.isDev = true;
     vi.stubEnv("YOUTUBE_OAUTH_CLIENT_ID", "client.web");
     vi.stubEnv("YOUTUBE_OAUTH_CLIENT_SECRET", "secret");
     vi.stubEnv("YOUTUBE_APP_REFRESH_TOKEN", "app-refresh");
@@ -447,5 +481,95 @@ describe("GET /api/youtube/search", () => {
     expect((await response.json()).source).toBe("app");
     expect(searchCalls[0].key).toBeNull();
     expect(searchCalls[0].auth).toBe("Bearer ya29.TEST_ACCESS");
+  });
+
+  // ── A trava da Fase 8f, no nível da rota ───────────────────────────────────
+  it("a chave de dev NÃO é alcançada por participante que não é dev", async () => {
+    seedRoom({ youtube_api_key: null });
+    vi.stubEnv("YOUTUBE_API_KEY", "AIzaSy-DEV-KEY");
+
+    const response = await GET(requestFor());
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe("CREDENTIAL_NOT_CONFIGURED");
+    expect(searchCalls).toHaveLength(0);
+  });
+
+  it("a chave de dev é alcançada pela conta dev, local e remoto", async () => {
+    seedRoom({ youtube_api_key: null });
+    h.state.isDev = true;
+    vi.stubEnv("YOUTUBE_API_KEY", "AIzaSy-DEV-KEY");
+
+    const response = await GET(requestFor());
+    expect(response.status).toBe(200);
+    expect((await response.json()).source).toBe("dev");
+    expect(searchCalls[0].key).toBe("AIzaSy-DEV-KEY");
+  });
+
+  it("pool da plataforma é usado quando a política do bar é platform_pool", async () => {
+    seedRoom({ youtube_api_key: null });
+    h.state.tables.bars = [
+      {
+        id: "b1",
+        latitude: -23.55066,
+        longitude: -46.63338,
+        raio_permitido_metros: 150,
+        youtube_credential_policy: "platform_pool",
+        youtube_pool_id: "pool-1",
+      },
+    ];
+    h.state.pools = [{ id: "pool-1", api_key: "POOL-KEY-123", active: true }];
+
+    const response = await GET(requestFor());
+    expect(response.status).toBe(200);
+    // A chave da plataforma é tão secreta quanto a do bar: o `source` diz de
+    // onde veio, e o texto inteiro não pode conter a chave.
+    const raw = await response.text();
+    expect(raw).not.toContain("POOL-KEY-123");
+    expect((JSON.parse(raw) as { source: string }).source).toBe("platform");
+    expect(searchCalls[0].key).toBe("POOL-KEY-123");
+  });
+
+  it("pool inativo não vira 503 de servidor: vira CREDENTIAL_NOT_CONFIGURED", async () => {
+    seedRoom({ youtube_api_key: null });
+    h.state.tables.bars = [
+      {
+        id: "b1",
+        latitude: -23.55066,
+        longitude: -46.63338,
+        raio_permitido_metros: 150,
+        youtube_credential_policy: "platform_pool",
+        youtube_pool_id: "pool-1",
+      },
+    ];
+    h.state.pools = [{ id: "pool-1", api_key: "POOL-KEY-123", active: false }];
+
+    const response = await GET(requestFor());
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { code: string; hint?: string };
+    expect(body.code).toBe("CREDENTIAL_NOT_CONFIGURED");
+    // O texto não manda o dono configurar uma chave que a política dele proíbe.
+    expect(body.hint).not.toContain("configurações da sala");
+    expect(searchCalls).toHaveLength(0);
+  });
+
+  it("own_only não lê o pool, mesmo com a coluna apontada", async () => {
+    seedRoom({ youtube_api_key: null });
+    h.state.tables.bars = [
+      {
+        id: "b1",
+        latitude: -23.55066,
+        longitude: -46.63338,
+        raio_permitido_metros: 150,
+        youtube_credential_policy: "own_only",
+        // Estado que o trigger da migration 43 proíbe; se a rota obedecesse
+        // só o id, este bar usaria a chave da plataforma.
+        youtube_pool_id: "pool-1",
+      },
+    ];
+    h.state.pools = [{ id: "pool-1", api_key: "POOL-KEY-123", active: true }];
+
+    const response = await GET(requestFor());
+    expect(response.status).toBe(503);
+    expect(searchCalls).toHaveLength(0);
   });
 });

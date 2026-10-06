@@ -139,7 +139,14 @@ async function requestJson<T>(
 
   if (!response.ok) {
     const details = typeof payload?.error?.message === "string" ? payload.error.message : "";
-    throw new YouTubeApiError(details, payload, response.status);
+    throw new YouTubeApiError(
+      details,
+      payload,
+      response.status,
+      // `Retry-After` sobrevive à camada de status, e é ele que distingue "espere
+      // N segundos" de "tente de novo". Preservado aqui para o classificador.
+      response.headers.get("retry-after")
+    );
   }
 
   return { status: response.status, body: payload as unknown as T };

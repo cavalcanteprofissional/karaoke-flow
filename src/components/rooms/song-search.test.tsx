@@ -364,3 +364,145 @@ describe("SongSearch — uma música ativa por participante", () => {
     expect(mocks.replaceQueueSongAction).toHaveBeenCalled();
   });
 });
+
+/**
+ * Fase 8f — o que a tela mostra quando a busca falha.
+ *
+ * O defeito reportado era duplo no cliente: (1) uma resposta HTTP com erro
+ * caía no `catch` e virava "Falha de rede", culpando a internet da pessoa; e
+ * (2) mesmo com a mensagem certa, não havia o passo a seguir — o dono do bar
+ * ficava sem saber o que fazer.
+ */
+describe("SongSearch — erros de busca (Fase 8f)", () => {
+  /** Faz a busca responder com um corpo JSON de erro e devolve a tela. */
+  async function searchWithError(body: Record<string, unknown>, status = 502) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status,
+        json: async () => body,
+      }))
+    );
+    renderSearch({ isHost: true });
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+  }
+
+  it("erro de configuração mostra o passo do servidor e o atalho de configurações", async () => {
+    await searchWithError({
+      error: "Nenhuma credencial do YouTube configurada para este bar.",
+      code: "CREDENTIAL_NOT_CONFIGURED",
+      hint: "O dono do bar precisa salvar uma chave da YouTube Data API v3 nas configurações da sala.",
+    });
+
+    expect(
+      screen.getByText(/precisa salvar uma chave da YouTube Data API v3/)
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /configurações da sala/i })).toBeTruthy();
+  });
+
+  it("chave com restrição de origem mostra o passo do Google Cloud", async () => {
+    await searchWithError({
+      error: "A chave do YouTube deste bar tem restrição de origem e a busca não consegue usar.",
+      code: "KEY_RESTRICTED",
+      hint: "No Google Cloud, edite a chave e deixe as restrições sem restrição.",
+    });
+
+    expect(screen.getByText(/No Google Cloud/)).toBeTruthy();
+  });
+
+  // Quem não é host não tem onde salvar chave nenhuma: mostrar um botão que leva a uma
+  // tela onde ela não pode agir seria pior que não mostrar nada.
+  it("participante não-dev vê o passo, mas sem o atalho", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        json: async () => ({
+          error: "Nenhuma credencial do YouTube configurada para este bar.",
+          code: "CREDENTIAL_NOT_CONFIGURED",
+          hint: "O dono do bar precisa salvar uma chave nas configurações da sala.",
+        }),
+      }))
+    );
+    renderSearch({ isHost: false });
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.getByText(/O dono do bar precisa salvar uma chave/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /configurações da sala/i })).toBeNull();
+  });
+
+  // O teste que fecha o defeito: HTTP 503 NÃO pode virar "falha de rede".
+  it("resposta HTTP de erro nunca aparece como 'falha de rede'", async () => {
+    await searchWithError({ error: "A busca está temporariamente indisponível.", code: "SERVER_MISCONFIGURED" });
+
+    expect(screen.queryByText(/Falha de rede/)).toBeNull();
+    expect(screen.getByText("A busca está temporariamente indisponível.")).toBeTruthy();
+  });
+
+  // Um proxy devolvendo HTML num 500 não pode virar "falha de rede" nem
+  // estourar exceção no `response.json()`.
+  it("resposta sem JSON válido não quebra a tela nem vira 'falha de rede'", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 500,
+        json: async () => {
+          throw new SyntaxError("Unexpected token < in JSON");
+        },
+      }))
+    );
+    renderSearch();
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.queryByText(/Falha de rede/)).toBeNull();
+    expect(screen.getByText("Não foi possível buscar agora.")).toBeTruthy();
+  });
+
+  // Só `fetch` recusado é rede. Offline, DNS, CORS bloqueado.
+  it("só fetch recusado diz 'falha de rede'", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      })
+    );
+    renderSearch();
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.getByText("Falha de rede ao buscar músicas.")).toBeTruthy();
+  });
+
+  it("rate limit continua dizendo para aguardar", async () => {
+    await searchWithError(
+      { error: "Você buscou demais. Espere um pouco e tente de novo.", code: "RATE_LIMITED" },
+      429
+    );
+
+    expect(screen.getByText(/aguarde um pouco\)/)).toBeTruthy();
+    // Rate limit não é problema de configuração: nada de atalho para o host.
+    expect(screen.queryByRole("link", { name: /configurações da sala/i })).toBeNull();
+  });
+});

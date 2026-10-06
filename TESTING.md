@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-03):** suite com **523 testes** (44 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 55, `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 10 (raio + `createRoomSchema` da Fase 8b·quater) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **16 provas via MSW** — incl. credencial OAuth via **Bearer** host/app —, o **roundtrip authorize→callback** com 4 provas do estado, a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 28, `song-search` 9, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `room-settings` 3, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-06):** suite com **680 testes** (51 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 88 (`credentials` 18 com o portão `is_dev`, `errors` 15 — que incluem o payload real do deploy, `badRequest` + "API key not valid", e o contrapeso que impede promover `badRequest` a chave inválida só pelo `reason`, `service` 15, `host-oauth` 16 com a invalidação na desconexão e no refresh em andamento, `diagnostics` 21 com a redação de segredo em exceção nossa, `search` 9), `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 10 (raio + `createRoomSchema` da Fase 8b·quater) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **21 provas via MSW** — Bearer OAuth host/app, o portão `is_dev` nos dois sentidos, pool ativo/inativo e `own_only` ignorando `youtube_pool_id` — e a **`/api/youtube/diagnostics` com 18** (o portão 401/403, o relatório sem gastar cota, `?room=`, `?probe=1` com `keyInvalid` e `ipRefererBlocked`, a sala inexistente que não pode virar "sem credencial", e a exceção com segredo redigida), o **roundtrip authorize→callback** com 4 provas do estado mais o `redirect_uri` derivado da env (12 no total, com o aviso de `NEXT_PUBLIC_APP_URL` ausente), a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 28, `song-search` 16 com o bloco da Fase 8f — passo do host, participante sem atalho e resposta HTTP que nunca vira "falha de rede" —, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host), `src/lib/supabase/admin.test.ts` 5 (o memo por `(url, key)`), `room-settings` 8 (os textos que não podem voltar a mentir) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). A Fase 8f acrescenta o **`scripts/smoke-youtube-credential.sql`** — **19/19 no Supabase Cloud em 06/10/2026** (default `own_only`, as quatro recusas de coerência, o FK `RESTRICT`, os pools invisíveis ao cliente, a RPC de saúde sem devolver a chave e o bypass do trigger para service role). A Fase 8f acrescenta o roteiro manual de §3.15 (o que a tela mostra × o que só o diagnóstico mostra) — a parte automatizada está coberta e o **`?probe=1` no deploy de preview foi executado** (ver o bloco "verificado no deploy" ao fim da seção). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -624,6 +624,82 @@ document.cookie = 'kf-geo=' + encodeURIComponent(JSON.stringify(
 > é do **navegador** (`signInAnonymously`). Limpar os dados do site cria uma
 > identidade nova, e o browser dá para apagar a cada pedido — fechar isso é prova
 > de identidade, não uma trigger.
+
+### 3.15 Busca do YouTube: o que a tela mostra e o que só o diagnóstico mostra (Fase 8f, 2026-10-05)
+
+> **Por que este bloco existe:** o defeito reportado era um 502 genérico
+> ("Tente de novo em instantes") que **ninguém conseguia diagnosticar** — o
+> `reason` do Google era descartado antes de virar texto. A Fase 8f separou duas
+> coisas que estavam misturadas: **o que o participante vê** (passo a seguir, sem
+> jargão) e **o que só a conta `dev` vê** (o `reason` cru, que custa 100 unidades
+> de cota). Os testes automatizados cobrem o contrato das duas.
+
+> **Verificado no deploy (2026-10-06, preview `karaoke-flow-54d1zvj4p`):** o item
+> que fechava a fase foi executado e a hipótese inicial — restrição de origem ou
+> de IP — estava **errada**. A `YOUTUBE_API_KEY` da Production tinha **198 dias** e
+> o Google respondia `400` · `reason=badRequest` · "API key not valid" para ela,
+> enquanto a chave do `.env.local` respondia `200`. Trocada a chave,
+> `?probe=1&room=KARAOKE` devolveu `ok: true`, `resolvedFrom: "dev"`, HTTP 200 do
+> Google em 404 ms, e nenhum segredo no corpo; o host de `BAR2FO` (fora de
+> `dev_accounts`) recebeu **403** sem gastar cota. Método: **`vercel pull` não
+> serve para conferir valor** — variável tipo Secret volta como `[SECRET]` e
+> `?decrypt=true` devolve o envelope cifrado (1072 caracteres para uma chave de
+> 39). A única leitura confiável de uma credencial é a **função que a usa**:
+> sondar a chave direto (Google, `maxResults=1`) ou `?probe=1` no deploy.
+
+> **Já verificado no deploy (2026-10-06, preview `karaoke-flow-54d1zvj4p`):** o
+> item que fechava a fase foi executado e a hipótese inicial estava **errada**.
+> Não era restrição de origem nem de IP: a `YOUTUBE_API_KEY` da Production tinha
+> **198 dias** e o Google respondia `400` · `reason=badRequest` · "API key not
+> valid" para ela, enquanto a chave do `.env.local` respondia `200`. Com a chave
+> trocada, `?probe=1&room=KARAOKE` devolveu `ok: true`, `resolvedFrom: "dev"`,
+> HTTP 200 do Google em 404 ms, e o corpo **sem nenhum segredo**. O caso do não-dev
+> (`room=BAR2FO`, host fora de `dev_accounts`) devolveu **403** sem gastar cota.
+> O que a sond taught sobre o método: **`vercel pull` não serve para conferir
+> valor** — variável tipo Secret volta como `[SECRET]` e `?decrypt=true` devolve o
+> envelope cifrado (1072 caracteres para uma chave de 39). A única leitura
+> confiável de uma credencial é a **função que a usa**: sondar a chave direto
+> (Google, `maxResults=1`) ou `?probe=1` no deploy.
+>
+> **Primeiro, o passo que não depende de nada:** a migration
+> `20261005000043` precisa estar aplicada no ambiente que se está testando. Sem
+> ela, a coluna `bars.youtube_credential_policy` não existe e a busca quebra com
+> erro de banco.
+
+**Participante sem nenhuma credencial (o caso reportado)**
+
+- [ ] Entrar em uma sala **sem chave salva e sem conta do YouTube conectada** e abrir "Pedir música": a mensagem diz que **esta sala** precisa de chave, com o passo escrito (Google Cloud → criar chave → colar em `/salas/<código>`), e **não** diz "falha de rede" nem "Tente de novo em instantes"
+- [ ] O mesmo celular, na mesma sessão, **sem** a chave do dev no ambiente: o erro é o de cima. Este é o teste que fecha o vazamento — **a chave do dono não pode aparecer para este bar**
+- [ ] A busca responde em **JSON** mesmo no erro (o DevTools em Network mostra o corpo com `code` e `hint`, e o status é `503`, não `500` com HTML)
+- [ ] **Host** da mesma sala vê um botão/atalho para as configurações da sala; **participante** não vê atalho
+
+**Host com chave inválida, restrita, ou sem API habilitada** (o que a classificação promete)
+
+- [ ] Salvar uma chave **com restrição de origem ou de IP**: a tela diz que a chave está **restrita**, e não "inválida" — é o caso que só falha no deploy, porque a busca é server-side e o IP de saída da Vercel não é o da máquina
+- [ ] Salvar uma chave de um projeto **sem a YouTube Data API v3 habilitada**: a mensagem é a específica, com o link/enlace para a tela da API
+- [ ] Copiar uma chave **revogada**: a mensagem é "chave inválida" e o passo é criar outra
+- [ ] **Cota do projeto estourada**: a mensagem diz que a cota do **projeto** acabou, e o passo é criar um projeto/chave — **não** diz "por usuário" e **não** promete que conectar a conta resolve
+
+**Conta do YouTube conectada pelo host (OAuth)**
+
+- [ ] Host conecta a conta em `/salas/<código>` e volta à busca: a busca funciona **e o texto da tela continua dizendo que a conta não garante cota separada** (a cobrança é do projeto do credential)
+- [ ] O `redirect_uri` bate com o registro: se `NEXT_PUBLIC_APP_URL` estiver errada/faltando, aparece `redirect_uri_mismatch` e **o log do servidor tem o aviso `youtube_oauth_missing_app_url`** (uma vez, não a cada requisição)
+
+**Diagnóstico (só conta `dev`)**
+
+- [ ] `GET /api/youtube/diagnostics` (sem query): devolve o estado do ambiente **sem gastar cota** — variáveis presentes **por nome**, contexto do deploy, papel da sessão. Conferir: nenhum valor de chave/token aparece no corpo
+- [ ] `GET /api/youtube/diagnostics?room=KARAOKE`: mostra a **fonte** que aquela sala resolveria (`room_api_key`, `host_oauth`, `platform_pool`, `app_oauth`, `dev_api_key` ou `none`) **sem** fazer chamada ao YouTube
+- [ ] `GET /api/youtube/diagnostics?probe=1`: faz a chamada real e devolve `googleReason` cru. É aqui que se descobre **por que** a chave da Vercel está sendo recusada
+- [ ] **Participante** chamando o endpoint: `403`, sem detalhe de ambiente
+- [ ] Nenhum dos três formatos devolve chave, access token, refresh token, id de projeto ou corpo bruto do Google
+
+**O item que fecha a Fase 8f:** rodar `?probe=1` **no deploy**, não no `localhost`.
+A hipótese da restrição de origem era a mais provável para o relato original, e
+ela é indistinguível de "chave inválida" olhando o `localhost`. — **Feito em
+06/10/2026**, e a hipótese estava errada: a chave da Production é que estava
+morta. O checklist de tela acima (as caixas de participante, chave inválida,
+conta conectada) continua **pendente**, porque exige gravar chave por sala e
+conectar OAuth de verdade no navegador.
 
 ---
 

@@ -9,6 +9,7 @@ import {
   parseOauthState,
   YOUTUBE_OAUTH_STATE_COOKIE,
 } from "@/app/auth/youtube/oauth";
+import { invalidateCachedHostToken } from "@/lib/youtube/host-oauth";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const query = request.nextUrl.searchParams;
@@ -55,6 +56,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (error) {
     return redirectWithError(request, "store-failed");
   }
+
+  // O token novo acabou de entrar no banco; o access token antigo pode estar
+  // no cache de 55 min desta instância. Sem esta linha, reconectar a conta (ou
+  // trocar de conta Google) continuaria buscando com o token anterior — que o
+  // Google pode ter revogado junto com o consentimento antigo.
+  invalidateCachedHostToken(user.id);
 
   const target = actual.room ? `/salas/${actual.room}` : "/dashboard";
   const response = NextResponse.redirect(new URL(target, oauthBaseUrl(request)));

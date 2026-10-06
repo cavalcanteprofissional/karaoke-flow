@@ -212,6 +212,7 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
                 replacedTitle: ownActiveSong.title,
               }
             }
+            isHost={room.host_id === user.id}
           />
         </CardContent>
       </Card>

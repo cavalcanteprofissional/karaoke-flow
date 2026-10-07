@@ -11,6 +11,7 @@ erDiagram
     auth_users ||--o| bars : "1:1 (host)"
     bars ||--o{ mesas : "tem (1..N)"
     bars ||--o{ rooms : "karaokê (default 1)"
+    youtube_credential_pools ||--o{ bars : "pool da política platform_pool (00043)"
     auth_users ||--o{ rooms : "host de (via bars)"
     auth_users ||--o{ room_members : "participa"
     auth_users ||--o{ queue_items : "adiciona"
@@ -50,6 +51,8 @@ erDiagram
         float latitude "nullable (geo gate)"
         float longitude "nullable (geo gate)"
         integer raio_permitido_metros "default 150 (50..1000)"
+        text youtube_credential_policy "own_only (default) | platform_pool — 00043"
+        uuid youtube_pool_id "FK youtube_credential_pools (nullable, ON DELETE RESTRICT)"
         timestamptz criado_em
     }
 
@@ -99,6 +102,15 @@ erDiagram
         jsonb results
         timestamptz created_at
     }
+
+    youtube_credential_pools {
+        uuid id PK
+        text label "rótulo mostrado ao dono (não é segredo)"
+        text api_key "chave da conta de EMPRESA (nunca sai do service role)"
+        integer daily_search_budget "teto de buscas não cacheadas/dia UTC (default 80)"
+        boolean active
+        timestamptz criado_em
+    }
 ```
 
 > `song_cache` (migration `20260921000006`) **não tem políticas RLS** — só o service role lê/escreve (cache da busca do YouTube).
@@ -113,7 +125,11 @@ erDiagram
 >
 > **Fase 8c (migrations `20260930000038`/`00039`, auditoria de RLS):** `rooms.youtube_api_key` e `rooms.player_token` saem do alcance do papel `authenticated` por **ACL de coluna** (as outras 14 colunas continuam legíveis, pela view `rooms_public`, que é `security_invoker`); a leitura/escrita dos dois segredos passa por `admin_get_room_player_token`, `admin_get_room_youtube_api_key` e `admin_set_room_youtube_api_key` (`security definer`, `EXECUTE` só para `authenticated`/`service_role`); `bars` passa a ser legível só pelo próprio bar ou pelo bar de uma sala aprovada; `mesas` só pelo host; `room_members` só aceita `UPDATE (status)`. RLS decide por **linha**, então nenhum desses cuatro efeitos é possível por policy — daí ACL de coluna + RPC. Relatório: [`auditoria-rls.md`](../engenharia/auditoria-rls.md).
 >
-> **Fase 8a (migrations `20260927000029`/`00030`):** `rooms.pre_approval_24h` (boolean, **default true**) e `room_members.approved_at` (timestamptz, base da janela de 24h, mantida por trigger `room_members_sync_approved_at_trg`); funções `current_user_is_anonymous()`, `member_entry_state(p_room_id, p_user_id)` e as duas portas de `player_room_id(p_room_code, p_token)` — `get_player_state` e `claim_next_song` passam a aceitar `p_token` nulo (autorização pela sessão).
+> **Fase 8a (migrations `20260927000029`/`00030`):** `rooms.pre_approval_24h` (boolean, **default true**) e `room_members.approved_at` (timestamptz, base da janela de 24h, mantida por trigger `room_members_sync_approved_at_trg`); funções `current_user_is_anonymous()`, `member_entry_state(p_room_id, p_user_id)` e as duas portas de `player_room_id(p_room_code, p_token)` — `get_player_state` e `claim_next_song` passam a aceitar `p_token` nulo (autorização pela sessão). A mesma migration **revogou** o `EXECUTE` de `PUBLIC` nessas duas RPCs e concedeu explicitamente a `anon`/`authenticated` (ver §2, "Playback é RPC").
+>
+> **Fase 8f (migration `20261005000043`, 2026-10-05):** política de credencial do YouTube **por bar** — `bars.youtube_credential_policy` (`own_only`, default, ou `platform_pool`) e `bars.youtube_pool_id` (FK **`ON DELETE RESTRICT`**, porque `SET NULL` anularia a invariante da trigger). A coerência policy↔pool mora na trigger `bars_guard_youtube_credential_policy` (`before insert or update`, mesmo padrão da `20260930000036`). A tabela `youtube_credential_pools` tem **RLS ligado e nenhuma policy** (só service role, como `song_cache` e `youtube_oauth_tokens`); a RPC dev-only `admin_youtube_credential_health(bar_id)` devolve rótulos, booleanos e contagens — **nunca** chave, token ou id de projeto. `daily_search_budget` é teto de **configuração**, não contador; rotação de chave do pool é manual. Detalhe em [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §3.1.1; smoke `scripts/smoke-youtube-credential.sql`.
+>
+> **Fase 8g (migration `20261005000044`, 2026-10-07):** RPC `release_current_item(p_room_code, p_token)` (`security definer`, mesma porta `player_room_id` de `claim_next_song`) — devolve a faixa presa em `playing` para **`approved` na mesma posição** e põe a sala em `idle`. Chamada pelo quiosque no "Trancar TV", **antes** de limpar o arm (que vive só no `localStorage` da TV): sem ela, a regra `KF001` bloqueava o cantor para sempre. Ver §2 e [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §4.4; smoke `scripts/smoke-release-current-item.sql` (11/11 no Cloud).
 
 ---
 
@@ -160,6 +176,7 @@ flowchart LR
 | `profiles`     | via view `profiles_public` (invoker: anon/authenticated leem `id/name/avatar_url`, nunca email) | trigger `handle_new_user` (ninguém insere direto)    | próprio profile                                                                               | —                              |
 | `consents`     | só o próprio usuário                                                    | próprio usuário (ou service role)                    | próprio usuário (ou service role)                                                             | —                              |
 | `song_cache`   | sem política                                                            | sem política                                         | sem política                                                                                  | sem política (só service role) |
+| `youtube_credential_pools` | sem política | sem política | sem política | sem política (só service role) |
 
 > **Anônimo (`is_anonymous`)**: lê `bars`/`mesas` (precisa ver código/QR e escolher mesa) — mas a RPC `create_bar` recusa sessão anônima; o anfitrião começa com sessão real. **Nunca é pré-aprovado** por `member_entry_state`, mesmo aprovado por outro host antes (Fase 8a).
 >
@@ -177,12 +194,14 @@ flowchart LR
 - **Encerrar sala = RPC `close_room` (`security definer`)** (migration `20260923000019`): checa `is_host`, marca `rooms.status='closed'`, cancela a fila toda (`cancelled`, status terminal novo) e **expulsa todos** (`DELETE room_members`). Atômico — o client não ajusta essas peças separadamente.
 - **Reordenar a fila = RPC `reorder_queue` (`security definer`)** (migration `20260926000025`): o UPDATE de `position` do host é feito dentro da função, sob advisory lock com a **mesma chave de `next_queue_position`**, e só com a **fila visível inteira** (`playing`+`approved`+`pending`) — sem unique em `(room_id, position)`, uma lista parcial criaria posições repetidas. Rewrite único com `row_number()` 1..N (realtime sem tempestade de eventos).
 - **Trocar a música = RPC `replace_queue_song` (`security definer`)** (migration `20260926000026`): o **autor do item ou o host** reescreve só vídeo/título/thumb/duração; `position` e `status` ficam intactos (D2) e o item precisa estar `pending`/`approved` (D3). Existe porque a policy de UPDATE é host-only — o client não ganha UPDATE direto.
-- **Playback é RPC, nunca policy** (migration `20260926000027`): a TV é **anônima** e não entra em `rooms`/`queue_items` por RLS (ela nem é membro), então leitura, avanço, controle e rotação de token são `get_player_state`, `claim_next_song`, `set_playback` e `rotate_player_token` — todas `security definer`. **Correção de doc (2026-10-02, medido):** este texto dizia que elas tinham `revoke … from public` e `grant` explícito, e **não têm** — as 40 funções de `public` deste projeto herdam `EXECUTE` do default do PostgreSQL (`CREATE FUNCTION` dá `EXECUTE` a `PUBLIC`, e `PUBLIC` vale para todo papel), então `anon` **executa** as quatro. O que barra é o **código** dentro de cada uma: `is_host`, o token de capacidade e a checagem de `status`. A segurança é real, mas é defendida por `if`, não por ACL — a mesma forma de "parede que a gente acredita estar no banco" que a auditoria da Fase 8c caçou (F7). A `20260930000039` fecha isso **só** para as três `admin_*`, que são as que carregam segredo; fechar as outras 37 exige inventário de quem chama o quê. **O token de capacidade (`rooms.player_token`) é a autorização da rota pública**: sem ele a leitura devolve `{ok: false}` e nada mais. `set_playback` exige `auth.uid() = rooms.host_id` e devolve `false` (não levanta exceção) para quem não é host.
+- **Playback é RPC, nunca policy** (migration `20260926000027`): a TV é **anônima** e não entra em `rooms`/`queue_items` por RLS (ela nem é membro), então leitura, avanço, controle, rotação de token e **liberação da faixa presa** são `get_player_state`, `claim_next_song`, `set_playback`, `rotate_player_token` e `release_current_item` (Fase 8g, `20261005000044`) — todas `security definer`. **ACL medida ao vivo em 2026-10-07 (a "correção de doc" de 02/10 não se sustenta para todas):** são **45** funções em `public` (a nota antiga citava 40), das quais **15** estão sem `EXECUTE` para `PUBLIC` — as cinco `admin_*` fechadas (`20260930000039` × 3, `admin_room_occupancy` da `00040`, `admin_youtube_credential_health` da `00043`) e dez de playback/entrada (inclusive as triggers `queue_items_one_active_per_participant` e `rooms_sync_playback`), entre elas `get_player_state` e `claim_next_song`, que a **`20260927000029` (27/09) revogou de `PUBLIC`** e concedeu explicitamente a `anon`/`authenticated`, e `release_current_item`, que nasce com o mesmo par `revoke`/`grant`. As outras **30** herdam o `PUBLIC` do `CREATE FUNCTION` — entre elas **`set_playback` e `rotate_player_token`**, que `anon` executa. Em **qualquer** dos dois casos o que barra é o **código** dentro da função: `is_host`, o token de capacidade e a checagem de `status` — segurança real defendida por `if`, não por ACL, a mesma forma de "parede que a gente acredita estar no banco" que a auditoria da Fase 8c caçou (F7); fechar as que faltam por ACL exige inventário de quem chama o quê. **O token de capacidade (`rooms.player_token`) é a autorização da rota pública**: sem ele a leitura devolve `{ok: false}` e nada mais. `set_playback` exige `auth.uid() = rooms.host_id` e devolve `false` (não levanta exceção) para quem não é host.
 - **A entrada em `playing` tem dono único: `claim_next_song`** (chamada pelo player, com a **mesma chave de advisory lock** de `next_queue_position`), e ela **exige que o item esteja `approved`**. `set_playback('play')` também promove, mas só quando não há item tocando — nunca troca o que está no ar. O `rooms.playback_status`/`current_item_id` é a fonte da verdade do que está tocando, e o trigger `rooms_sync_playback` mantém a invariante (item atual tem que estar `playing`; sem item, sala `idle` e âncora nula) — inclusive quando o item sai da fila pelo `on delete set null`.
 - **`claim_next_song` é idempotente por item** (migration `20260926000028`): o player manda o id do item que acabou; o banco só terminaliza se ainda for o item atual e devolve `already_advanced: true` quando for outro. Sem esse terceiro argumento, dois claims simultâneos (evento `ENDED` do player + poll) pulavam a música em reprodução.
+- **A saída da faixa presa = RPC `release_current_item`** (migration `20261005000044`, Fase 8g): com o quiosque trancado nada termina a faixa (`onEnded` não dispara com o stage desmontado e os guards de claim estão desarmados), então o item ficaria `playing` para sempre e a trigger `KF001` bloquearia o cantor. A RPC — chamada pelo **próprio quiosque** no "Trancar TV", antes de limpar o arm (que vive só no `localStorage`, `player-arm.ts`) — resolve a sala pela mesma porta `player_room_id` (token da TV **ou** sessão; forasteiro não libera, token errado não cai para a sessão), sob o **mesmo advisory lock** do playback, devolve o item para **`approved` na mesma posição** (`played` seria mentira, `skipped` roubaria a vez) e põe a sala em `idle`; sem faixa no ar, `released: false`. **`claim_next_song` não foi tocado** — ele só roda com a TV armada. Falha do RPC não impede o travar; a sala encerrada recusa. Smoke `scripts/smoke-release-current-item.sql` (11/11 no Cloud, 2026-10-07); detalhe em [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §4.4.
 - **Aprovação de entrada** só via RPC `join_room` (`security definer`) — INSERT direto sempre vira `pending`.
 - **Pré-aprovação de 24h é regra do banco, não da UI** (migration `20260927000030`): `member_entry_state` devolve o status efetivo (`status`, `mesa_numero`, `pre_approval`, `approved_at`) e é a **única** cópia da regra — o `join_room` grava o que ela devolve e o app lê a mesma função (preview, tela de espera, página da sala). A janela nasce em `room_members.approved_at`, escrita por trigger **só quando o status muda para `approved`** (reaprovar não renova; sair de `approved` zera). Toggle da sala: `rooms.pre_approval_24h` (**default ON**; a UI o mostra ligado e travado, decisão de produto, mas o banco respeita ON e OFF). **Anônimo nunca é pré-aprovado** (`current_user_is_anonymous`). `p_user` só é aceito para o próprio usuário ou pelo service role.
 - **Preview / entrada e criação de bar são RPCs `security definer`** (`get_entry_preview`, `join_room`, `create_bar`) — o leitor não-membro não acessa `rooms`/`bars` por SELECT.
+- **Política de credencial do YouTube por bar = trigger, não `if` de TypeScript** (migration `20261005000043`, Fase 8f): `bars.youtube_credential_policy` (`own_only` default = o bar banca a própria credencial; `platform_pool` = chave de conta de empresa com teto diário) e `bars.youtube_pool_id`. A coerência mora na trigger `bars_guard_youtube_credential_policy` (`before insert or update`): `own_only` com pool apontado e `platform_pool` sem pool **ativo** são recusados na escrita — mesma razão da `20260930000036`: regra que RLS não expressa não sobrevive a uma chamada direta pelo PostgREST. A política fica em `bars` (e não em `rooms`) de propósito: a **chave** é coluna da sala, a **política** é decisão do dono do bar. O FK do pool é `ON DELETE RESTRICT` — `SET NULL` deixaria o bar no estado que o trigger recusa, alcançado por fora dele. `youtube_credential_pools` tem RLS ligado e **nenhuma policy** (só service role lê chave), e `admin_youtube_credential_health` (dev-only) nunca devolve segredo. Limites declarados: `daily_search_budget` é teto de configuração, não contador; rotação de chave do pool é manual. Smoke `scripts/smoke-youtube-credential.sql` (precisa de Postgres).
 - **Multi-tenancy**: toda tabela de domínio tem `room_id`/`bar_id`; nada de assumir bar/sala única.
 
 ---
@@ -200,6 +219,7 @@ stateDiagram-v2
     approved --> rejected: host rejeita (antes de tocar)
     playing --> played: termina
     playing --> skipped: host pula
+    playing --> approved: "Trancar TV" devolve a faixa (release_current_item, Fase 8g)
     pending --> cancelled: dono encerra a sala
     approved --> cancelled: dono encerra a sala
     playing --> cancelled: dono encerra a sala (interrompe)
@@ -223,6 +243,7 @@ stateDiagram-v2
     playing --> playing: a música termina (claim com p_finished_item_id)
     playing --> playing: host pula (skip)
     playing --> idle: host para (stop)
+    playing --> idle: "Trancar TV" libera a faixa (release_current_item, Fase 8g)
     idle --> idle: item tocando saiu da fila (on delete set null)
     playing --> [*]: sala encerrada
     paused --> [*]: sala encerrada

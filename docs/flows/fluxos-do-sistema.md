@@ -313,20 +313,32 @@ autoridade:
    autoriza o autor sobre o próprio item nesses dois status — RLS real em vez de
    privilégio novo. Se a RLS barrar, a trigger falha em vez de deixar duas ativas.
 
-**Espelho no app (não é a fonte da verdade):** `resolveOwnActiveSong`
-(`src/lib/rooms/queue.ts`) dá a **mensagem** e permite o aviso prévio da tela;
-`readOwnActiveSong` monta o estado que a busca mostra. A action
-`addSongToQueueAction` lê antes de inserir e mapeia `KF001` para a mesma frase, o
-que cobre a corrida entre a leitura e o INSERT.
+**Espelho no app (não é a fonte da verdade):** a regra pura é **uma só** —
+`ownActiveSongView` (`src/lib/rooms/queue.ts`), que devolve a **mensagem** e o
+estado que a busca mostra. Ela é lida por `readOwnActiveSong` no servidor e por
+`useOwnActiveSong` no cliente (2026-10-07, Fase 8g): o hook escuta
+`postgres_changes` em `queue_items` (a virada `playing → played`, que acontece
+dentro da `claim_next_song` da TV), o broadcast da fila e um poll de 10 s, com
+relê no foco/visibilidade/online — as mesmas três camadas da `queue-list`.
+Enquanto a faixa toca, o botão da busca fica travado com o aviso; quando ela
+termina, a página destrava **sem F5**. Antes havia duas fontes de verdade (uma
+prop de Server Component lida por render) e a virada de status não revalidava
+`/buscar`, então o destravar dependia de alguém navegar. As actions
+`claimNextSongAction`/`setPlaybackAction` revalidam `/salas/<código>` **e**
+`/salas/<código>/buscar`, e a action `addSongToQueueAction` lê antes de inserir
+e mapeia `KF001` para a mesma frase, o que cobre a corrida entre a leitura e o
+INSERT. O **host** é isento por derivação da própria regra (ele não tem limite),
+não por efeito — foi um teste dessa leitura que pegou o antigo leitor mostrando
+o aviso "sua música vai sair" para o host.
 
 **Limite declarado:** o visitante sem login autenticado é usuário Supabase
 anônimo de verdade (`signInAnonymously`), com `auth.uid()` estável **por
 navegador** — limpar os dados do site cria uma identidade nova. Fechar isso é
 prova de identidade, não uma trigger.
 
-## 3.1.1 Busca de música no YouTube (Fase 4 — implementado)
+## 3.1.1 Busca de música no YouTube (Fase 4 — implementado; credencial e erros revisados na Fase 8f — 2026-10-05/06)
 
-Rota `/api/youtube/search` consumida pelo `SongSearch` (rota filha `/salas/[codigo]/buscar`). Credencial é resolvida **apenas no servidor** (service role); cache `song_cache` compartilhado entre karaokês; rate limit independente da cota da Google.
+Rota `/api/youtube/search` consumida pelo `SongSearch` (rota filha `/salas/[codigo]/buscar`). Credencial é resolvida **apenas no servidor** (service role) numa cadeia com dono em cada degrau — **chave do bar → OAuth do host**, e os dois últimos degraus (OAuth do app, `YOUTUBE_API_KEY`) **só para conta `dev`** (`is_dev`, papel vivo no banco e não numa env, falha fechada); cache `song_cache` compartilhado entre karaokês; rate limit independente da cota da Google. **Quem paga a cota de cada bar é decisão explícita** (`bars.youtube_credential_policy`, migration `20261005000043`): `own_only` (default — o bar banca a própria credencial) ou `platform_pool` (chave de conta de empresa com teto diário por bar). Ver o bloco "Política de credencial por bar" abaixo do diagrama.
 
 ```mermaid
 sequenceDiagram
@@ -356,7 +368,7 @@ sequenceDiagram
     alt cache fresco
         R-->>S: 200 { results, cached: true }
     else cache miss
-        R->>R: credencial: chave do bar → OAuth host → OAuth app → dev
+        R->>R: credencial: chave do bar → OAuth host → (só conta dev) OAuth app → chave dev
         R->>YT: search.list safeSearch=strict + videoEmbeddable + videos.list durações
         R->>YT: OAuth Bearer ou fallback API key
         YT-->>R: itens
@@ -367,6 +379,17 @@ sequenceDiagram
 ```
 
 **OAuth por-host:** bloco "Conta do YouTube" no `RoomSettings` (mostra "conectado à conta Google + data" quando há token, com botão "Remover conexão" que **revoga na Google** e apaga a linha) → `/auth/youtube/authorize` (estado nonce em cookie httpOnly, `access_type=offline&prompt=consent`) → Google → `/auth/youtube/callback` (exchange → `youtube_oauth_tokens`, **sem policies — service role**) → redirect à sala. Fallback do app: `scripts/youtube-app-oauth.mjs` (loopback) coleta o `YOUTUBE_APP_REFRESH_TOKEN` para o `.env.local`.
+
+**A cadeia de credencial ganhou dono em cada degrau (Fase 8f — 2026-10-05, `20261005000043`):**
+
+- **`is_dev` no portão dos últimos degraus.** Antes, a única condição de "OAuth do app" e "`YOUTUBE_API_KEY`" era "a env existe" — na prática **qualquer bar sem nada nos três primeiros degraus gastava a cota pessoal do dono**, sem ele saber e sem poder recusar. Agora os dois últimos só são alcançados por conta `dev` (`dev_accounts` no banco, `isDevAccount` falha fechada), o que mantém a conta do dev funcionando em local e remoto.
+- **`bars.youtube_credential_policy`** (`own_only` | `platform_pool`, default `own_only`) e **`bars.youtube_pool_id`**: a chave é coluna da **sala** (o dono cola por sala), mas a política é decisão do **dono do bar** e vale para todas as salas dele — a coerência entre as duas mora em **trigger**, não em `if` de TypeScript (`own_only` com pool apontado e `platform_pool` sem pool ativo são recusados na escrita; mesmo padrão da `20260930000036`).
+- **`youtube_credential_pools`** (chave da conta de empresa + `daily_search_budget` + `active`) com **RLS ligado e nenhuma policy** — só service role, como `song_cache` e `youtube_oauth_tokens`; uma RPC "só para membros" não resolveria (o argumento da auditoria F1, `20260930000038`). O FK do pool é `ON DELETE RESTRICT`, porque `SET NULL` anularia a invariante que o trigger sustenta.
+- **`admin_youtube_credential_health(bar_id)`** (dev-only): política, rótulo/estado do pool, quantas salas têm chave própria, se o host tem OAuth conectado e se herda o orçamento — **nunca** chave, token ou id de projeto. O `daily_search_budget` é teto **de configuração**, não contador: nada impede um bar de estourá-lo, ele apenas não é contabilizado por request; e o pool não tem rotação automática de chave.
+- **Erros com causa e ação.** `classifyYouTubeError` (`src/lib/youtube/errors.ts`) classifica pelo `reason` do Google (campo estável) antes da mensagem: cota, chave inválida, chave com **restrição de origem** (o caso que só aparece no deploy — a busca é server-side, não manda `Referer`, e o IP de saída não é o da máquina do dono) e API não habilitada viram textos diferentes, com `Retry-After` propagado no 429. O **`/api/youtube/diagnostics`** (só dev) mostra o estado do ambiente **sem gastar cota**; `?probe=1` faz a chamada real (100 unidades), `?room=CODIGO` mostra a credencial que aquela sala resolveria — e a chave/tokens **nunca** saem (`safeDiagnosticDetail` é fronteira com `SECRET_PATTERNS`, não rótulo). Verificado no deploy de 06/10: a causa do 502 relatado era uma chave `YOUTUBE_API_KEY` de Production com **198 dias**, não restrição de origem — foi o `?probe=1` que provou.
+- **Smoke:** `scripts/smoke-youtube-credential.sql` (precisa de Postgres: o Vitest não alcança o trigger) — default `own_only`, as quatro recusas de coerência, FK `RESTRICT` e recusa de apagar pool em uso, pools invisíveis ao cliente autenticado, RPC de saúde recusada para não-dev e sem chave no corpo.
+
+> **Falha de busca nunca é "falha de rede" (Fase 8f):** a rota responde **sempre JSON** (configuração ruim vira `SERVER_MISCONFIGURED`/503, não HTML 500), e no cliente só `fetch` recusado diz "falha de rede" — um 500 com HTML não vira mais rede na tela do participante.
 
 ### 3.2 Aprovação (host) — entregue em 2026-09-26 (Fase 5, Bloco A)
 
@@ -422,6 +445,7 @@ stateDiagram-v2
     approved --> rejected: host rejeita (antes de tocar)
     playing --> played: termina
     playing --> skipped: host pula
+    playing --> approved: "Trancar TV" devolve a faixa (release_current_item, Fase 8g)
     pending --> cancelled: dono encerra a sala
     approved --> cancelled: dono encerra a sala
     playing --> cancelled: dono encerra a sala (interrompe)
@@ -434,6 +458,8 @@ stateDiagram-v2
 > A operação de **trocar música** (ver §5) mantém o item no mesmo estado de status em que está (com re-regra opcional conforme decisão de produto) — não cria um estado novo.
 
 > **Quem promove `approved → playing` agora (entregue em 27/09):** a RPC `claim_next_song`, chamada pelo **player**, e não pelo painel. Ela é a única porta de entrada em `playing` (o painel do host não tem "tocar"), garante a **mesma chave de advisory lock** da fila e marca o item anterior como `played` **só se o player mandar o id dele** (ver §4.1).
+>
+> **E a única volta de `playing` para `approved` (entregue em 07/10, Fase 8g):** `release_current_item`, chamada pelo quiosque no "Trancar TV" (ver §4.4). Não é um quinto status nem uma exceção à regra `KF001` — é a devolução da vez que não terminou: a música não tocou até o fim, então `played` seria mentira e `skipped` roubaria a vez de quem estava cantando.
 
 ---
 
@@ -457,6 +483,10 @@ sequenceDiagram
     C-->>RT: broadcast playback-changed
     RT-->>P: evento → relê o estado (sem reload)
     YT-->>P: ended → claim_next_song(code, token, id-do-item-que-acabou)
+    P-->>RT: announce playback-changed (a TV também avisa — Fase 8g)
+    T->>T: 'Trancar TV' → sai o arm (localStorage) e chama release_current_item
+    P->>P: faixa volta approved na mesma posição · sala idle (Fase 8g)
+    P-->>RT: announce playback-changed (o card do host acompanha)
 ```
 
 > Latência alvo < 2s entre ação no controller e reflexo na tela: o caminho rápido é o broadcast; o poll de 5s existe para canal caído (TV ligada o dia todo).
@@ -515,6 +545,20 @@ Dois consertos de comportamento que o mesmo levantamento trouxe (os detalhes est
 
 - **A TV acorda tocando.** O quiosque só pedia a próxima faixa no `onStateChange(ENDED)`; quem acordasse, recarregasse ou perdesse o broadcast com a sala ociosa ficava parado no QR para sempre. Agora qualquer leitura de estado que encontra **sala ociosa com fila aprovada** pede música (`shouldClaimFromIdle`), e aprovar/rejeitar/remover/reordenar emite broadcast — o poll de 5s virou só a rede de segurança.
 - **O painel do host aprovava nada.** O embed `rooms(...)` das actions de fila virou ambíguo quando `rooms.current_item_id` passou a apontar para `queue_items` (PGRST201), e o erro era reportado como "música não encontrada". Corrigido com o hint explícito da FK, com o erro real chegando ao `toast`, e com `npm run diagnose:queue` no repositório para o próximo bug de RPC/PostgREST.
+
+### 4.4 A faixa presa em `playing` e a RPC `release_current_item` (Fase 8g — 2026-10-07, migration `20261005000044`)
+
+**O sintoma:** com o quiosque **trancado** ("Trancar TV") e uma faixa no ar, o cantor daquela música ficava **bloqueado para sempre** — todo pedido novo dele era recusado com `KF001` ("você já tem uma música tocando") e nada mais tirava o item de `playing`: `onEnded` não dispara com o stage desmontado, e `shouldAutoAdvance`/`shouldClaimFromIdle` respondem `false` porque o quiosque está desarmado. A única saída era o host lembrar de apertar Pular/Parar.
+
+**Por que o banco não sabia que a TV trancou.** O estado "armada/desarmada" vive só no `localStorage` da TV (`player-arm.ts`, por origem) — é um gate de autoplay, não um estado de sala. Conferido em 2026-10-07: a migration `20260927000032_playback_held` **nunca existiu** (o diretório salta de `00031` para `00033`), então não há coluna nenhuma que registre "sala segurada". Quem sabe que trancou é, portanto, **o próprio quiosque** — e é ele quem precisa dar o passo de saída.
+
+**A RPC (`security definer`, mesma porta de `claim_next_song`):** `release_current_item(p_room_code, p_token)` resolve a sala por `player_room_id` — **token da TV ou sessão** (host da sala ou membro `approved`; forasteiro não libera, token errado não cai para a sessão), sob o **mesmo advisory lock** das demais operações de playback. Com uma faixa em `playing`, devolve o item para **`approved` na mesma posição** (a música não terminou, então `played` seria mentira, e `skipped` roubaria a vez de quem estava cantando) e põe a sala em `idle`; sem música no ar, responde `released: false` e nada muda. A sala encerrada recusa.
+
+**A ordem no `Trancar TV` importa:** o arm sai **primeiro** (`setPlayerArmed(false)`), para que nenhum `claim` dispare entre o clique e a liberação; o RPC sai em seguida, sem esperar a UI. **Falha do RPC não impede o travamento** (a TV fecha mesmo assim), e depois disso o `refresh` roda de qualquer jeito para a tela não mentir. Quando o release efetivamente devolve uma faixa, o quiosque **anuncia** no canal `player:{CODE}` — senão o card do host (§6 de `fluxos-do-usuario.md`) ficaria dizendo "tocando" para uma sala que acabou de ficar ociosa.
+
+**Verificação (2026-10-07):** migration aplicada no projeto Cloud `kskoipyzqcacccepcqpc` e **`scripts/smoke-release-current-item.sql` rodou 11/11** (sala `SMOKE8G`, autossuficiente): `KF001` recusa com a faixa no ar · release devolve `approved` na mesma posição com sala `idle` · sem faixa no ar `released: false` · token errado não cai para sessão · host libera pela sessão · forasteiro não libera · sala encerrada recusa · **depois do release o cantor pede de novo**. Roteiro manual em [`TESTING.md`](../../TESTING.md) §3.16.
+
+**Limite declarado:** fechar o navegador da TV **no meio da faixa** não dispara nada (não há servidor para avisar) — o destravamento aí continua sendo Pular/Parar do host, que já existia. O `claim_next_song` **não foi tocado**: ele só é chamado por uma TV armada, então não havia momento em que ele pudesse enxergar o travamento.
 
 ---
 

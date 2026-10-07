@@ -217,6 +217,22 @@ entregue em `spectator.test.ts`, `queue-actions.test.ts`, `queue-list.test.ts` e
 
 ---
 
+## Adendo 2026-10-07 — Fase 8g: legenda OFF de propósito, busca que destrava sozinha e o card do Player ao vivo
+
+**Três entregas, uma única causa raiz: o banco sabia o que terminava, a UI não.**
+
+- **Legenda desligada de propósito, não por omissão (A):** `cc_load_policy: 0` em `src/components/rooms/youtube-stage.tsx`. O que o YouTube chama de legenda aqui é **transcrição automática por IA**, não letra de karaokê — numa sala de karaokê ela atrapalha o canto. Antes o OFF era "não passamos o parâmetro"; agora é uma **decisão explícita**. O contrato dos **8 `playerVars`** (`autoplay`, `controls`, `rel`, `fs`, `playsinline`, `iv_load_policy`, `cc_load_policy`, `origin`) passou a ser testado com `toEqual` (`youtube-stage.test.tsx`) — apagar `controls: 1` vira vermelho. Ver `fluxos-do-usuario.md` §5.
+
+- **A fila não destravava a busca (B1):** enquanto a música do participante estava em `playing`, a página de busca só destravava no próximo render do servidor (navegar/F5). A virada `playing → played` acontece **dentro da TV** (`claim_next_song`), sem revalidar `/salas/<código>/buscar`. Foi unificada uma **única regra**: `ownActiveSongView` (`src/lib/rooms/queue.ts`) — lida por `readOwnActiveSong` (servidor) e `useOwnActiveSong` (cliente) — com `postgres_changes` em `queue_items`, broadcast da fila, poll de 10 s, relê no foco/visibilidade/online. `claimNextSongAction` e `setPlaybackAction` **revalidam** `/salas/<código>` e `/salas/<código>/buscar`. **O host não tem limite** e nunca era para ver o aviso: o leitor antigo saía antes de olhar `playing` para o host — a caixa "sua música vai sair" aparecia quando não podia aparecer. Corrigido. Roteiro em [`../../TESTING.md`](../../TESTING.md) §3.16.
+
+- **Item preso em `playing` ao trancar a TV (B2):** com a TV trancada, `onEnded` não dispara e os guards de avanço se recusam a agir — a regra "uma música tocando não aceita novo pedido" (`KF001`) deixava aquele item em `playing` para sempre. A saída não era uma coluna `playback_held` (esta **nunca existiu** no banco — migrations saltam de `00031` para `00033`), mas a **própria TV** saber que trancou. Nova RPC `release_current_item` (`20261005000044`, `security definer`, mesma porta `player_room_id`) é chamada pelo quiosque **antes** de limpar o arm (`player-arm.ts`, localStorage), devolve a faixa para **`approved` na mesma posição**, põe a sala em `idle`, sob o mesmo advisory lock. Falha do RPC não impede o "Trancar TV"; **depois do release o cantor pede de novo**. Smoke 11/11 no Cloud `kskoipyzqcacccepcqpc`. Detalhe em [`../flows/fluxos-do-sistema.md`](../flows/fluxos-do-sistema.md) §4.4. **Limite declarado:** fechar o navegador no meio da faixa não dispara — o destravamento continua sendo Pular/Parar do host.
+
+- **O card "Player da TV" ao vivo (C):** deixava de acompanhar a realidade da TV (aparecia "tocando" numa sala ociosa). Passou a ler o estado ao vivo (`usePlaybackLive`), pela **sessão do host** — não pelo token — com broadcast + poll de 10 s + relê no foco. A **TV também anuncia** (depois do `claim` e do release), evitando duplo canal e mantendo coerência entre os painéis.
+
+**Gates:** lint, `tsc`, **705 testes / 52 arquivos** e `build` verdes; **`scan:secrets` vermelho por 7 achados pré-existentes** (fixtures de chave falsa de rodadas anteriores), sem allowlist nova (reportado no `TODO.md`); migration aplicada no Cloud, smoke 11/11.
+
+---
+
 ## Fase 11 — Visibilidade em dois níveis: agregado da sala + detalhe da mesa
 
 **Decidido com o PO (2026-09-25) — D3:** quem está fora do raio (após aprovado

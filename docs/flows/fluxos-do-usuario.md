@@ -103,6 +103,8 @@ flowchart TD
 ```
 
 > **Uma música ativa por participante (2026-10-04, migration `20261004000042`):** quem não é o **host da própria sala** tem no máximo **uma** música ativa — ativa é o que a fila mostra: `pending` + `approved` + `playing`. Pedir outra **substitui** a anterior (a mais antiga sai da fila), e **pedir com uma música tocando é recusado** — trocar a que está tocando cortaria o áudio da TV. Quando ela vira `played`, a vaga abre e o próximo pedido entra. Vale para o **visitante sem login autenticado** (que é usuário Supabase anônimo, com id estável por navegador) e para qualquer outro participante. O **host** pode manter quantas quiser, só na sala dele. A tela **avisa nos dois sentidos**: antes do clique, qual música vai sair; depois, um toast nomeando a que foi substituída. A decisão é do **banco** (trigger `before insert`), não do botão — ver `fluxos-do-sistema.md` §2.2 e o roteiro em [`../../TESTING.md`](../../TESTING.md) §3.14.
+>
+> **A busca destrava em tempo real, sem F5 (2026-10-07, Fase 8g):** enquanto a sua música toca, o botão "Adicionar" fica travado com o texto explicando que dá para pedir de novo quando ela terminar; quando a TV dá o `claim` e a faixa vira `played`, **a tela de busca reabre sozinha na hora** — era precisar navegar ou recarregar, porque a página lia a música ativa uma vez por render e a virada de status acontece dentro da TV, sem avisar a busca. Agora há **uma regra só** (`ownActiveSongView`), lida ao vivo por `useOwnActiveSong` (postgres_changes + broadcast + poll de 10 s + relê no foco) e pelas actions de playback, que revalidam `/salas/<código>` **e** `/salas/<código>/buscar`. O **host** não vê nenhum aviso nem trava (ele não tem limite) — a leitura que mostrava o aviso "sua música vai sair" para o host era um defeito, corrigido na mesma rodada. Roteiro em [`../../TESTING.md`](../../TESTING.md) §3.16.
 
 > **Pré-aprovação de 24h (2026-09-27, Fase 8a):** quem o host aprovou e **tem conta** volta aprovado por **24h** ao reconectar na sala, sem o host tocar em nada. Passou disso (ou com o toggle desligado no banco) a entrada volta a ser pedida normalmente, e **sair da sala** sempre exige aprovação nova — a linha do participante é apagada, então voltar é uma entrada do zero. **Visitante sem conta nunca é pré-aprovado**, mesmo que o host tenha aprovado antes. No painel do dono, o item "**Aprovação vale por 24h**" aparece **ligado e travado**, com o aviso de que sair da sala passa a exigir aprovação de novo (decisão de produto: o host não desliga isso). Detalhe da regra em [`banco-de-dados.md`](./banco-de-dados.md) §4.2 e [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §2.2.
 >
@@ -116,7 +118,7 @@ flowchart TD
 >
 > **Raio de presença no painel do host (2026-09-25, editável em 2026-09-26):** o card "Raio de presença" (abaixo dos toggles de "Como a sala funciona") explica que o gate de localização vale **mesmo com entrada livre ligada** e que o raio vale para **todas as salas do bar**, desenha o raio (padrão **500 m**) sobre o endereço do bar num mapa Leaflet/OpenStreetMap — com a metragem no HUD, os anéis internos rotulados ("anéis de 100 m") e links para abrir no Google Maps/OpenStreetMap. O host ajusta o valor no **input numérico ou no slider** (**50 a 1000 m**, de 50 em 50) e **vê o círculo e o aviso mudarem na hora, antes de gravar**; ao soltar o slider, sair do campo, apertar Enter ou parar por meio segundo, o valor é gravado e aparece "Salvo às HH:MM". Valor inválido (abaixo de 50 ou acima de 1000) é recusado no campo, erro do servidor devolve o valor anterior com aviso, e há "Restaurar 500 m" para voltar ao padrão. Bar sem endereço geolocalizado: aviso de que todo participante é bloqueado (o host entra). Quem não é dono do bar vê o mesmo mapa em modo somente leitura.
 
-> **Busca (Fase 4):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida só no servidor (chave do bar → OAuth do host → OAuth do app → dev); cota esgotada vira mensagem amigável; 429 por excesso de buscas.
+> **Busca (Fase 4; erros e credencial revisados na Fase 8f, 2026-10-05/06):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida **só no servidor** na ordem **chave do bar → OAuth do host**, e os degraus seguintes (OAuth do app e chave dev) **só para conta `dev`** — antes, qualquer bar sem nada gastava a cota do dono sem ele saber. **Política de credencial por bar** (`own_only` ou `platform_pool`, migration `20261005000043`) define quem paga a cota. A resposta do Google vira mensagem com **causa e o que fazer** (cota estourada, chave inválida, chave com restrição de origem — só aparece no deploy, API não habilitada), nunca um "algo deu errado"; 429 por excesso de buscas.
 
 ### 3.3 Participante — trocar a música da fila mantendo a posição — entregue em 2026-09-26 (Fase 5, Bloco D)
 
@@ -170,10 +172,16 @@ flowchart TD
     C --> D["Toca; fila lateral legível a distância; destaque para 'próxima'"]
     D --> E["Eventos realtime sem reload: play/pause/skip/stop"]
     E --> E2["Acabou a música → TV avança sozinha (o banco decide se é o item atual)"]
+    E --> L["'Trancar TV' → some o vídeo, a faixa NO AR volta para a fila<br/>(approved, mesma posição) e a sala fica ociosa — volta ao gate"]
+    L --> A
     E2 --> F["Fim da noite: dono encerra → fila cancelada, participantes expulsos,<br/>tela de encerramento (participantes) / volta ao CTA de QR"]
 ```
 
 > **Quem está cantando, na TV:** a faixa fixa mostra posição, título e quem pediu, com "tocando agora" em destaque e a próxima destacada logo abaixo. Nenhum overlay sobre o vídeo (restrição de TOS do YouTube).
+>
+> **Legenda do YouTube desligada de propósito (2026-10-07, Fase 8g):** a TV nunca mostra legenda (`cc_load_policy: 0`) — o que o YouTube chama de legenda aqui é **transcrição automática por IA**, não letra de karaokê, e numa sala ela grita texto por cima da música. Antes o OFF existia só por omissão (o parâmetro não estava escrito); agora está escrito com o motivo ao lado e os 8 knobs do player estão fechados num teste (`youtube-stage.test.tsx`) — apagar `controls: 1`, por exemplo, deixa a suíte vermelha.
+>
+> **"Trancar TV" não é só esconder o vídeo (2026-10-07, Fase 8g):** o botão some com o stage e, **ao mesmo tempo**, devolve a faixa que estava no ar para a fila (`approved`, na **mesma posição**) com a sala em `idle` — sem isso o cantor ficava bloqueado para sempre: a regra "uma música tocando não pede outra" continuaria valendo e nada mais tiraria a música de `playing` com o quiosque desligado. A destrava a busca na hora, e o card do host acompanha. Se o banco falhar no meio, a TV trava mesmo assim (não é por isso que o host fica sem fechar a sala). Só a **TV com token** vê o botão; quem abre o player pela sessão (celular, espectador) não. Detalhe em [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §4.4.
 >
 > **A TV é anonima**: ela abre um link com um **token** (`/player/KARAOKE?token=…`). Sem token — ou com um link já rotacionado — a tela explica que o link não serve mais, em vez de mostrar fila errada. O link fica no card "Player da TV" do painel, com **copiar** e **gerar novo link**.
 >
@@ -185,17 +193,21 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A["Host no celular (qualquer lugar da casa)"] --> B["Card 'Player da TV': tocar/pausar/pular/parar"]
+    A["Host no celular (qualquer lugar da casa)"] --> B["Card 'Player da TV' AO VIVO: tocar/pausar/pular/parar"]
     B --> C["set_playback — o banco exige host, a UI é só conveniência"]
     C --> D["Broadcast em player:{CODE}"]
     D --> E["Player kiosk relê o estado e mexe no vídeo carregado (sem reload)"]
     E --> F["Fila persistida reflete o estado atual (rooms.playback_status + current_item_id)"]
     B --> G["Gerar novo link → token rotacionado, a TV velha para na hora"]
+    E --> H["TV anuncia no mesmo canal (depois do claim e de liberar a faixa)"]
+    H --> B
 ```
 
 > **Quem não é host não vê o card** — e, se chamar a API direto, recebe `false`: a autorização é `auth.uid() = rooms.host_id` no banco.
 >
 > **Sem música aprovada, os botões de tocar/pausar somem** e o painel diz "Nenhuma música aprovada na fila" — melhor que um botão morto.
+>
+> **O card acompanha a TV (2026-10-07, Fase 8g):** até essa fase o card era renderizado **uma vez** pela Server Component e nunca mais mudava — o host via "Retomar" a noite inteira numa sala que já estava ociosa, com os botões certos no banco e a tela mentindo. Ele ganhou `usePlaybackLive` (broadcast + poll de 10 s + relê no foco, as mesmas três camadas da fila), lendo `get_player_state` **pela sessão do host** — sem depender do token, que o "Gerar novo link" gira; se a leitura falhar, o card mantém o que está na tela em vez de zerar. E a **TV passou a anunciar também**: depois de cada `claim` e de cada liberação de faixa, no canal `player:{CODE}` que ela já assinava — antes só o host avisava.
 
 ---
 

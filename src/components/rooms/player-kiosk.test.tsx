@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 
 import { PlayerKiosk } from "./player-kiosk";
@@ -14,6 +14,7 @@ import type { PlayerState } from "@/lib/rooms/playback";
 const mocks = vi.hoisted(() => ({
   getPlayerStateAction: vi.fn(),
   claimNextSongAction: vi.fn(),
+  releaseCurrentItemAction: vi.fn(),
   subscribeToPlaybackChanges: vi.fn(),
   announce: vi.fn(),
 }));
@@ -23,6 +24,8 @@ vi.mock("@/lib/rooms/playback-actions", () => ({
     mocks.getPlayerStateAction(...args) as unknown,
   claimNextSongAction: (...args: unknown[]) =>
     mocks.claimNextSongAction(...args) as unknown,
+  releaseCurrentItemAction: (...args: unknown[]) =>
+    mocks.releaseCurrentItemAction(...args) as unknown,
 }));
 
 vi.mock("@/lib/rooms/player-channel", () => ({
@@ -182,6 +185,9 @@ beforeEach(() => {
     playbackStatus: "playing",
     item: null,
   });
+  // Padrão "liberou": os testes de gate clicam em "Trancar TV" sem ser sobre o
+  // release, e sem este resolved o `.catch()` do quiosque estouraria em undefined.
+  mocks.releaseCurrentItemAction.mockResolvedValue({ ok: true, released: true });
   mocks.subscribeToPlaybackChanges.mockReturnValue(() => {});
 });
 
@@ -795,6 +801,44 @@ describe("PlayerKiosk — toque de partida", () => {
 
     expect(yt.player.loadVideoById).toHaveBeenCalledTimes(2);
     expect(yt.player.loadVideoById).toHaveBeenLastCalledWith("abc123", 0);
+  });
+
+  /**
+   * Fase 8g/B2: "Trancar TV" com a faixa no ar deixava o item preso em
+   * `playing` para sempre — `onEnded` não dispara com o stage desmontado, o
+   * quiosque já está desarmado (então nem `shouldAutoAdvance` nem
+   * `shouldClaimFromIdle` reclamam nada) e a trigger de "uma música por
+   * participante" recusava todo pedido daquele cantor com `KF001`. Não era
+   * demora, era bloqueio permanente.
+   */
+  it("'trancar TV' devolve para a fila a música que estava no ar", async () => {
+    await renderKiosk();
+
+    fireEvent.click(screen.getByRole("button", { name: /Trancar TV/ }));
+
+    await waitFor(() =>
+      expect(mocks.releaseCurrentItemAction).toHaveBeenCalledWith(ROOM, TOKEN)
+    );
+    // O quiosque relê o banco em seguida: o card não pode continuar mostrando
+    // como se a música estivesse no ar depois dela ter sido devolvida. (O mount
+    // não lê nada — ele já recebe o estado do servidor — então a primeira
+    // leitura da vida desta TV é justamente esta.)
+    await waitFor(() =>
+      expect(mocks.getPlayerStateAction).toHaveBeenCalledWith(ROOM, TOKEN)
+    );
+  });
+
+  it("'trancar TV' não falha quando a liberação não dá certo", async () => {
+    mocks.releaseCurrentItemAction.mockRejectedValue(new Error("rede caiu"));
+    await renderKiosk();
+
+    fireEvent.click(screen.getByRole("button", { name: /Trancar TV/ }));
+
+    // A TV tem de trancar de qualquer jeito: um erro de rede não pode deixar o
+    // host preso numa faixa que ele acabou de decidir encerrar.
+    expect(screen.getByTestId("player-gate")).toBeInTheDocument();
+    expect(screen.queryByTestId("youtube-stage")).toBeNull();
+    expect(window.localStorage.getItem(`kf:player-armed:${ROOM}`)).toBeNull();
   });
 
   it("'começar sem som' dá conta de uma TV que recusou o áudio", async () => {

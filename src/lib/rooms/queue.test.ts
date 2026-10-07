@@ -8,6 +8,7 @@ import {
   buildQueueSongReplacement,
   composeQueueOrder,
   moveQueueItem,
+  ownActiveSongView,
   reorderSchema,
   resolveOwnActiveSong,
   QUEUE_ITEM_STATUSES,
@@ -550,7 +551,7 @@ terminais.every(
     }
   });
 
-  it("o host não tem limite — nem para tocar, nem para acumular", () => {
+it("o host não tem limite — nem para tocar, nem para acumular", () => {
     const lotacao = [
       song("1", "pending"),
       song("2", "approved"),
@@ -561,5 +562,55 @@ terminais.every(
       ok: true,
       replaced: null,
     });
+  });
+});
+
+/**
+ * `ownActiveSongView` — a mesma resposta para o servidor (`readOwnActiveSong`) e
+ * para a leitura ao vivo do navegador (`useOwnActiveSong`). A Fase 8g existiu
+ * porque a tela calculava isso por conta própria em cada lado: o servidor
+ * respondia "tocando" a partir de uma prop lida uma vez, e a fila seguia andando
+ * sem mexer nela. Com a função única, o botão destrava na hora e o servidor não
+ * tem como discordar do cliente.
+ */
+describe("ownActiveSongView (o que a tela mostra)", () => {
+  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+
+  it("tocando: trava e diz qual é", () => {
+    expect(ownActiveSongView([song("Evidências", "playing")], false)).toEqual({
+      playing: true,
+      title: "Evidências",
+    });
+  });
+
+  it("na fila, sem tocar: não trava, mas avisa qual sai", () => {
+    expect(ownActiveSongView([song("Já pedi essa", "approved")], false)).toEqual({
+      playing: false,
+      title: "Já pedi essa",
+    });
+  });
+
+  it("ouviu: destrava. É a virada que a Fase 8g precisou tratar", () => {
+    expect(ownActiveSongView([song("Já ouvi", "played")], false)).toEqual({
+      playing: false,
+      title: null,
+    });
+  });
+
+  it("uma tocando vence a mais antiga da fila no nome mostrado", () => {
+    expect(
+      ownActiveSongView([song("velha", "approved", 1), song("tocando", "playing", 2)], false)
+    ).toEqual({ playing: true, title: "tocando" });
+  });
+
+  it("o host nunca é travado", () => {
+    expect(ownActiveSongView([song("minha", "playing")], true)).toEqual({
+      playing: false,
+      title: null,
+    });
+  });
+
+  it("sem nada: nem trava nem avisa", () => {
+    expect(ownActiveSongView([], false)).toEqual({ playing: false, title: null });
   });
 });

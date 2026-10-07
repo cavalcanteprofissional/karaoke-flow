@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-06):** suite com **680 testes** (51 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 88 (`credentials` 18 com o portão `is_dev`, `errors` 15 — que incluem o payload real do deploy, `badRequest` + "API key not valid", e o contrapeso que impede promover `badRequest` a chave inválida só pelo `reason`, `service` 15, `host-oauth` 16 com a invalidação na desconexão e no refresh em andamento, `diagnostics` 21 com a redação de segredo em exceção nossa, `search` 9), `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 10 (raio + `createRoomSchema` da Fase 8b·quater) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **21 provas via MSW** — Bearer OAuth host/app, o portão `is_dev` nos dois sentidos, pool ativo/inativo e `own_only` ignorando `youtube_pool_id` — e a **`/api/youtube/diagnostics` com 18** (o portão 401/403, o relatório sem gastar cota, `?room=`, `?probe=1` com `keyInvalid` e `ipRefererBlocked`, a sala inexistente que não pode virar "sem credencial", e a exceção com segredo redigida), o **roundtrip authorize→callback** com 4 provas do estado mais o `redirect_uri` derivado da env (12 no total, com o aviso de `NEXT_PUBLIC_APP_URL` ausente), a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 28, `song-search` 16 com o bloco da Fase 8f — passo do host, participante sem atalho e resposta HTTP que nunca vira "falha de rede" —, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host), `src/lib/supabase/admin.test.ts` 5 (o memo por `(url, key)`), `room-settings` 8 (os textos que não podem voltar a mentir) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). A Fase 8f acrescenta o **`scripts/smoke-youtube-credential.sql`** — **19/19 no Supabase Cloud em 06/10/2026** (default `own_only`, as quatro recusas de coerência, o FK `RESTRICT`, os pools invisíveis ao cliente, a RPC de saúde sem devolver a chave e o bypass do trigger para service role). A Fase 8f acrescenta o roteiro manual de §3.15 (o que a tela mostra × o que só o diagnóstico mostra) — a parte automatizada está coberta e o **`?probe=1` no deploy de preview foi executado** (ver o bloco "verificado no deploy" ao fim da seção). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-07):** suite com **705 testes** (52 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 20, i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 88 (`credentials` 18 com o portão `is_dev`, `errors` 15 — que incluem o payload real do deploy, `badRequest` + "API key not valid", e o contrapeso que impede promover `badRequest` a chave inválida só pelo `reason`, `service` 15, `host-oauth` 16 com a invalidação na desconexão e no refresh em andamento, `diagnostics` 21 com a redação de segredo em exceção nossa, `search` 9), `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 10 (raio + `createRoomSchema` da Fase 8b·quater) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **21 provas via MSW** — Bearer OAuth host/app, o portão `is_dev` nos dois sentidos, pool ativo/inativo e `own_only` ignorando `youtube_pool_id` — e a **`/api/youtube/diagnostics` com 18** (o portão 401/403, o relatório sem gastar cota, `?room=`, `?probe=1` com `keyInvalid` e `ipRefererBlocked`, a sala inexistente que não pode virar "sem credencial", e a exceção com segredo redigida), o **roundtrip authorize→callback** com 4 provas do estado mais o `redirect_uri` derivado da env (12 no total, com o aviso de `NEXT_PUBLIC_APP_URL` ausente), a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 28, `song-search` 16 com o bloco da Fase 8f — passo do host, participante sem atalho e resposta HTTP que nunca vira "falha de rede" —, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host), `src/lib/supabase/admin.test.ts` 5 (o memo por `(url, key)`), `room-settings` 8 (os textos que não podem voltar a mentir) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). A Fase 8f acrescenta o **`scripts/smoke-youtube-credential.sql`** — **19/19 no Supabase Cloud em 06/10/2026** (default `own_only`, as quatro recusas de coerência, o FK `RESTRICT`, os pools invisíveis ao cliente, a RPC de saúde sem devolver a chave e o bypass do trigger para service role). A Fase 8g acrescenta o **`scripts/smoke-release-current-item.sql`** — **11/11 no Supabase Cloud em 07/10/2026** (o `KF001` recusando no ar, o release devolvendo `approved` na mesma posição com a sala `idle`, as duas portas do `player_room_id`, a sala encerrada e o cantor destravado em seguida). A Fase 8f acrescenta o roteiro manual de §3.15 (o que a tela mostra × o que só o diagnóstico mostra) — a parte automatizada está coberta e o **`?probe=1` no deploy de preview foi executado** (ver o bloco "verificado no deploy" ao fim da seção). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -700,6 +700,101 @@ ela é indistinguível de "chave inválida" olhando o `localhost`. — **Feito e
 morta. O checklist de tela acima (as caixas de participante, chave inválida,
 conta conectada) continua **pendente**, porque exige gravar chave por sala e
 conectar OAuth de verdade no navegador.
+
+---
+
+### 3.16 Fase 8g — legenda desligada, busca que destrava sozinha e card que não mente (2026-10-07)
+
+> **O que mudou:** três defeitos com a mesma forma — nada destravia sozinho.
+> (1) A legenda do YouTube (transcrição por **IA**, não letra) ficava por cima da
+> música e o `OFF` era só "não passei o parâmetro"; (2) o botão de pedir música
+> só destrava no **próximo render do servidor**, porque quem terminava a faixa
+> era a TV, por RPC, sem avisar o celular — o sintoma era "demora para pedir a
+> próxima", e na prática era F5; (3) pior: **trancar a TV com a música no ar**
+> deixava o item em `playing` para sempre, e a trigger de "uma música por
+> participante" recusava todo pedido seguinte daquele cantor com `KF001` —
+> bloqueio permanente, não demora.
+>
+> **A regra agora mora num lugar só.** `ownActiveSongView`
+> (`src/lib/rooms/queue.ts`) é a mesma função que o servidor
+> (`readOwnActiveSong`) e que o navegador (`useOwnActiveSong`) usam. O que a suíte
+> cobre: o contrato fechado dos 8 `playerVars`, a regra pura (incluindo
+> "`played` não prende ninguém"), o hook com as três camadas, o card reagindo ao
+> broadcast, o `release` no `Trancar TV` — e o caso que só apareceu ao testar a
+> regra, de o **host** receber o aviso de substituição que não é dele.
+>
+> **Por que o release é uma RPC nova (`release_current_item`) e não uma
+> mudança em `claim_next_song`:** o `20260927000032` (`playback_held`) **nunca
+> existiu** — o diretório salta de `00031` para `00033`. Sem coluna nenhuma no
+> banco, `claim_next_song` não tem como saber que a TV foi trancada; além disso
+> ele só é chamado por uma TV **armada**, que é justamente o estado em que não
+> há nada a liberar. Quem sabe que trancou é o próprio quiosque, e é ele quem
+> paga a conta — antes de limpar a marcação de armada no `localStorage`.
+>
+> **Banco coberto por smoke, não só pela suíte:** a migration
+> `20261005000044` foi aplicada no Supabase Cloud e o
+> **`scripts/smoke-release-current-item.sql` rodou 11/11 lá** (autossuficiente,
+> sala `SMOKE8G`, formato do `smoke-player-session`): `KF001` recusa enquanto
+> toca → release devolve `approved` na mesma posição e `idle` → sem música no
+> ar `released:false` → token errado não cai para sessão → host libera pela
+> sessão → forasteiro não libera → sala encerrada recusa → **depois do release
+> o cantor pede de novo**. **Rodar:**
+> `node scripts/apply-sql.mjs scripts/smoke-release-current-item.sql 8000`.
+
+**Legenda (decisão do dono, 2026-10-05 — deve permanecer desligada)**
+
+- [ ] **Nenhum texto de IA sobre a música**: com a faixa tocando na TV, não
+      aparece nenhuma linha de transcrição automática sobre o vídeo, e o botão
+      de legendas (`.ytp-subtitles-button`) não oferece faixa nenhuma.
+- [ ] **Os 8 knobs estão lá** (isso é o que a suíte garante; aqui é só olhar):
+      `autoplay: 0`, `controls: 1`, `rel: 0`, `fs: 0`, `playsinline: 1`,
+      `iv_load_policy: 3`, `cc_load_policy: 0`, `origin`. Se qualquer um
+      sumir da tela **e** o teste de contrato continuar verde, o teste foi
+      afrouxado — a lista é `toEqual`, então acrescentar também falha.
+
+**Busca destravando sozinha (o relato original: "demora")**
+
+- [ ] **No meio da música, o botão está travado**: participante que tem faixa
+      em `playing` vê o aviso de que já tem música e não consegue pedir.
+- [ ] **A música termina na TV → o botão destrava em segundos, sem F5**: a
+      TV faz `claim_next_song`, e o celular com a tela de busca **aberta**
+      reage pelo `postgres_changes`/broadcast/poll. Navegar para outra tela e
+      voltar também destrava (o `revalidatePath` de `/buscar`).
+- [ ] **O aviso cita a música certa**: na fila (ainda não tocando) o texto
+      nomeia o pedido que vai sair; tocando, diz que está tocando; depois de
+      ouvir, o aviso some. O host **nunca** vê esse aviso.
+- [ ] **Sem nada na fila, sem nenhum aviso** — e se a leitura falhar, a tela
+      libera o pedido (quem decide é a trigger no banco, então isso é seguro).
+
+**`release_current_item` — o item preso em `playing`**
+
+- [ ] **Travar a TV com música no ar libera o cantor**: com a faixa tocando,
+      aperte "Trancar TV". No banco: o item volta para `approved` **na mesma
+      posição**, `rooms.current_item_id` fica nulo e `playback_status` vai para
+      `idle`. No celular do cantor: o botão de pedido destrava **na hora**.
+- [ ] **A fila não pula ninguém**: quem estava atrás dele continua na mesma
+      posição, e a faixa devolvida volta a tocar quando a TV for rearmada.
+- [ ] **Falha de rede no release não impede o travamento**: corte a conexão e
+      trave a TV — o gate aparece do mesmo jeito e o `localStorage` fica sem a
+      chave `kf:player-armed:<código>` (a suíte cobre este caso).
+- [ ] **Sem música no ar, "Trancar TV" não muda nada** (a RPC responde
+      `released: false` e nada é anunciado).
+- [ ] **Cobertura faltante, assumida:** fechar o navegador/TV no meio da faixa
+      não dispara `release` nenhum. Enquanto isso, quem destrava é o host com
+      **Pular/Parar**, que já terminaliza o item. Se um cantor aparecer travado
+      numa sala, este é o caminho manual.
+
+**Card "Player da TV" ao vivo**
+
+- [ ] **O card acompanha a TV sem recarregar**: host com a sala aberta vê
+      "Pausar" enquanto toca; quando a música termina na TV, o card vira
+      "Tocar"/"Retomar" e desabilita Pular/Parar em ~1–2s. Antes desta fase ele
+      mostrava "Retomar" a noite inteira.
+- [ ] **`Pular`/`Parar` do host atualizam o próprio card** na hora.
+- [ ] **Fila esvaziando**: com a última música indo para `played`, o card passa
+      a dizer "Nenhuma música aprovada na fila." e some o botão de tocar.
+- [ ] **Tela travada no celular por > 30s e voltando**: o card relê no foco
+      (é o caso real do bar — o host deixou o celular na mesa).
 
 ---
 

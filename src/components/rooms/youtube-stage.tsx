@@ -415,6 +415,18 @@ export const YouTubeStage = forwardRef<YouTubeStageHandle, YouTubeStageProps>(
               fs: 0,
               playsinline: 1,
               iv_load_policy: 3,
+              // Legenda desligada DE PROPÓSITO (decidido pelo dono em 2026-10-05):
+              // o que o YouTube chama de legenda aqui é transcrição automática por
+              // IA, e numa sala de karaokê ela grita "parabéns, obrigado pela sua
+              // preferência" por cima da música e atrapalha mais do que traduz. Não é
+              // letra, e o app não tem letra sincronizada (spec §Letra). `0` faz o
+              // player nem PEDIR a lista de faixas ao YouTube.
+              //
+              // Escrito à mão, e não por omissão: o `playerVars` inteiro é
+              // asserido no teste de contrato em `youtube-stage.test.tsx`, então
+              // quem tirar este `0` (ou o `controls: 1` do lado) leva a suíte
+              // junto — a versão anterior passava verde mesmo sem nenhum deles.
+              cc_load_policy: 0,
               origin: window.location.origin,
             },
             events: {

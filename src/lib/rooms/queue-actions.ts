@@ -11,6 +11,7 @@ import {
   buildQueueRemoval,
   buildQueueSongItem,
   buildQueueSongReplacement,
+  ownActiveSongView,
   reorderSchema,
   resolveOwnActiveSong,
 } from "./queue";
@@ -89,20 +90,7 @@ export async function readOwnActiveSong(input: {
     .in("status", ["pending", "approved", "playing"]);
   if (!data) return undefined;
 
-  const resolved = resolveOwnActiveSong({ isHost, ownSongs: data });
-  /**
-   * O título vem da própria leitura, não da regra pura: a regra devolve `code` e
-   * frase, e o nome da música que está tocando é o que o aviso da tela mostra.
-   * Quando o resultado é `ok`, `replaced` existe por construção do tipo — o `ok`
-   * estreita o union, e é ele que separa "toca logo" de "troca quando terminar".
-   */
-  const tocando = data.find((song) => song.status === "playing");
-  return {
-    playing: !resolved.ok,
-    title: tocando ? tocando.title : resolved.ok && resolved.replaced
-      ? resolved.replaced.title
-      : null,
-  };
+  return ownActiveSongView(data, isHost);
 }
 
 async function readModerationTarget(

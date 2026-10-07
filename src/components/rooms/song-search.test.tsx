@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => ({
   announceQueueChange: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
   push: vi.fn(),
+  /**
+   * O que a leitura ao vivo responde. Começa `undefined` (não montado) e os
+   * testes que precisam mexer nisso sobrescrevem antes do render.
+   */
+  useOwnActiveSong: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -49,16 +54,32 @@ vi.mock("@/lib/rooms/room-channel", () => ({
   announceQueueChange: (...args: unknown[]) => mocks.announceQueueChange(...args) as unknown,
 }));
 
-function renderSearch(props: Partial<React.ComponentProps<typeof SongSearch>> = {}) {
-  return render(
+/**
+ * A leitura ao vivo (Fase 8g) é um hook de realtime com assinatura própria, testado
+ * em `use-own-active-song.test.tsx`. Aqui ele é um espelho controlável, porque o
+ * que esta suíte precisa provar é que **o botão segue a leitura ao vivo** e não a
+ * prop que o servidor mandou uma vez.
+ */
+vi.mock("@/lib/rooms/use-own-active-song", () => ({
+  useOwnActiveSong: (...args: unknown[]) => mocks.useOwnActiveSong(...args) as unknown,
+}));
+
+function searchElement(props: Partial<React.ComponentProps<typeof SongSearch>> = {}) {
+  return (
     <SongSearch
       roomCode="KARAOKE"
+      roomId="room-1"
+      userId="user-1"
       presenceOk
       presenceMessage={null}
       requireSongConfirmation={false}
       {...props}
     />
   );
+}
+
+function renderSearch(props: Partial<React.ComponentProps<typeof SongSearch>> = {}) {
+  return render(searchElement(props));
 }
 
 /** Busca na API (debounce de 500 ms) e devolve o botão da primeira música. */
@@ -77,6 +98,9 @@ beforeEach(() => {
   mocks.replaceQueueSongAction.mockResolvedValue({ ok: true });
   mocks.addSongToQueueAction.mockResolvedValue({ ok: true, item: { status: "pending" } });
   mocks.announceQueueChange.mockClear();
+  // Sem leitura ao viva, o hook responde "não sei" e a tela segue com a prop.
+  mocks.useOwnActiveSong.mockReset();
+  mocks.useOwnActiveSong.mockReturnValue(undefined);
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
@@ -343,6 +367,58 @@ describe("SongSearch — uma música ativa por participante", () => {
 
     expect(mocks.addSongToQueueAction).toHaveBeenCalled();
     expect(mocks.toast.success.mock.calls[0][0] as string).not.toContain("saiu da fila");
+  });
+
+  /**
+   * A regressão do "demora para pedir a próxima" (Fase 8g).
+   *
+   * A música terminou **na TV**, dentro da RPC `claim_next_song`, e o celular não
+   * é avisado por nada disso: a prop `ownActiveSong` é do primeiro render. Com só
+   * ela, o botão ficava travado com "você já tem uma música tocando" até o
+   * cliente voltar para a página — na prática, o F5. Aqui a leitura ao vivo
+   * responde que acabou e o botão abre **sem nenhuma navegação**.
+   */
+  it("o botão destrava sozinho quando a música acaba, sem recarregar a página", async () => {
+    mocks.useOwnActiveSong.mockReturnValue({ playing: true, title: "Tocando pra mim" });
+    const { rerender } = renderSearch({
+      ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" },
+    });
+
+    expect(await searchAndGetAddButton()).toBeDisabled();
+    expect(screen.getByTestId("aviso-tocando")).toBeInTheDocument();
+
+    // A faixa acabou na TV e o realtime chegou: nada de novo pedido, nada de F5.
+    mocks.useOwnActiveSong.mockReturnValue({ playing: false, title: null });
+    rerender(searchElement({ ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" } }));
+
+    expect(await searchAndGetAddButton()).toBeEnabled();
+    expect(screen.queryByTestId("aviso-tocando")).toBeNull();
+  });
+
+  /**
+   * Quem manda é a leitura ao vivo. Se a prop velha do servidor vencesse, o
+   * botão ficaria preso mesmo com o realtime dizendo que a música acabou — que
+   * é exatamente o defeito que a Fase 8g fecha.
+   */
+  it("a leitura ao vivo tem precedência sobre a prop velha do servidor", async () => {
+    mocks.useOwnActiveSong.mockReturnValue({ playing: false, title: null });
+    renderSearch({ ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" } });
+
+    expect(await searchAndGetAddButton()).toBeEnabled();
+    expect(screen.queryByTestId("aviso-tocando")).toBeNull();
+  });
+
+  /**
+   * A leitura ao viva devolveu `undefined` (assinatura sem resposta, rede, ou
+   * primeiro render): aí a prop do servidor é a reserva, e a tela continua
+   * mostrando o que o servidor respondeu em vez de fingir que pode pedir.
+   */
+  it("sem leitura ao vivo, o valor do servidor ainda vale", async () => {
+    mocks.useOwnActiveSong.mockReturnValue(undefined);
+    renderSearch({ ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" } });
+
+    expect(await searchAndGetAddButton()).toBeDisabled();
+    expect(screen.getByTestId("aviso-tocando")).toHaveTextContent("Tocando pra mim");
   });
 
   it("a troca autorizada ignora a trava — ali o limite é outro", async () => {

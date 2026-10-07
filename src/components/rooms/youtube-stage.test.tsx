@@ -413,3 +413,65 @@ describe("YouTubeStage — o CTA de gesto não vira spam", () => {
     }
   });
 });
+
+/**
+ * O contrato das opções do player — a lista **fechada** do que a TV depende.
+ *
+ * Por que uma lista fechada e não "tem `controls`": até 2026-10-05 a única
+ * asserção do repo inteiro sobre opções era `expect(yt.options).not.toBeNull()`,
+ * que só prova que o construtor rodou. Apagar `controls: 1` — a barra de
+ * controles que o host usa para-volume e fullscreen — deixava a suíte **verde**,
+ * e a TV perdia a barra sem nenhum sinal. É a mesma classe de falha do §3.7 do
+ * pós-mortem: a tela verde que não cobre o que quebrou.
+ *
+ * `cc_load_policy: 0` entra na lista pelo mesmo motivo e pelo motivo do dono
+ * (2026-10-05): legenda do YouTube é transcrição por IA, não é letra, e
+ * atrapalha o karaokê. O estado certo era alcançado por omissão — se alguém
+ * acrescentar um parâmetro para "melhorar", ninguém tem como saber que quebrou
+ * a decisão.
+ */
+describe("YouTubeStage — contrato das opções do player", () => {
+  let yt: FakeYouTube;
+
+  beforeEach(() => {
+    yt = installFakeYouTube();
+  });
+
+  afterEach(() => {
+    cleanup();
+    uninstallFakeYouTube();
+  });
+
+  it("monta o player com exatamente as opções que a TV precisa", async () => {
+    render(<YouTubeStage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Lista fechada de propósito: chaves a mais ou a menos são erro, não
+    // detalhe. Se aparecer uma nova, a decisão passa por este teste.
+    expect(yt.options?.playerVars).toEqual({
+      // Quem manda no play é o `PlayerGate`, não o player.
+      autoplay: 0,
+      controls: 1,
+      rel: 0,
+      fs: 0,
+      playsinline: 1,
+      iv_load_policy: 3,
+      // Legenda (IA do YouTube) desligada por decisão do dono.
+      cc_load_policy: 0,
+      // Sem `origin` a IFrame API não faz postMessage: o quiosque perde o
+      // controle do player inteiro.
+      origin: window.location.origin,
+    });
+  });
+
+  it("não pede a lista de faixas de legenda ao YouTube", async () => {
+    render(<YouTubeStage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(yt.options?.playerVars?.cc_load_policy).toBe(0);
+  });
+});

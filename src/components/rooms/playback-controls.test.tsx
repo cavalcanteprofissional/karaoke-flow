@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { PlaybackControls } from "./playback-controls";
 import { FAKE_PLAYER_TOKEN, FAKE_ROTATED_PLAYER_TOKEN } from "@/test/fake-player-token";
@@ -12,7 +12,9 @@ import { FAKE_PLAYER_TOKEN, FAKE_ROTATED_PLAYER_TOKEN } from "@/test/fake-player
 const mocks = vi.hoisted(() => ({
   setPlaybackAction: vi.fn(),
   rotatePlayerTokenAction: vi.fn(),
+  getPlayerStateAction: vi.fn(),
   announce: vi.fn(),
+  onPlaybackChange: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -21,10 +23,18 @@ vi.mock("@/lib/rooms/playback-actions", () => ({
   setPlaybackAction: (...args: unknown[]) => mocks.setPlaybackAction(...args) as unknown,
   rotatePlayerTokenAction: (...args: unknown[]) =>
     mocks.rotatePlayerTokenAction(...args) as unknown,
+  getPlayerStateAction: (...args: unknown[]) =>
+    mocks.getPlayerStateAction(...args) as unknown,
 }));
 
 vi.mock("@/lib/rooms/player-channel", () => ({
   announcePlaybackChange: (...args: unknown[]) => mocks.announce(...args) as unknown,
+  // O gancho do card ao vivo (Fase 8g·C): o teste segura o callback e o
+  // dispara como se a TV tivesse avisado.
+  subscribeToPlaybackChanges: (roomCode: string, onChange: () => void) => {
+    mocks.onPlaybackChange(roomCode, onChange);
+    return () => {};
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -189,5 +199,86 @@ describe("PlaybackControls", () => {
     await waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("barra"))
     );
+  });
+
+  /**
+   * Fase 8g·C. O card recebia `status`/`hasCurrent`/`queueLength` da Server
+   * Component e nunca mais mudava — e a música termina na TV, por RPC, sem
+   * revalidar a página aberta. Resultado real: o host via "Retomar" a noite
+   * inteira numa sala ociosa, com os botões certos no banco e a tela mentindo.
+   */
+  describe("leitura ao vivo (Fase 8g·C)", () => {
+    it("o aviso da TV tira o card do estado antigo", async () => {
+      render(<PlaybackControls {...baseProps} />);
+      expect(mocks.onPlaybackChange).toHaveBeenCalledWith(ROOM_CODE, expect.any(Function));
+      const onChange = mocks.onPlaybackChange.mock.calls[0][1] as () => void;
+
+      // A TV terminou a faixa e a sala ficou ociosa.
+      mocks.getPlayerStateAction.mockResolvedValue({
+        ok: true,
+        state: {
+          room: { playback_status: "idle" },
+          current: null,
+          queue: [
+            {
+              id: "33333333-3333-4333-8333-333333333333",
+              position: 2,
+              youtube_video_id: "ghi789",
+              title: "Toda Menina Rodapé",
+              duration_seconds: 198,
+              status: "approved",
+              requested_by: "Clara",
+            },
+          ],
+        },
+      });
+
+      act(() => {
+        onChange();
+      });
+
+      // Começava com música no ar (Pausar + Pular habilitado).
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /tocar/i })).toBeInTheDocument()
+      );
+      expect(screen.queryByRole("button", { name: /pausar/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /pular/i })).toBeDisabled();
+      // Continua sabendo que há fila — só não há nada no ar.
+      expect(screen.queryByText(/nenhuma música aprovada na fila/i)).not.toBeInTheDocument();
+    });
+
+    it("leitura que falha não zera o card", async () => {
+      render(<PlaybackControls {...baseProps} />);
+      const onChange = mocks.onPlaybackChange.mock.calls[0][1] as () => void;
+      mocks.getPlayerStateAction.mockResolvedValue({ ok: false, error: "rede caiu", code: "X" });
+
+      act(() => {
+        onChange();
+      });
+
+      await waitFor(() => expect(mocks.getPlayerStateAction).toHaveBeenCalled());
+      // O que estava na tela continua valendo: um erro de rede não pode
+      // apagar o estado do player nem deixar o card em branco.
+      expect(screen.getByRole("button", { name: /pausar/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /pular/i })).toBeEnabled();
+    });
+
+    it("sem música e sem fila, o card diz que não há nada para tocar", async () => {
+      render(<PlaybackControls {...baseProps} />);
+      const onChange = mocks.onPlaybackChange.mock.calls[0][1] as () => void;
+      mocks.getPlayerStateAction.mockResolvedValue({
+        ok: true,
+        state: { room: { playback_status: "idle" }, current: null, queue: [] },
+      });
+
+      act(() => {
+        onChange();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByText(/nenhuma música aprovada na fila/i)).toBeInTheDocument()
+      );
+      expect(screen.queryByRole("button", { name: /tocar/i })).not.toBeInTheDocument();
+    });
   });
 });

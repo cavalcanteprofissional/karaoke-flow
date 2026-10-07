@@ -319,6 +319,51 @@ export function resolveOwnActiveSong(ctx: OwnActiveSongContext): OwnActiveSongRe
   };
 }
 
+/** O que a tela de busca mostra: o botão travado e o nome da música em disputa. */
+export type OwnActiveSongView = {
+  /** `true` = não dá para pedir agora (a anterior está tocando). */
+  playing: boolean;
+  /** A música que está tocando, ou a que sai da fila quando a próxima for pedida. */
+  title: string | null;
+};
+
+/**
+ * O que a tela de busca mostra, a partir dos itens do próprio participante.
+ *
+ * **Uma regra só, dois lugares.** A mesma pergunta é respondida no primeiro
+ * render (servidor, `readOwnActiveSong`) e na leitura ao vivo (navegador,
+ * `useOwnActiveSong`) — e foi justamente por recalcular nos dois que a tela
+ * destravou com atraso: o servidor dizia "tocando" a partir de uma prop lida
+ * uma vez, e a fila seguia andando sem mexer nela. Esta função é o ponto
+ * único onde a resposta é calculada, então servidor e cliente não têm como
+ * discordar.
+ *
+ * O título sai da própria lista, e não do `code` da regra: o que a tela mostra
+ * é o nome da música. `undefined` (sem valor) é o caso "não sei" — e é
+ * proposital: uma leitura falhaída **não trava** ninguém, porque quem decide é a
+ * trigger `queue_items_one_active_per_participant`, no banco.
+ */
+export function ownActiveSongView(
+  ownSongs: OwnActiveSongContext["ownSongs"],
+  isHost: boolean
+): OwnActiveSongView {
+  // O host não tem o limite — e também não tem por que receber aviso de
+  // "substituição": a regra abaixo acharia a música tocando dele e o título
+  // vazaria para a tela. O retorno tem de vir antes de olhar `playing`.
+  if (isHost) return { playing: false, title: null };
+
+  const resolved = resolveOwnActiveSong({ isHost, ownSongs });
+  const tocando = ownSongs.find((song) => song.status === "playing");
+  return {
+    playing: !resolved.ok,
+    title: tocando
+      ? tocando.title
+      : resolved.ok && resolved.replaced
+        ? resolved.replaced.title
+        : null,
+  };
+}
+
 export type QueueStatusView = {
   label: string;
   variant: "default" | "secondary" | "outline" | "destructive";

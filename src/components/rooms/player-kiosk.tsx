@@ -11,9 +11,9 @@ import {
 } from "@/components/rooms/youtube-stage";
 import type { YouTubeStageHandle } from "@/components/rooms/youtube-stage";
 import { Button } from "@/components/ui/button";
-import { getPlayerStateAction, claimNextSongAction } from "@/lib/rooms/playback-actions";
+import { getPlayerStateAction, claimNextSongAction, releaseCurrentItemAction } from "@/lib/rooms/playback-actions";
 import { setPlayerArmed, usePlayerArmed } from "@/lib/rooms/player-arm";
-import { subscribeToPlaybackChanges } from "@/lib/rooms/player-channel";
+import { announcePlaybackChange, subscribeToPlaybackChanges } from "@/lib/rooms/player-channel";
 import {
   playerHeadline,
   playerPanel,
@@ -183,6 +183,14 @@ export function PlayerKiosk({
           onInvalid?.(result.error);
           return;
         }
+        /**
+         * A faixa acabou AQUI, dentro de uma RPC que só sabe revalidar para
+         * navegação — quem está com o card "Player da TV" aberto não recebe
+         * nada. Broadcast para o card reler já (caminho rápido) e `refresh`
+         * para a TV não depender do broadcast voltar (caminho garantido). Os
+         * dois são baratos: a TV já relê o banco a cada 5s.
+         */
+        void announcePlaybackChange(roomCode);
         await refresh();
       } finally {
         claimingRef.current = false;
@@ -363,13 +371,43 @@ export function PlayerKiosk({
   }, []);
 
   /** Trancar a TV: some com o vídeo e devolve a tela de gate. */
+  /**
+   * Travar a TV: apaga o stage da tela e, no mesmo instante, devolve para a
+   * fila a música que estava no ar (Fase 8g/B2).
+   *
+   * A segunda metade é obrigatória, não cortesia. Com a faixa parada em
+   * `playing`, a trigger de "uma música por participante" recusa qualquer
+   * pedido novo daquele cantor (`KF001`) — e nada mais vai tirar o item de
+   * `playing`: `onEnded` não dispara com o stage desmontado, e
+   * `shouldAutoAdvance`/`shouldClaimFromIdle` já respondem `false` porque o
+   * quiosque acabou de desarmar. Sem este release, "Trancar TV" transformava
+   * um atraso em bloqueio permanente.
+   *
+   * A ordem importa: o arm sai primeiro, para que nenhum `claim` dispare entre
+   * o clique e a liberação; o RPC sai em seguida, sem esperar a UI. Se falhar,
+   * a TV ainda trancada (não é por isso que o host vai ficar sem fechar a
+   * sala) e o `refresh` roda do mesmo jeito, para o estado da tela não mentir.
+   */
   const handleLock = useCallback(() => {
     setStalled(false);
     setNeedsUnmute(false);
     muteOnLoadRef.current = false;
     loadedRef.current = null;
     setPlayerArmed(roomCode, false);
-  }, [roomCode]);
+    if (isTv && stateRef.current.current) {
+      void releaseCurrentItemAction(roomCode, token)
+        .catch(() => null)
+        .then((result) => {
+          // O card do host também vive (Fase 8g·C) e estaria dizendo "tocando"
+          // para uma sala que acaba de ficar ociosa. Só quando houve música
+          // para devolver, porque um "não tinha nada no ar" não muda estado.
+          if (result?.ok && result.released) {
+            void announcePlaybackChange(roomCode);
+          }
+        })
+        .finally(() => void refresh());
+    }
+  }, [roomCode, isTv, token, refresh]);
 
   const panel = playerPanel(state);
   const headline = playerHeadline(state);

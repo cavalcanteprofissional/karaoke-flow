@@ -24,6 +24,7 @@ import { copiarTexto } from "@/lib/clipboard";
 import { setPlaybackAction, rotatePlayerTokenAction } from "@/lib/rooms/playback-actions";
 import { announcePlaybackChange } from "@/lib/rooms/player-channel";
 import { playbackControls } from "@/lib/rooms/playback";
+import { usePlaybackLive } from "@/lib/rooms/use-playback-live";
 import type { PlaybackAction, PlaybackStatus } from "@/lib/rooms/playback";
 
 /**
@@ -36,6 +37,12 @@ import type { PlaybackAction, PlaybackStatus } from "@/lib/rooms/playback";
  *    estado) — o alvo é latência < 2s sem depender de poll;
  *  - o link da TV carrega um token de capacidade. "Gerar novo link" rotaciona
  *    o token, então o link antigo (e a TV velha) param na hora.
+ *
+ * E um quarto, da Fase 8g·C: `status`/`hasCurrent`/`queueLength` são o estado
+ * do PRIMEIRO render, e a música termina na TV, num RPC que não revalida a
+ * página aberta. Sem o `usePlaybackLive`, o card ficava dito "Retomar" a noite
+ * inteira enquanto a sala seguia sozinha — os botões continuavam certos no
+ * banco, só a tela mentia.
  */
 export type PlaybackControlsProps = {
   roomId: string;
@@ -58,8 +65,20 @@ export function PlaybackControls({
 }: PlaybackControlsProps) {
   const [busy, setBusy] = useState<PlaybackAction | "link" | null>(null);
   const [token, setToken] = useState(playerToken);
+  /**
+   * Os três valores vivem: começam iguais ao que o servidor mandou e passam a
+   * ser atualizados por broadcast/poll/foco (Fase 8g·C). Enquanto nenhuma
+   * leitura chegar, valem exatamente as props — é por isso que os testes de
+   * estado do card não precisam de realtime nenhum.
+   */
+  const live = usePlaybackLive(roomCode, { status, hasCurrent, queueLength });
 
-  const controls = playbackControls({ isHost, status, hasCurrent, queueLength });
+  const controls = playbackControls({
+    isHost,
+    status: live.status,
+    hasCurrent: live.hasCurrent,
+    queueLength: live.queueLength,
+  });
   const playerUrl = `/player/${roomCode}?token=${token}`;
 
   async function run(action: PlaybackAction) {

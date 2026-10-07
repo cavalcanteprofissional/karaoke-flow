@@ -168,10 +168,16 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
   }
 
   /**
-   * Uma música ativa por participante (migration `20261004000042`). O estado vem
+   * Uma música ativa por participante (migration `20261004000042`). O valor vem
    * do servidor pelo mesmo leitor que a action usa, para que o aviso da tela e a
    * regra do servidor não contem histórias diferentes. `reading` (não-detectado)
    * fica fora: aí a tela não trava ninguém, e a trigger ainda recusa no banco.
+   *
+   * Este é o valor do **primeiro render** — e só isso não resolvia (Fase 8g):
+   * a música vira `played` na TV, por dentro da RPC `claim_next_song`, e nada
+   * chegava ao celular; o botão só destravava quando o servidor era renderizado
+   * de novo, o que na prática era o F5. `SongSearch` assina o realtime e passa a
+   * mandar no botão.
    */
   const ownActiveSong = replaceItem
     ? undefined
@@ -190,17 +196,24 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
               {room.queue_approval_mode === "auto" ? "fila automática" : "host aprova"}
             </Badge>
           </CardTitle>
-          <CardDescription>
-            {replaceItem
-              ? "Escolha a música que substitui a atual. A posição na fila e a aprovação são mantidas."
-              : ownActiveSong?.playing
-                ? "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar."
+          {/**
+           * O texto do cabeçalho é o **neutro** de propósito: a pergunta "posso
+           * pedir agora?" tem uma resposta viva dentro do `SongSearch` (o aviso e
+           * os botões destravam sozinhos), e repetir essa resposta aqui, no
+           * servidor, criava duas respostas para a mesma pergunta na mesma tela —
+           * o cabeçalho jurando que a música ainda tocava com o botão já livre.
+           */}
+<CardDescription>
+              {replaceItem
+                ? "Escolha a música que substitui a atual. A posição na fila e a aprovação são mantidas."
                 : "Pesquise no YouTube e adicione à fila. A duração e a miniatura aparecem automaticamente."}
-          </CardDescription>
+            </CardDescription>
         </CardHeader>
         <CardContent>
           <SongSearch
             roomCode={code}
+            roomId={room.id}
+            userId={user.id}
             presenceOk={presence.ok}
             presenceMessage={presence.ok ? null : presence.error}
             requireSongConfirmation={room.require_song_confirmation}

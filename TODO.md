@@ -318,6 +318,197 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > entregue** em `20261004000041`; não reaproveitar o número para o plano de escala
 > sem renomear explicitamente.
 
+## Plano registrado em 2026-10-05 — o que o dono pediu depois do deploy da Fase 8f
+
+> **Relato (2026-10-05, dono, uma sessão só):** (1) **demora para pedir a música
+> seguinte** depois que a anterior acaba — "funciona, mas com atraso alto";
+> (2) o **cartão de configurações do Player da TV não atualiza** em tempo real,
+> ao contrário da fila; (3) as configurações do host precisam virar **três telas
+> separadas** — Player, Sala e Bar — porque hoje estão todas enfiadas em
+> `/salas/[codigo]` com a tela ao vivo; (4) **mesas: 1 por padrão, até 10, e sem
+> perguntar mesa quando há só uma**; (5) sobre as **legendas**, o dono invertendo o
+> que eu propus: os vídeos já tocam com **legenda gerada por IA** e isso atrapalha
+> o karaokê — o pedido é **manter qualquer legenda desligada por padrão**; (6)
+> **pulseira** com valor que muda por dia da semana e faixa de horas.
+>
+> **Estado: só registrado.** Nada implementado, nenhuma migration escrita, nenhum
+> arquivo de código tocado. As quatro fases abaixo são o plano acordado.
+>
+> **Numeração:** a 8g continua a série de defeitos achados no uso real (8a–8f);
+> 16, 17 e 18 continuam o roadmap de Fases 9–15 já documentado em
+> [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md).
+> Nenhum número reaproveitado.
+
+### Decidido com o PO (2026-10-05)
+
+- [x] **1 — uso único definitivo do código/QR** — "não pode ser utilizado mais de
+      uma vez consecutiva": quem usou hoje **não** usa o mesmo código amanhã, nem o
+      mesmo usuário, nem outro. Implementação: `usado_por`/`usado_em` são
+      **escrita única** e **não existe** RPC, action ou botão que os limpe; a única
+      forma de reemitir é gerar outro código. Some com isso a brecha de "amanhã uso
+      um código novo": índice único em `pulseiras_acessos (bar_id, user_id)` faz a
+      segunda tentativa na mesma casa voltar "você já tem acesso neste bar".
+- [x] **2 — toggle default OFF** na criação do bar, com **caixa explicativa**
+      ("quem não tem pulseira não pede música"); a tela de configuração da
+      pulseira **continua visível, desabilitada e esmaecida** quando OFF.
+- [x] **3 — a faixa de valores é pública** — host edita, **qualquer usuário dentro
+      do bar confere**. É "calendário + memorando", **sem cobrança agora**.
+- [x] **4 — `/bar/[codigo]`** para a tela do bar.
+
+### Fase 8g — legendas desligadas de propósito, fila que só destrava recarregando, e o card do Player parado — **ENTREGUE 2026-10-07**
+
+- [x] **A — legenda OFF explícito, não por ausência** — `cc_load_policy: 0` em
+      `src/components/rooms/youtube-stage.tsx:406-421` com comentário explicando
+      que legenda do YouTube é IA e não é letra de karaokê. Sem isso, o OFF é só
+      "não passei o parâmetro": é o estado certo por acidente, e não por decisão.
+- [x] **A2 — teste do `playerVars` inteiro** em `youtube-stage.test.tsx` — contrato
+      **fechado** com `toEqual` nos 8 knobs, não uma lista que alguém pode
+      acrescentar sem ler: apagar `controls: 1` passa a ser vermelho. Anotado em
+      `TESTING.md` §3.16 que a legenda deve permanecer desligada.
+- [x] **B1 — a fila não avisa a página de busca** (causa raiz da demora) —
+      a raiz era ter **duas** fontes de verdade. Agora há uma:
+      `ownActiveSongView` (`src/lib/rooms/queue.ts`) é a única regra, usada por
+      `readOwnActiveSong` (servidor) e por `useOwnActiveSong` (cliente).
+  - `src/lib/rooms/playback-actions.ts` — `claimNextSongAction` e
+    `setPlaybackAction` revalidam `/salas/[codigo]` **e** `/salas/[codigo]/buscar`
+  - `src/lib/rooms/use-own-active-song.ts` (novo) — `postgres_changes` em
+    `queue_items` (a virada `playing → played`) + broadcast da fila + poll de
+    10s e relê no foco/visibilidade/online. Host isento por derivação, não por
+    efeito (o `set-state-in-effect` do eslint é a prova de que a saída é o lugar)
+  - `song-search.tsx` recebe `roomId`/`userId` e reage em tempo real; a
+    `CardDescription` de `/buscar` virou neutra para não repetir a pergunta
+  - Achado pelo teste novo: `ownActiveSongView` devolvia o título da música do
+    **host** (o leitor antigo saía antes de olhar) — a caixa de "sua música vai
+    sair" aparecia para quem não tem limite. Corrigido na regra, com teste.
+- [x] **B2 — item preso em `playing`: bloqueio permanente, não demora** —
+      **conferido: `20260927000032` (o `playback_held`) nunca existiu** — as
+      migrations saltam de `00031` para `00033`, e o "desarmada" vive só no
+      `localStorage` da TV (`player-arm.ts`). Como o banco não tem como saber,
+      quem sabe é a TV: nova RPC **`release_current_item`**
+      (`20261005000044`), chamada pelo quiosque **antes** de limpar o arm,
+      devolvendo a faixa para `approved` na mesma posição e pondo a sala em
+      `idle`. `claim_next_song` não foi tocado — ele só é chamado por uma TV
+      armada, então não havia momento em que ele pudesse enxergar o travamento.
+      Falha do RPC não impede o `Trancar TV` (testado). **Falta coberto:**
+      fechar o navegador da TV no meio da faixa não dispara nada — o
+      destravamento aí continua sendo Pular/Parar do host, que já existe.
+- [x] **C — card "Player da TV" ao vivo** — `playback-controls.tsx` ganhou
+      `usePlaybackLive` (`src/lib/rooms/use-playback-live.ts`): broadcast +
+      poll de 10s + relê no foco, as três camadas da `queue-list.tsx`. Sem
+      migration — `rooms` não está na publicação realtime e não precisa estar.
+      O announce é em `player-channel.ts`, não `room-channel.ts`: o canal do
+      player **já existe** e o quiosque **já assina** ele; criar um segundo
+      seria duplicar a mesma fila de mensagens. A TV agora anuncia depois do
+      `claim` e depois de um release bem-sucedido (era só o host que avisava).
+- [x] **Migration `20261005000044` aplicada no Supabase Cloud** (2026-10-07) e
+      `scripts/smoke-release-current-item.sql` **novo, 11/11 no Cloud**
+      (autossuficiente, sala `SMOKE8G`, mesmo formato do `smoke-player-session`):
+      claim da TV põe no ar · `KF001` recusa o pedido enquanto toca · release
+      devolve `approved` na **mesma posição** com a sala `idle` · sem música no
+      ar `released: false` · token errado **não** cai para sessão · host libera
+      pela sessão sem token · forasteiro não libera · sala encerrada recusa ·
+      e o ponto do produto: **depois do release o cantor pede de novo** (e a
+      nova substitui a devolvida, sobrando 1 ativa). Achado do próprio roteiro:
+      o passo "destravado" precisa liberar antes de medir — o `claim` do caso
+      "sala encerrada" deixa a música no ar, e aí o `KF001` do passo seguinte é
+      a regra certa atrapalhando a medição (defeito do smoke, não do código).
+- [ ] **Falta:** validar no aparelho (`TESTING.md` §3.16) e `vercel deploy
+      --prod` (decisão do dono — a árvore da 8g está nesta commit).
+- [ ] **`scan:secrets` está vermelho com 7 achados PRE-EXISTENTES** (2026-10-07,
+      nenhum em arquivo da 8g): chaves falsas em `scripts/smoke-youtube-credential.sql`
+      (2), `src/app/api/youtube/diagnostics/route.test.ts` (2) e
+      `src/lib/youtube/diagnostics.test.ts` (3). A regra `chave-conhecida` tem
+      `skipFixtures: false` **por decisão** ("chave real em teste continua sendo
+      vazamento"), então as opções são corrigir os fixtures (precedente
+      `d70af7e`) ou allowlist — decidido **deixar vermelho e reportar**, sem
+      enfraquecer o scanner. `DoD` §4 fica com este item explicitamente aberto.
+
+### Fase 16 — Mesas: 1 por padrão, até 10, e sem perguntar mesa quando há só uma
+
+- [ ] `MESA_MAX` de 999 para 10 (`src/types/bar.ts:56`) e `max={999}` → `10` em
+      `src/components/bars/create-bar-dialog.tsx:170-184`
+- [ ] Migration: check `bars.quantidade_mesas between 1 and 10` no banco, e
+      `create_bar` recusando >10 (hoje valida 1–999 em `20260930000034:125`) — o
+      dono pediu limite, e limite que só existe na UI não é limite
+- [ ] **Cortar o ZEHBAR de 12 para 10** — conferido no Cloud em 2026-10-05: as
+      mesas 11 e 12 estão **vazias** (as ocupadas são 1, 3 e 7), então o corte não
+      mexe em ninguém. A realocação de quem estiver sentado em mesa removida entra
+      na mesma migration, para o caso de rodar depois
+- [ ] RPC `update_bar_mesas` (`security definer`) para o host mudar a quantidade
+      depois, sincronizando as linhas de `mesas`
+- [ ] Auto-mesa-1 de volta **dentro do `join_room`** (removida em
+      `20260923000022`), só quando `quantidade_mesas = 1`: regra no banco, não na
+      UI, como manda o ADR-003. No front, `/salas/[codigo]` pula o `MesaPicker`
+      (`page.tsx:380`) quando o bar tem uma mesa só
+
+### Fase 17 — Quatro telas de configuração
+
+| Rota | Cartões |
+| --- | --- |
+| `/salas/[codigo]/player` | `Player da TV`, `Fila de Músicas`, `Pedidos de Entrada` (este último só quando `Entrada livre` = OFF) |
+| `/salas/[codigo]/sala` | `Como a sala funciona`, `Cartaz e QR das mesas`, `Código de Entrada`, `Quem está na sala` |
+| `/bar/[codigo]` (nova) | `Raio de presença`, `Busca de música (YouTube)` → pool da plataforma + consumo de cota |
+| `/salas/[codigo]/pulseiras` (nova) | `Distribuição de códigos`, `Valor da pulseira` — esmaecida e desabilitada se o toggle do bar estiver OFF |
+
+- [ ] `/salas/[codigo]` deixa de ser a tela de configuração e vira a **tela ao
+      vivo** (mesa, código, sair) com navegação para as três telas acima
+- [ ] `PendingEntries` passa a respeitar `entry_mode = 'approval'` — hoje
+      renderiza para todo host (`page.tsx:365`), e o cartão não deve existir com
+      entrada livre ligada
+- [ ] `room-settings.tsx` (472 linhas) partido em `Como a sala funciona` +
+      `Código de Entrada` (hoje o código vive dentro do card de settings)
+- [ ] Link para `/bar/[codigo]` em cada bar do dashboard (`dashboard/page.tsx:154`)
+- [ ] Telas do bar são host-only por `bars.host_id` no RLS
+
+### Fase 18 — Pulseira: código/QR de uso único, sem cobrança por enquanto
+
+- [ ] `bars.pulseiras_ativadas boolean default false`, parâmetro **obrigatório**
+      no `create_bar`, e `Switch` no modal de criação com a caixa explicativa da
+      decisão 2
+- [ ] `pulseiras_codigos` (`codigo` único por bar, `expira_em = criado_em + 24h`,
+      `usado_por`/`usado_em` **sem caminho de reset** — decisão 1)
+- [ ] `pulseiras_acessos` — **único por `(bar_id, user_id)`**, `acesso_ate`
+- [ ] `pulseiras_precos` — dia da semana + faixa de horas + `preco_centavos`, sem
+      sobreposição (trigger, não `if` de TypeScript)
+- [ ] `resgatar_pulseira(p_bar_id, p_codigo)` (`security definer`) — recusa
+      anônimo (`auth.jwt() ->> 'is_anonymous'`), recusa bar com toggle OFF, recusa
+      código usado ou expirado, e devolve o **preço vigente do momento**
+- [ ] **Gate de cantar:** trigger `BEFORE INSERT` em `queue_items` barra o pedido
+      quando o bar exige pulseira e a conta não tem acesso válido. E o reflexo no
+      padrão do repo: `member_entry_state` passa a devolver `tem_pulseira` e
+      `canRequestSongs` (`src/lib/rooms/spectator.ts`) ganha o mesmo corte — a UI
+      sugere, o banco manda
+- [ ] Tela do host (`/salas/[codigo]/pulseiras`): switch mestre, gerar códigos em
+      lote, lista com status (disponível / usado / expirado), folha de QR
+      imprimível reaproveitando o `RoomQr` que já existe, e o card de valores por
+      dia/hora com o preço de hoje em destaque
+- [ ] Tela do cliente (`/entrar`): **card público de valores** (leitura) + campo de
+      código; o QR da pulseira aponta para `/entrar?pulseira=CODIGO`, que exige
+      **conta logada** e resgata antes de mostrar o preço e entrar
+- [ ] Leitura de QR pela câmera com `BarcodeDetector` nativo e queda para
+      digitação — a lib `qrcode` do repo só **gera**, e o modo digitado é a outra
+      opção que o host escolhe, então nada trava se o navegador não tiver a API
+- [ ] Smoke SQL com casos **ATAQUE/LEGITIMO**: código já usado, expirado, conta
+      anônima, bar com toggle OFF, e segunda conta no mesmo código
+- [ ] Registrar a contradição: cobrar do cantor tensiona `MANIFEST.md:43-47,68-69`
+      ("o custo é da casa", "sem favor por pagamento"). Como **não há cobrança
+      agora**, fica anotado como decisão a revisar quando a cobrança entrar — que é
+      a Fase 15 / D12 (provedor)
+
+### Ordem, gates e o que falta decidir
+
+- [ ] **Ordem:** 8g → 16 → 17 → 18. A 8g é defeito de uso real e é o que mais
+      incomoda; a 18 é domínio novo e a que mais precisa de decisão de negócio
+- [ ] **Gates por fase:** migration + smoke SQL, testes, `npm run lint`, `tsc`,
+      `npm run build`, `npm run scan:secrets`, docs (README/TESTING/CHANGELOG) e
+      commit + push. `vercel deploy --prod` **só com confirmação** do dono — até lá
+      o código novo fica em preview
+- [ ] **Riscos assumidos, para vetar antes de começar:** (a) legenda ganha só teste e
+      comentário, sem toggle de host — um botão "Legendas" na TV mexe no ciclo de
+      vida do player e é trabalho separado; (b) `Pedidos de Entrada` some quando
+      `Entrada livre` = ON; (c) o card público de valores aparece em `/entrar` **e**
+      compacto em `/salas/[codigo]`; (d) nada disso vai a produção sem o dono mandar
+
 ## Retomada — contexto da próxima sessão (2026-10-03, tarde)
 
 > ### Rodada do dia: LAN + a regra do espectador virou regra de banco
@@ -812,7 +1003,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [x] **`createClient()` dentro do `try`** nos dois canais (`room-channel`, `player-channel`) — aviso best-effort não pode virar erro na tela de quem acabou de gravar no banco (achado porque o teste da busca disparava `Unhandled Rejection` sem URL/chave de ambiente)
 - [x] **Migração `20260927000031` aplicada no projeto Cloud** (`kskoipyzqcacccepcqpc`, sem `seed`) e conferida: `relreplident = 'f'` (full) em `queue_items` e `queue_items_delete_own` presente
 - [ ] **Validar na TV + celular** conforme `TESTING.md` §3.9·ter (crash do "Parar", CTA por 60s, lista do participante, celular em background)
-- [ ] **D2 — "Parar" segura a sala (decidido com o usuário):** coluna aditiva `rooms.playback_held` (`20260927000032_playback_hold.sql`), sem novo enum. Hoje `set_playback('stop')` deixa a sala `idle` e `shouldClaimFromIdle` **puxa a próxima sozinho**; com o hold, a TV fica no QR e nada entra em `playing` até o host apertar "Tocar". O crash já foi corrigido (B), a semântica é esta
+- [ ] **D2 — "Parar" segura a sala (decidido com o usuário):** coluna aditiva `rooms.playback_held` (`20260927000032_playback_hold.sql`), sem novo enum. Hoje `set_playback('stop')` deixa a sala `idle` e `shouldClaimFromIdle` **puxa a próxima sozinho**; com o hold, a TV fica no QR e nada entra em `playing` até o host apertar "Tocar". O crash já foi corrigido (B), a semântica é esta. **Conferido em 2026-10-07: a migration nunca foi criada** — o diretório salta de `00031` para `00033`, então não há coluna nenhuma e o "desarmada" segue só no `localStorage` (`player-arm.ts`); quem precisa disso hoje é só o release da Fase 8g·B2, que resolve por outra porta (`release_current_item`)
 - [ ] **Regra permanente:** cleanup que fala com API que remove o próprio DOM é `useLayoutEffect`; listar os gatilhos de desmontagem antes de fechar a task; efeito que reexecuta por poll precisa de teste com temporizador
 
 ### Fase 8b·bis — o link da TV é credencial, e o repo é público (2026-09-27)

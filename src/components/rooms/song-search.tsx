@@ -23,6 +23,7 @@ import { SongConfirmDialog } from "@/components/rooms/song-confirm-dialog";
 import { captureGeolocation, writeGeoCookie } from "@/lib/consent/geo";
 import { addSongToQueueAction, replaceQueueSongAction } from "@/lib/rooms/queue-actions";
 import { announceQueueChange } from "@/lib/rooms/room-channel";
+import { useOwnActiveSong } from "@/lib/rooms/use-own-active-song";
 import type { YouTubeVideo } from "@/lib/youtube/types";
 import { formatDurationSeconds } from "@/lib/youtube/format";
 
@@ -59,16 +60,28 @@ type SongSearchProps = {
   /** Título do item trocado, só para o texto do modal. */
   replaceItemTitle?: string | null;
   /**
-   * Uma música ativa por participante (migration `20261004000042`). Vem pronto do
-   * servidor (`resolveOwnActiveSong`): `{ playing: true }` trava os botões — é a
-   * sua música tocando e trocá-la cortaria o áudio da TV — e `{ replaced }`
-   * avisa que aquele pedido sai da fila quando o próximo entrar.
+   * Uma música ativa por participante (migration `20261004000042`). Este é o
+   * valor do **primeiro render**, lido no servidor por `readOwnActiveSong`.
+   * `{ playing: true }` trava os botões — é a sua música tocando e trocá-la
+   * cortaria o áudio da TV — e `{ replacedTitle }` avisa que aquele pedido sai da
+   * fila quando o próximo entrar.
+   *
+   * Ele sozinho **não** basta (Fase 8g): como prop de Server Component ele
+   * envelhece sem aviso, e a música vira `played` na TV, por dentro de uma RPC
+   * que não avisa o celular. Quem manda no botão é `useOwnActiveSong`, que lê o
+   * mesmo valor ao vivo; este segue sendo o valor inicial, para a tela não piscar
+   * antes de hidratar.
    */
   ownActiveSong?: { playing: boolean; replacedTitle: string | null };
+  /** `rooms.id` — a assinatura do realtime é filtrada por sala. */
+  roomId: string;
+  /** O autor dos pedidos: a leitura ao vivo é só das músicas dele. */
+  userId: string;
   /**
    * Esta pessoa é o host da sala? Decide se o passo de configuração vem
    * acompanhado do atalho para as configurações — porque só o host tem onde
-   * salvar a chave (ver `OWNER_ACTION_CODES`).
+   * salvar a chave (ver `OWNER_ACTION_CODES`). Também isenta da trava de música
+   * ativa, que é por participante.
    */
   isHost?: boolean;
 };
@@ -121,6 +134,8 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
 
 export function SongSearch({
   roomCode,
+  roomId,
+  userId,
   presenceOk,
   presenceMessage,
   requireSongConfirmation,
@@ -131,11 +146,35 @@ export function SongSearch({
 }: SongSearchProps) {
   const isReplace = Boolean(replaceItemId);
   /**
+   * A leitura ao vivo (Fase 8g). A regra é a mesma do servidor
+   * (`ownActiveSongView`); o que muda aqui é **quando** ela é lida. Sem isto,
+   * a música que acabava na TV continuava travando o botão até o cliente
+   * navegar de novo.
+   */
+  const liveOwn = useOwnActiveSong({
+    roomId,
+    roomCode,
+    userId,
+    isHost,
+    initial: ownActiveSong
+      ? { playing: ownActiveSong.playing, title: ownActiveSong.replacedTitle }
+      : undefined,
+  });
+  /**
+   * Quem manda é o valor ao vivo; a prop do servidor entra como reserva para o
+   * instante antes da primeira leitura e para o caso de a assinatura não entregar
+   * nada. `undefined` do hook é "não sei" — não trava nem destrava sozinho.
+   */
+  const ownSong = {
+    playing: liveOwn?.playing ?? ownActiveSong?.playing ?? false,
+    replacedTitle: liveOwn?.title ?? ownActiveSong?.replacedTitle ?? null,
+  };
+  /**
    * A trava do player não vale para a troca autorizada (Bloco D): ali quem troca é
    * o host, ou o próprio autor em item que não está tocando, e a ação segue valendo
    * — é a fila do participante que a regra limita, não o texto da busca.
    */
-  const ownSongPlaying = !isReplace && Boolean(ownActiveSong?.playing);
+  const ownSongPlaying = !isReplace && ownSong.playing;
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
@@ -463,7 +502,7 @@ export function SongSearch({
        * substituição só apareceria no toast depois do clique, e a pessoa já teria
        * clicado achando que as duas iam tocar.
        */}
-      {!isReplace && !ownActiveSong?.playing && ownActiveSong?.replacedTitle && (
+      {!isReplace && !ownSong.playing && ownSong.replacedTitle && (
         <div
           className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
           data-testid="aviso-substituicao"
@@ -471,9 +510,7 @@ export function SongSearch({
           <Repeat2 className="mt-0.5 size-4 shrink-0 text-amber-400" />
           <p>
             Você já tem{" "}
-            <span className="text-foreground font-medium">
-              {ownActiveSong.replacedTitle}
-            </span>{" "}
+            <span className="text-foreground font-medium">{ownSong.replacedTitle}</span>{" "}
             na fila. Pedir outra música substitui esse pedido — cada participante
             tem uma música ativa por vez.
           </p>
@@ -487,11 +524,9 @@ export function SongSearch({
         >
           <Music2 className="mt-0.5 size-4 shrink-0 text-amber-400" />
           <p>
-            {ownActiveSong?.replacedTitle ? (
+            {ownSong.replacedTitle ? (
               <>
-                <span className="text-foreground font-medium">
-                  {ownActiveSong.replacedTitle}
-                </span>{" "}
+                <span className="text-foreground font-medium">{ownSong.replacedTitle}</span>{" "}
                 está tocando agora.
               </>
             ) : (

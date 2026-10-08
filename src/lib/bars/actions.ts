@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdmin } from "@/lib/supabase/admin";
 import {
+  barMesasSchema,
   createBarSchema,
   createRoomSchema,
   barRadiusSchema,
@@ -21,7 +22,7 @@ import {
 } from "@/lib/bars/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
-import type { EntryBarPreview } from "@/types/bar";
+import { MESA_MAX, type EntryBarPreview } from "@/types/bar";
 import type { EntryMembership, MemberStatus } from "@/types/room";
 
 type CreateBarRpcRow = {
@@ -121,6 +122,64 @@ export async function updateBarRadiusAction(
 
   revalidatePath("/salas/[codigo]", "page");
   return { ok: true, radiusMeters: parsed.data };
+}
+
+export type UpdateBarMesasResult =
+  | { ok: true; quantidadeMesas: number; reallocados: number }
+  | { ok: false; error: string };
+
+/**
+ * Quantidade de mesas do bar (Fase 16) — 1 por padrão, até 10.
+ *
+ * Vai pela RPC `update_bar_mesas` (migration `20261008000001`) porque são três
+ * escritas que valem juntas: realocar quem sentou em mesa removida, sincronizar
+ * as linhas de `mesas` e atualizar `bars.quantidade_mesas`. A autorização mora
+ * dentro da RPC (só o dono), então aqui só traduzimos erro — mesmo desenho de
+ * `createBarAction`.
+ */
+export async function updateBarMesasAction(
+  barId: string,
+  raw: unknown
+): Promise<UpdateBarMesasResult> {
+  const parsed = barMesasSchema.safeParse(raw);
+  if (!parsed.success) {
+    const first = parsed.error.errors[0];
+    return { ok: false, error: first?.message ?? "Quantidade de mesas inválida." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Faça login para mudar as mesas do bar." };
+  }
+
+  const { data, error } = await supabase.rpc("update_bar_mesas", {
+    p_bar_id: barId,
+    p_nova_qtd: parsed.data,
+  });
+  if (error) {
+    if (/bar não encontrado/i.test(error.message)) {
+      return { ok: false, error: "Só o dono do bar pode mudar a quantidade de mesas." };
+    }
+    if (/quantidade de mesas inválida/i.test(error.message)) {
+      return { ok: false, error: `O bar aceita de 1 a ${MESA_MAX} mesas.` };
+    }
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível salvar a quantidade de mesas."),
+    };
+  }
+
+  const result = (data ?? {}) as { quantidade_mesas?: number; reallocados?: number };
+  revalidatePath("/salas/[codigo]", "page");
+  revalidatePath("/dashboard");
+  return {
+    ok: true,
+    quantidadeMesas: result.quantidade_mesas ?? parsed.data,
+    reallocados: result.reallocados ?? 0,
+  };
 }
 
 export async function createBarAction(raw: unknown): Promise<CreateBarResult> {

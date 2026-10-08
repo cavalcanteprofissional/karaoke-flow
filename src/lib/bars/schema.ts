@@ -9,6 +9,17 @@ export const mesaNumeroSchema = z
   .min(1, `A mesa mínima é 1.`)
   .max(MESA_MAX, `O bar aceita até ${MESA_MAX} mesas.`);
 
+/**
+ * Quantidade de mesas do bar — mesma faixa do `check` do banco
+ * (`bars_quantidade_mesas_check`, migration `20261008000001`): 1 por padrão,
+ * até 10. Aceita string (input do formulário) como o resto dos inputs numéricos.
+ */
+export const barMesasSchema = z.coerce
+  .number({ message: "Quantidade de mesas inválida." })
+  .int("Quantidade de mesas deve ser inteira.")
+  .min(1, "O bar tem no mínimo 1 mesa.")
+  .max(MESA_MAX, `O bar aceita até ${MESA_MAX} mesas.`);
+
 /** Coordenada opcional: vazio/null vira null (não 0). */
 function nullableCoord(schema: z.ZodNumber) {
   return z.preprocess((value) => {

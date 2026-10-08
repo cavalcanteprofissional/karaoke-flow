@@ -288,7 +288,8 @@ describe("createBarSchema — localização e raio", () => {
       nome: "Karaokê do Zé",
       cidade: "São Paulo",
       endereco: "Rua A, 1",
-      quantidade_mesas: "12",
+      // 10 é o teto da Fase 16; o teste é da localização, não do limite.
+      quantidade_mesas: "10",
     };
     const parsed = createBarSchema.safeParse(base);
     expect(parsed.success).toBe(true);

@@ -423,23 +423,51 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
       `d70af7e`) ou allowlist — decidido **deixar vermelho e reportar**, sem
       enfraquecer o scanner. `DoD` §4 fica com este item explicitamente aberto.
 
-### Fase 16 — Mesas: 1 por padrão, até 10, e sem perguntar mesa quando há só uma
+### Fase 16 — Mesas: 1 por padrão, até 10, e sem perguntar mesa quando há só uma — **ENTREGUE 2026-10-08**
 
-- [ ] `MESA_MAX` de 999 para 10 (`src/types/bar.ts:56`) e `max={999}` → `10` em
-      `src/components/bars/create-bar-dialog.tsx:170-184`
-- [ ] Migration: check `bars.quantidade_mesas between 1 and 10` no banco, e
-      `create_bar` recusando >10 (hoje valida 1–999 em `20260930000034:125`) — o
-      dono pediu limite, e limite que só existe na UI não é limite
-- [ ] **Cortar o ZEHBAR de 12 para 10** — conferido no Cloud em 2026-10-05: as
-      mesas 11 e 12 estão **vazias** (as ocupadas são 1, 3 e 7), então o corte não
-      mexe em ninguém. A realocação de quem estiver sentado em mesa removida entra
-      na mesma migration, para o caso de rodar depois
-- [ ] RPC `update_bar_mesas` (`security definer`) para o host mudar a quantidade
-      depois, sincronizando as linhas de `mesas`
-- [ ] Auto-mesa-1 de volta **dentro do `join_room`** (removida em
-      `20260923000022`), só quando `quantidade_mesas = 1`: regra no banco, não na
-      UI, como manda o ADR-003. No front, `/salas/[codigo]` pula o `MesaPicker`
-      (`page.tsx:380`) quando o bar tem uma mesa só
+- [x] `MESA_MAX` de 999 para **10** (`src/types/bar.ts`), `max={10}` no modal e
+      o teto nos parsers/validações (`qr.ts`, `mesaNumeroSchema`) — 11+ deixa de
+      existir em `zod`, input, QR e banco
+- [x] Migration **`20261008000001_mesas_ate_10.sql`** — checks
+      `bars_quantidade_mesas_check` e `mesas_numero_check` **1–10**, e
+      `create_bar` redefinida recusando >10 (validava 1–999 em
+      `20260930000034:125`). Os checks entram **depois** do corte de dados, senão
+      o `ZEHBAR` de 12 falharia na própria migração. **Aplicada no Supabase Cloud**
+      `kskoipyzqcacccepcqpc` (2026-10-08)
+- [x] **Cortar o ZEHBAR de 12 para 10** — mesas 11 e 12 vazias (conferido em
+      2026-10-05), ninguém movido; a migration realoca quem estiver sentado em
+      mesa > 10 **e** em bar de 1 mesa sem mesa gravada (backfill, espectador
+      excluído), e só então aperta os checks
+- [x] RPC **`update_bar_mesas`** (`security definer`, host-only, `revoke` do
+      `anon`) — realoca quem estava na mesa removida, sincroniza as linhas de
+      `mesas` e atualiza `bars.quantidade_mesas` numa transação; UI no
+      `RoomSettings` (**card "Mesas do bar"**, confirmação ao diminuir, toast
+      com o nº de realocados)
+- [x] Auto-mesa-1 de volta **dentro do `join_room`** (regra no banco, como manda
+      o ADR-003): `p_mesa null` + bar de **1** mesa → `mesa_numero = 1`, com
+      **espectador** (`fora_do_raio`) ficando `null` — quem está de fora não
+      senta. A regra existia na `20260923000013:135-139` e saiu na
+      **`20260924000022`** quando a mesa virou opcional (**o `TODO.md` antigo
+      citava `20260923000022`, que não existe** — a remoção real é a de 24/09).
+      No front, `/salas/[codigo]` pula o `MesaPicker` quando o bar tem uma mesa
+      só (`needsMesa` exige `quantidade_mesas > 1`)
+- [x] **Seed e limites alinhados:** `scripts/seed.mjs` com ZEHBAR 10 mesas;
+      fixture `geo.test.ts` que usava `"12"`; testes novos em `qr.test.ts` e
+      `schema.test.ts` (`barMesasSchema`)
+- [x] **`scripts/smoke-mesas.sql` novo, 12/12 no Supabase Cloud** (autossuficiente,
+      casa `SMKMES1`): `create_bar` recusa 11 e aceita 10 · checks do `bars` e do
+      `mesas` dando 23514 · `ZEHBAR` com 10 · `update_bar_mesas` 10→2 com
+      realocação · não-dono recusado · 0/11/null recusados · auto-mesa-1 = 1 ·
+      espectador = `null` · bar de 2 mesas = `null` · cleanup limpo. Achados do
+      próprio roteiro: o passo do `check` de `bars` precisa impersonar quem
+      **não** tem bar (o `bars_guard_insert` barra antes e esconde a medição), e
+      o cleanup tem que apagar **`rooms` junto** (`bar_id on delete set null` —
+      a sala órfã sobrevive e o trigger "1 sala por dono" trava o `create_bar`
+      seguinte)
+- [x] Docs: README (estado atual + roadmap), `TESTING.md` §3.17, `CHANGELOG.md`
+- [ ] **Falta:** validar no aparelho (`TESTING.md` §3.17 — bar de 1 mesa sem
+      `MesaPicker`, `BARSEG` perguntando, card de mesas do host) e `vercel
+      deploy --prod` (decisão do dono — a árvore da 16 está nesta commit).
 
 ### Fase 17 — Quatro telas de configuração
 

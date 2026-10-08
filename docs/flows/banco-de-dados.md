@@ -47,7 +47,7 @@ erDiagram
         text nome
         text cidade
         text endereco
-        integer quantidade_mesas "default 1 (1..999)"
+        integer quantidade_mesas "default 1 (1..10 — Fase 16, 20261008000001)"
         float latitude "nullable (geo gate)"
         float longitude "nullable (geo gate)"
         integer raio_permitido_metros "default 150 (50..1000)"
@@ -59,7 +59,7 @@ erDiagram
     mesas {
         uuid id PK
         uuid bar_id FK "bars.id"
-        integer numero "1..999 (único por bar)"
+        integer numero "1..10 (único por bar)"
         text rotulo "nullable (etiqueta da mesa)"
         timestamptz criado_em
     }
@@ -169,7 +169,7 @@ flowchart LR
 | Tabela         | SELECT                                                                  | INSERT                                               | UPDATE                                                                                        | DELETE                         |
 | -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------ |
 | `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                                                                                          | host                           |
-| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | —                                                                                             | —                              |
+| `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | — (só via RPC `update_bar_mesas`, Fase 16)                                                    | —                              |
 | `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                                                                                          | host                           |
 | `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar)                                                                       | self **ou** host               |
 | `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only** (a troca de música é via RPC `replace_queue_song`; o playback também é via RPC) | host only                      |
@@ -342,7 +342,7 @@ flowchart TD
     A["node scripts/seed.mjs"] --> B["Auth Admin API: 4 usuários (IDs fixos)"]
     B --> C["trigger handle_new_user cria profiles"]
     C --> D["INSERT 2 bares + mesas + rooms + members + queue (idempotente)"]
-    D --> E["Bar1 ZEHBAR (12 mesas) / Bar2 BARSEG (6 mesas) / salas KARAOKE·BAR2FO"]
+    D --> E["Bar1 ZEHBAR (10 mesas) / Bar2 BARSEG (6 mesas) / salas KARAOKE·BAR2FO"]
     E --> F["Login dev: usuários do seed · e-mails/senha de SEED_* no .env.local (defaults públicos @exemplo.com · senha123)"]
 ```
 

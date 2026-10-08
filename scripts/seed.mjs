@@ -198,7 +198,7 @@ async function main() {
       nome: "Karaokê do Zé",
       cidade: "Fortaleza",
       endereco: "R. Cap. Olavo, 1111 - Aerolândia",
-      quantidade_mesas: 12,
+      quantidade_mesas: 10,
       latitude: -3.7719634,
       longitude: -38.5146187,
       raio_permitido_metros: 150,
@@ -216,11 +216,11 @@ async function main() {
   ]);
   if (barsErr) throw new Error("bars: " + barsErr.message);
   console.log(
-    "bares criados: Karaokê do Zé (ZEHBAR, 12 mesas, dono), Bar da Esquina (BARSEG, 6 mesas, Betânia)"
+    "bares criados: Karaokê do Zé (ZEHBAR, 10 mesas, dono), Bar da Esquina (BARSEG, 6 mesas, Betânia)"
   );
 
   // ---- Mesas (etiquetas; rótulos opcionais) ----
-  const mesas1 = Array.from({ length: 12 }, (_, i) => ({
+  const mesas1 = Array.from({ length: 10 }, (_, i) => ({
     bar_id: BAR1,
     numero: i + 1,
     rotulo: `Mesa ${i + 1}`,
@@ -232,7 +232,7 @@ async function main() {
   }));
   const { error: mesasErr } = await admin.from("mesas").insert([...mesas1, ...mesas2]);
   if (mesasErr) throw new Error("mesas: " + mesasErr.message);
-  console.log("mesas criadas: 12 no Zé, 6 na Esquina");
+  console.log("mesas criadas: 10 no Zé, 6 na Esquina");
 
   // ---- Salas (1 por bar — multi-sala desabilitado) ----
   const { error: roomsErr } = await admin.from("rooms").insert([

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  barMesasSchema,
   barRadiusInputSchema,
   barRadiusSchema,
   createRoomSchema,
 } from "./schema";
-import { RAIO_MAX_METROS, RAIO_MIN_METROS, RAIO_PADRAO_METROS } from "@/types/bar";
+import { MESA_MAX, RAIO_MAX_METROS, RAIO_MIN_METROS, RAIO_PADRAO_METROS } from "@/types/bar";
 
 describe("barRadiusSchema", () => {
   it("aceita as bordas da faixa do banco (50–1000 m)", () => {
@@ -43,6 +44,32 @@ describe("barRadiusSchema", () => {
   it("com default, usa 500 m quando o host não informa", () => {
     const parsed = barRadiusInputSchema.safeParse(undefined);
     expect(parsed.success && parsed.data).toBe(RAIO_PADRAO_METROS);
+  });
+});
+
+describe("barMesasSchema — 1 por padrão, até 10 (Fase 16)", () => {
+  it("aceita as bordas da faixa do banco (1 e 10)", () => {
+    expect(barMesasSchema.safeParse(1).success).toBe(true);
+    expect(barMesasSchema.safeParse(MESA_MAX).success).toBe(true);
+  });
+
+  it("recusa 0, 11 e fracionário com a mensagem do limite", () => {
+    const zero = barMesasSchema.safeParse(0);
+    expect(zero.success).toBe(false);
+
+    const high = barMesasSchema.safeParse(MESA_MAX + 1);
+    expect(high.success).toBe(false);
+    expect(high.success === false && high.error.errors[0].message).toMatch(
+      new RegExp(`até ${MESA_MAX} mesas`, "i")
+    );
+
+    expect(barMesasSchema.safeParse(1.5).success).toBe(false);
+  });
+
+  it("aceita a string do formulário e devolve número", () => {
+    const parsed = barMesasSchema.safeParse("7");
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data).toBe(7);
   });
 });
 

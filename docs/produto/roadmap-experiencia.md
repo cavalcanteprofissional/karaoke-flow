@@ -233,6 +233,18 @@ entregue em `spectator.test.ts`, `queue-actions.test.ts`, `queue-list.test.ts` e
 
 ---
 
+## Adendo 2026-10-08 — Fase 16: o bar nasce com 1 mesa, aceita até 10 e o de mesa única não pergunta
+
+**Pedido do dono (2026-10-05, item 4):** "mesas: 1 por padrão, até 10, e sem perguntar mesa quando há só uma".
+
+- **O teto de 10 passou a existir no banco.** `MESA_MAX = 10` no front (`src/types/bar.ts`, `max` do modal, zod, parse do QR) é conveniência; o limite de verdade são os checks `bars_quantidade_mesas_check`/`mesas_numero_check` **1–10** e a `create_bar` redefinida (validava **1–999**). Migration `20261008000001`, aplicada no Cloud `kskoipyzqcacccepcqpc`: corta os dados (`ZEHBAR` 12 → 10, mesas 11/12 vazias) **e só então** aperta os checks. O host muda a quantidade pelo novo card **"Mesas do bar"**, que chama a RPC **`update_bar_mesas`** (`security definer`, host-only): realoca quem estava na mesa removida para a mesa 1, sincroniza as linhas de `mesas` e atualiza `bars.quantidade_mesas` numa transação — um `update` direto deixaria as três fora de sincronia.
+- **Bar de uma mesa só não pergunta — a regra voltou para dentro do `join_room`.** A auto-mesa-1 existia desde `20260923000013` e saiu em `20260924000022` quando a mesa virou opcional; agora `p_mesa null` com `quantidade_mesas = 1` devolve `mesa_numero = 1`, e o `needsMesa` de `/salas/<código>` só exige escolha quando há **mais de uma** mesa. Quem entra cai direto na tela de pedir música, que é a tela da mesa. **Espectador (`fora_do_raio`) fica de fora**: quem está de fora não senta, e sentá-lo mentiria para o card de ocupação do host.
+- **Validação:** `scripts/smoke-mesas.sql` **12/12 no Cloud** (teto no `create_bar` e nos dois checks, corte do `ZEHBAR`, `update_bar_mesas` com realocação e recusa de não-dono, auto-mesa-1, espectador e bar de 2 mesas). Suíte **705 → 709 testes**; roteiro de aparelho em [`../../TESTING.md`](../../TESTING.md) §3.17.
+
+**Gates:** lint, `tsc`, **709 testes / 52 arquivos** e `build` verdes; **`scan:secrets` vermelho pelos mesmos 7 achados pré-existentes** (nenhum em arquivo desta fase), sem allowlist nova.
+
+---
+
 ## Fase 11 — Visibilidade em dois níveis: agregado da sala + detalhe da mesa
 
 **Decidido com o PO (2026-09-25) — D3:** quem está fora do raio (após aprovado

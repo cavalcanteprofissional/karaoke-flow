@@ -159,7 +159,15 @@ export default async function RoomPage({ params }: RoomPageProps) {
   // pedido de música — a pessoa assiste.
   const podePedir = canRequestSongs({ isHost, membership: myMembership ?? null });
   const podeEscolherMesa = canPickMesa({ isHost, membership: myMembership ?? null });
-  const needsMesa = (myMembership?.status ?? null) === "approved" && myMesa == null && podeEscolherMesa;
+  // Fase 16: bar de mesa única não pergunta. Quem entra já nasce com a mesa 1
+  // gravada pelo `join_room` (migration 20261008000001); o `quantidade_mesas > 1`
+  // aqui cobre quem entrou antes da regra e membro antigo sem mesa — sem ele o
+  // MesaPicker apareceria para a pessoa escolher a única opção possível.
+  const needsMesa =
+    (myMembership?.status ?? null) === "approved" &&
+    myMesa == null &&
+    podeEscolherMesa &&
+    (bar?.quantidade_mesas ?? 0) > 1;
   // Assistir é opt-in e liberado para qualquer membro aprovado — dentro ou fora
   // do raio. A porta do player (a migration 20260927000029) exige `approved`, por
   // isso o botão não aparece para quem está pendente. Sem token: o quiosque

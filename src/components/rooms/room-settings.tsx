@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Link2, LoaderCircle, Lock, PlugZap, Video } from "lucide-react";
+import { KeyRound, LayoutGrid, Link2, LoaderCircle, Lock, PlugZap, Video } from "lucide-react";
 import { toast } from "sonner";
 
 import { Label } from "@/components/ui/label";
@@ -18,12 +18,14 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PresenceGateInfo } from "@/components/rooms/presence-gate-info";
 import { RoomOccupancyCard } from "@/components/rooms/room-occupancy";
+import { updateBarMesasAction } from "@/lib/bars/actions";
 import {
   updateRoomCodeAction,
   updateRoomSettingsAction,
   updateYoutubeKeyAction,
   youtubeDisconnectAction,
 } from "@/lib/rooms/actions";
+import { MESA_MAX } from "@/types/bar";
 import type { RoomEntryMode, RoomQueueApprovalMode } from "@/types/room";
 
 type RoomSettingsProps = {
@@ -67,6 +69,10 @@ export function RoomSettings({
   const [ytConnBusy, setYtConnBusy] = useState(false);
   const [roomCodeInput, setRoomCodeInput] = useState(roomCode);
   const [codeBusy, setCodeBusy] = useState(false);
+  // Mesas do bar (Fase 16): 1 por padrão, até 10. O valor vive no servidor
+  // (`bars.quantidade_mesas`) e é sincronizado pela RPC `update_bar_mesas`.
+  const [mesasInput, setMesasInput] = useState(String(bar?.quantidade_mesas ?? 1));
+  const [mesasBusy, setMesasBusy] = useState(false);
   const optimistic = useRef(settings);
 
   async function saveRoomCode() {
@@ -79,6 +85,36 @@ export function RoomSettings({
     }
     toast.success(`Código atualizado! Novo link: /salas/${result.newCode}`);
     router.push(`/salas/${result.newCode}`);
+    router.refresh();
+  }
+
+  async function saveMesas() {
+    if (!bar) return;
+    const next = Number(mesasInput);
+    if (!Number.isInteger(next) || next < 1 || next > MESA_MAX) {
+      toast.error(`Informe de 1 a ${MESA_MAX} mesas.`);
+      return;
+    }
+    if (next === bar.quantidade_mesas) return;
+    if (next < bar.quantidade_mesas) {
+      const confirmed = window.confirm(
+        `Diminuir de ${bar.quantidade_mesas} para ${next} mesa(s)? Quem estiver sentado nas mesas removidas vai para a mesa 1.`
+      );
+      if (!confirmed) return;
+    }
+    setMesasBusy(true);
+    const result = await updateBarMesasAction(bar.id, next);
+    setMesasBusy(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    setMesasInput(String(result.quantidadeMesas));
+    toast.success(
+      result.reallocados > 0
+        ? `Mesas atualizadas. ${result.reallocados} pessoa(s) foram para a mesa 1.`
+        : "Quantidade de mesas atualizada."
+    );
     router.refresh();
   }
 
@@ -247,6 +283,51 @@ export function RoomSettings({
 
       {bar && (
         <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <LayoutGrid className="text-muted-foreground size-4" />
+                Mesas do bar
+              </CardTitle>
+              <CardDescription>
+                De 1 a {MESA_MAX} mesas. Um bar de mesa única não pergunta a mesa na
+                entrada: quem entra pelo código já senta na mesa 1. Diminuir remove as
+                últimas mesas e move quem estava nelas para a mesa 1.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Input
+                  id="bar-mesas"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={MESA_MAX}
+                  value={mesasInput}
+                  onChange={(event) => setMesasInput(event.target.value)}
+                  className="w-24"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={saveMesas}
+                  disabled={mesasBusy || mesasInput === String(bar.quantidade_mesas)}
+                >
+                  {mesasBusy ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    <LayoutGrid className="size-4" />
+                  )}
+                  Salvar
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Hoje o bar tem <span className="font-medium">{bar.quantidade_mesas}</span>{" "}
+                {bar.quantidade_mesas === 1 ? "mesa" : "mesas"}.
+              </p>
+            </CardContent>
+          </Card>
+
           <RoomOccupancyCard roomId={roomId} quantidadeMesas={bar.quantidade_mesas} />
           <PresenceGateInfo
             barId={bar.id}

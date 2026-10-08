@@ -3,6 +3,7 @@
  * (3–12 alfanuméricos). Um mesmo padrão cobre os dois.
  */
 import { resolveAppUrl } from "@/lib/app-url";
+import { MESA_MAX } from "@/types/bar";
 
 const CODE_PATTERN = /^[A-Z0-9]{3,12}$/;
 
@@ -40,12 +41,12 @@ export function parseEntryToken(text: string): EntryToken | null {
     if (bar) {
       if (!isCode(bar)) return null;
       const token: EntryToken = { bar };
-      if (Number.isInteger(mesa) && mesa! >= 1 && mesa! <= 999) token.mesa = mesa;
+      if (Number.isInteger(mesa) && mesa! >= 1 && mesa! <= MESA_MAX) token.mesa = mesa;
       return token;
     }
     if (code && isCode(code)) {
       const token: EntryToken = { roomCode: code };
-      if (Number.isInteger(mesa) && mesa! >= 1 && mesa! <= 999) token.mesa = mesa;
+      if (Number.isInteger(mesa) && mesa! >= 1 && mesa! <= MESA_MAX) token.mesa = mesa;
       return token;
     }
     return null;

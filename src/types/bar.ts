@@ -53,7 +53,8 @@ export type EntryScreen = {
   mesa: number;
 };
 
-export const MESA_MAX = 999;
+/** Limite do produto (Fase 16): 1 por padrão, até 10 — mesmo `check` do banco. */
+export const MESA_MAX = 10;
 
 /**
  * Raio de presença do bar (`bars.raio_permitido_metros`) — mesmo `check` do

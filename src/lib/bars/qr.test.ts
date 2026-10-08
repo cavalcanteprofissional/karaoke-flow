@@ -52,6 +52,16 @@ describe("parseEntryToken", () => {
       bar: "ZEHBAR",
     });
   });
+
+  it("ignora mesa acima do teto do bar (Fase 16: até 10)", () => {
+    expect(parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&mesa=11")).toEqual({
+      bar: "ZEHBAR",
+    });
+    expect(parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&mesa=10")).toEqual({
+      bar: "ZEHBAR",
+      mesa: 10,
+    });
+  });
 });
 
 describe("entryRoute", () => {
@@ -81,19 +91,18 @@ describe("createBarSchema", () => {
     }
   });
 
-  it("aceita quantidade_mesas inteira >= 1", () => {
+  it("aceita quantidade_mesas inteira de 1 a 10 (Fase 16)", () => {
     expect(
-      createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 12 }).success
+      createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 10 }).success
     ).toBe(true);
   });
 
-  it("rejeita quantidade_mesas < 1 ou > 999", () => {
+  it("rejeita quantidade_mesas < 1 ou > 10", () => {
     expect(
       createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 0 }).success
     ).toBe(false);
     expect(
-      createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 1000 })
-        .success
+      createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 11 }).success
     ).toBe(false);
     expect(
       createBarSchema.safeParse({ nome: "X", cidade: "Y", quantidade_mesas: 1.5 }).success

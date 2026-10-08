@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { createBarAction, geocodeBarAddressAction } from "@/lib/bars/actions";
 import { captureGeolocation, roundCoords, type GeoCoordinates } from "@/lib/consent/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
+import { MESA_MAX } from "@/types/bar";
 import { cn } from "cn";
 
 export function CreateBarDialog({
@@ -173,7 +174,7 @@ export function CreateBarDialog({
                 type="number"
                 inputMode="numeric"
                 min={1}
-                max={999}
+                max={MESA_MAX}
                 value={form.quantidade_mesas}
                 onChange={(e) => set("quantidade_mesas", e.target.value)}
                 required

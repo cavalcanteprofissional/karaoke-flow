@@ -124,6 +124,8 @@ A RPC `get_room_preview` **foi substituída** pela `get_entry_preview(p_code, p_
 
 **Mesa escolhida dentro da sala na entrada por código** (2026-09-24): QR de bar/mesa (`?bar=…[&mesa=N]`) mantém o fluxo abaixo — mesa vai no `join_room`. Já o **código puro de sala** (`/entrar?code=KARAOKE` ou digitado) entra **direto na sala sem mesa** (`join_room(code)` com `p_mesa` nulo) e o participante é **obrigado a escolher a mesa dentro da sala** (`pick_mesa`, migration `20260924000022` — valida mesa em 1..`quantidade_mesas`, só para membro `approved` de sala `active`); enquanto `pending` vê o aviso de aguardando aprovação.
 
+**Exceção — bar de uma mesa só não pergunta** (Fase 16, `20261008000001`, 2026-10-08): se `quantidade_mesas = 1`, o próprio `join_room` devolve `mesa_numero = 1` para quem mandou `p_mesa` nulo, e o `needsMesa` de `/salas/<código>` só exige escolha quando há **2 ou mais** mesas — quem entra cai direto na tela de pedir música. **Espectador (`fora_do_raio`) é excluído da regra**: continua `mesa_numero null`, porque quem está de fora não senta (sentá-lo mentiria para o card de ocupação).
+
 **Gate de presença física** (requisito 2026-09-23, revisto em 2026-10-02): antes de `join_room`, o servidor lê o cookie `kf-geo` (geo do participante coletada sob consentimento §2.5) e compara com as coordenadas do bar (haversine ≤ `raio_permitido_metros`). A decisão tem **três desfechos** (`src/lib/bars/geo.ts`), porque "onde a pessoa está" responde a duas perguntas diferentes — **entrar** e **participar**:
 
 | Desfecho | Quando | Entrada | Pedir música |
@@ -142,7 +144,7 @@ flowchart TD
     R -->|não| PC{"Presença: kf-geo × coords ± raio (host isento)"}
     PC -->|sem consentimento/coords, ou bar sem raio| PC1["bloqueado: geoRequired → a entrada oferece 'Permitir localização'"]
     PC -->|fora do raio| ROOMOUT["RPC join_room(p_code) sem mesa · entrada como espectador"]
-    PC -->|dentro do raio| ROOM["RPC join_room(p_code) sem mesa — (backend)"]
+    PC -->|dentro do raio| ROOM["RPC join_room(p_code) sem mesa — (backend)<br/>bar de 1 mesa devolve mesa_numero = 1 (Fase 16)"]
     ROOMOUT --> OUTV["vê o player · sem MesaPicker e sem pedir música"]
     ROOM --> DG0{É o host?}
     DG0 -->|sim| HOST["redirect → /salas/[code]"]
@@ -150,16 +152,16 @@ flowchart TD
     DG1 -->|não| Z["erro: sala não encontrada/inativa"]
     DG1 -->|sim| ROOM2{entry_mode?}
     ROOM2 -->|approval| PRE{Pré-aprovação de 24h?}
-    ROOM2 -->|open| APPR["approved · mesa_numero null"]
+    ROOM2 -->|open| APPR["approved · mesa 1 se o bar for de 1 mesa, senão null"]
     PRE -->|sim| APPR2["approved · reconecta sem novo pedido"]
     PRE -->|não| PEND["pending · mesa_numero null — vê 'aguardando aprovação' na sala"]
-    APPR --> MESA_DENTRO["Sala pede a mesa (MesaPicker → RPC pick_mesa, migration 00022)"]
+    APPR --> MESA_DENTRO["Bar de 2+ mesas: a sala pede a mesa (MesaPicker → RPC pick_mesa, migration 00022)<br/>Bar de 1 mesa: já está sentado, sem escolha"]
     PEND --> HOST2["Host aprova → approved · mesa null"]
     HOST2 --> MESA_DENTRO
     MESA_DENTRO --> H["Participante vê a fila ('Bar · Mesa N')"]
     R -->|sim| X{Bar tem mesa pré-selecionada?}
     X -->|sim| X1["Mesa pré-selecionada (QR / ?mesa=N): valida p_mesa (1..quantidade_mesas e existe em mesas)"]
-    X -->|não| X2["UI pede a mesa (grid 1..N); default 1 quando mesa única"]
+    X -->|não| X2["UI pede a mesa (grid 1..N) — bar de 1 mesa pula a grade e senta na 1"]
     X1 --> X3["Confirmar entrada"]
     X2 --> X3
     X3 --> P{"Presença: kf-geo × coords ± raio (host isento)"}

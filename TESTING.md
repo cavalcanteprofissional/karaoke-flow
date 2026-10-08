@@ -5,7 +5,7 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-08):** suite com **709 testes** (52 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 25 (inclui o teto de 10 mesas da Fase 16), i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 88 (`credentials` 18 com o portão `is_dev`, `errors` 15 — que incluem o payload real do deploy, `badRequest` + "API key not valid", e o contrapeso que impede promover `badRequest` a chave inválida só pelo `reason`, `service` 15, `host-oauth` 16 com a invalidação na desconexão e no refresh em andamento, `diagnostics` 21 com a redação de segredo em exceção nossa, `search` 9), `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 13 (raio + `createRoomSchema` da Fase 8b·quater + `barMesasSchema` da Fase 16) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **21 provas via MSW** — Bearer OAuth host/app, o portão `is_dev` nos dois sentidos, pool ativo/inativo e `own_only` ignorando `youtube_pool_id` — e a **`/api/youtube/diagnostics` com 18** (o portão 401/403, o relatório sem gastar cota, `?room=`, `?probe=1` com `keyInvalid` e `ipRefererBlocked`, a sala inexistente que não pode virar "sem credencial", e a exceção com segredo redigida), o **roundtrip authorize→callback** com 4 provas do estado mais o `redirect_uri` derivado da env (12 no total, com o aviso de `NEXT_PUBLIC_APP_URL` ausente), a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 28, `song-search` 16 com o bloco da Fase 8f — passo do host, participante sem atalho e resposta HTTP que nunca vira "falha de rede" —, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host), `src/lib/supabase/admin.test.ts` 5 (o memo por `(url, key)`), `room-settings` 8 (os textos que não podem voltar a mentir) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). A Fase 8f acrescenta o **`scripts/smoke-youtube-credential.sql`** — **19/19 no Supabase Cloud em 06/10/2026** (default `own_only`, as quatro recusas de coerência, o FK `RESTRICT`, os pools invisíveis ao cliente, a RPC de saúde sem devolver a chave e o bypass do trigger para service role). A Fase 8g acrescenta o **`scripts/smoke-release-current-item.sql`** — **11/11 no Supabase Cloud em 07/10/2026** (o `KF001` recusando no ar, o release devolvendo `approved` na mesma posição com a sala `idle`, as duas portas do `player_room_id`, a sala encerrada e o cantor destravado em seguida). A Fase 16 acrescenta o **`scripts/smoke-mesas.sql`** — **12 passos no Supabase Cloud em 08/10/2026** (teto 1–10 no `create_bar` e nos checks do banco, corte do ZEHBAR, `update_bar_mesas` com realocação e recusa de não-dono, auto-mesa-1 em bar de 1 mesa, espectador sem mesa e bar de 2 mesas sem escolha — roteiro em §3.17). A Fase 8f acrescenta o roteiro manual de §3.15 (o que a tela mostra × o que só o diagnóstico mostra) — a parte automatizada está coberta e o **`?probe=1` no deploy de preview foi executado** (ver o bloco "verificado no deploy" ao fim da seção). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-08):** suite com **729 testes** (56 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 25 (inclui o teto de 10 mesas da Fase 16), i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 88 (`credentials` 18 com o portão `is_dev`, `errors` 15 — que incluem o payload real do deploy, `badRequest` + "API key not valid", e o contrapeso que impede promover `badRequest` a chave inválida só pelo `reason`, `service` 15, `host-oauth` 16 com a invalidação na desconexão e no refresh em andamento, `diagnostics` 21 com a redação de segredo em exceção nossa, `search` 9), `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 13 (raio + `createRoomSchema` da Fase 8b·quater + `barMesasSchema` da Fase 16) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **21 provas via MSW** — Bearer OAuth host/app, o portão `is_dev` nos dois sentidos, pool ativo/inativo e `own_only` ignorando `youtube_pool_id` — e a **`/api/youtube/diagnostics` com 18** (o portão 401/403, o relatório sem gastar cota, `?room=`, `?probe=1` com `keyInvalid` e `ipRefererBlocked`, a sala inexistente que não pode virar "sem credencial", e a exceção com segredo redigida), o **roundtrip authorize→callback** com 4 provas do estado mais o `redirect_uri` derivado da env (12 no total, com o aviso de `NEXT_PUBLIC_APP_URL` ausente), a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 30, incluindo o host pedindo música da Fase 17, `song-search` 17 com o bloco da Fase 8f — passo do host, participante sem atalho, resposta HTTP que nunca vira "falha de rede" e o atalho de configuração indo para `/bar/[codigo]` —, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host), `src/lib/supabase/admin.test.ts` 5 (o memo por `(url, key)`), as **4 telas do host da Fase 17** (`settings/room-behavior-card` 4 com o toggle travado, `settings/youtube-settings-card` 9 com os textos que não podem voltar a mentir, `settings/mesas-bar-card` 5, `settings/room-code-card` 4 e `host-screen-nav` 3) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). A Fase 8f acrescenta o **`scripts/smoke-youtube-credential.sql`** — **19/19 no Supabase Cloud em 06/10/2026** (default `own_only`, as quatro recusas de coerência, o FK `RESTRICT`, os pools invisíveis ao cliente, a RPC de saúde sem devolver a chave e o bypass do trigger para service role). A Fase 8g acrescenta o **`scripts/smoke-release-current-item.sql`** — **11/11 no Supabase Cloud em 07/10/2026** (o `KF001` recusando no ar, o release devolvendo `approved` na mesma posição com a sala `idle`, as duas portas do `player_room_id`, a sala encerrada e o cantor destravado em seguida). A Fase 16 acrescenta o **`scripts/smoke-mesas.sql`** — **12 passos no Supabase Cloud em 08/10/2026** (teto 1–10 no `create_bar` e nos checks do banco, corte do ZEHBAR, `update_bar_mesas` com realocação e recusa de não-dono, auto-mesa-1 em bar de 1 mesa, espectador sem mesa e bar de 2 mesas sem escolha — roteiro em §3.17). A Fase 8f acrescenta o roteiro manual de §3.15 (o que a tela mostra × o que só o diagnóstico mostra) — a parte automatizada está coberta e o **`?probe=1` no deploy de preview foi executado** (ver o bloco "verificado no deploy" ao fim da seção). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
 
@@ -99,7 +99,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [ ] Anônimo escaneia QR do bar → preview com **escolha da mesa** → entra e vê a fila ("Bar · Mesa N").
 - [ ] QR de mesa (`?bar=ZEHBAR&mesa=3`) entra já com a mesa selecionada.
 - [ ] **Código de sala puro (`/entrar?code=KARAOKE` ou digitado) entra DIRETO na sala, sem mesa** — a mesa é escolhida **dentro da sala**, obrigatória para membro `approved` ainda sem mesa (`/salas/[codigo]` mostra o painel de escolha da mesa — badge "KARAOKE · ZEHBAR · N mesas"); se ainda `pending`, vê o aviso de espera da aprovação.
-- [ ] **Código da sala é configurável pelo host (3–12 alfanuméricos)** no RoomSettings ("Código de entrada"): valida contra sala/bar (colisão bloqueada) e redireciona a página para o novo código.
+- [ ] **Código da sala é configurável pelo host (3–12 alfanuméricos)** na tela **Sala** (`/salas/<código>/sala`, card "Código de entrada"): valida contra sala/bar (colisão bloqueada) e redireciona a página para o novo código.
 - [ ] **Código default do bar = nome do bar normalizado** (`Karaokê do Zé` → `KARAOKEDOZE`, truncado em 12; fellback `KARAOKE` + sufixo `KARAOKE1`, `KARAOKE2`…) — aplicado ao criar bar e exibido como dica no formulário.
 - [ ] Código legado de sala (`/entrar?code=ROOM`) continua entrando no karaokê de um bar.
 - [ ] Criar bar (conta real) pede nome/cidade/endereço/quantidade de mesas; gera bar + mesas + karaokê único.
@@ -145,7 +145,7 @@ Checklist manual/funcional por fluxo, executado **antes de cada release**. Marqu
 - [x] Rate limit por usuário/IP bloqueia spam de buscas — **429 + `Retry-After`**.
 - [x] Cache compartilhado reusa resultados (2ª busca do mesmo termo **sem bater na Google** — `cached: true`).
 - [x] **Gate de presença física na busca e na adição** (fora do raio / sem geo → bloqueado com CTA "Permitir localização"; host isento).
-- [x] OAuth por-host: "Conectar com o Google" no RoomSettings grava `youtube_oauth_tokens`, vira a credencial da busca (**Bearer**) e o bloco passa a mostrar **"conectado à conta Google · desde …"**.
+- [x] OAuth por-host: "Conectar conta do YouTube" no card **"Busca de música (YouTube)"** (tela do bar) grava `youtube_oauth_tokens`, vira a credencial da busca (**Bearer**) e o bloco passa a mostrar **"Conectado à conta do YouTube · desde …"**.
 - [x] **Remover conexão** revoga o token na Google e apaga a linha; a busca cai para a próxima credencial da cadeia.
 - [x] Busca usando OAuth (host/app) envia `Authorization: Bearer` e **nunca** `?key=` — **testes MSW** (host e app cobrem os dois caminhos).
 
@@ -297,7 +297,7 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 - [x] **Participante e host entram no player sem token** (`/player/<codigo>` por sessão) e **adicionar música leva ao player** — `song-search.test.tsx` (9).
 - [x] **Negados no player:** membro `pending`, anônimo sem aprovação, não-membro e token errado — token errado **não** cai para a sessão.
 - [x] **Pré-aprovação de 24h:** autenticado aprovado há 23h reentra aprovado; aos 25h volta a `pending` (com "entrada livre" OFF); toggle OFF não pré-aproveja ninguém; **anônimo nunca** é pré-aprovado; **reaprovar não renova** a janela.
-- [x] **Toggle travado ON na UI** do `RoomSettings` (a decisão do PO) com o backend aceitando os dois valores — `room-settings.test.tsx` (3).
+- [x] **Toggle travado ON na UI** (a decisão do PO) com o backend aceitando os dois valores — `settings/room-behavior-card.test.tsx` (4, desde a Fase 17; antes era `room-settings.test.tsx`).
 - [x] **Fila/player/seed de dev** — o seed deixa uma música `approved` (a trigger de status inicial ignora o `approved` do `INSERT`), senão o teste manual do player não tinha com o que testar.
 - [ ] **Smoke HTTP** da rota pública com os dois caminhos de autorização e o redirect depois de adicionar — depende de Playwright.
 - [ ] **Player em browser de TV de verdade** (IFrame API real, autoplay, latência) — o smoke prova o contrato, não a tela. **O browser de dev já rodou em 27/09** e expôs o crash de prontidão (ver §3.6): o que falta é a confirmação na TV.
@@ -834,6 +834,58 @@ Rodar: `node scripts/apply-sql.mjs scripts/smoke-mesas.sql 9000`
       quantas foram para a mesa 1.
 - [ ] **Membro antigo em bar de 1 mesa** (entrou antes da migration) já aparece
       sentado na mesa 1 — o backfill cobre, e o `MesaPicker` não volta a aparecer.
+
+---
+
+### 3.18 Fase 17 — quatro telas de configuração + host pede música (2026-10-08)
+
+**Coberto pela suíte (roda no `npm test`)**
+
+- [x] `settings/room-behavior-card` (4): os quatro toggles, a pré-aprovação
+      **ligada, esmaecida e travada** e o rollback quando o servidor recusa.
+- [x] `settings/youtube-settings-card` (9): os textos que não podem voltar a
+      mentir (cota é do projeto, "não cria uma cota separada", "Conectar conta do
+      YouTube", chave sem "opcional", Google Cloud/restrição/Referer), o link de
+      OAuth com o código da sala, remover chave gravando `null` e o card de conta
+      conectada.
+- [x] `settings/mesas-bar-card` (5): faixa 1–10, aumento sem confirmação,
+      **redução com confirmação** (cancelar não grava) e o toast de realocados.
+- [x] `settings/room-code-card` (4): input travado no código atual, caixa alta,
+      navegação para `/salas/<novo>/sala` e recusa do servidor sem navegar.
+- [x] `host-screen-nav` (3): as três telas da sala, o quarto link só com bar, e
+      o texto de cada item.
+- [x] `queue-list` (+2): o host vê **"Pedir música"** nos dois lugares, e um
+      não-host sem permissão continua sem o atalho.
+- [x] `song-search` (+1): o passo de configuração leva para `/bar/<código>` quando
+      a sala tem bar e para `/salas/<código>/player` quando não tem.
+- [x] `npm run lint`, `npm run typecheck`, `npm test` (**729 testes, 56
+      arquivos**) e `npm run build` — as rotas novas aparecem no output
+      (`/bar/[codigo]`, `/salas/[codigo]/{player,sala,pulseiras}`).
+
+**Aparelho (falta — fazer no ZEHBAR)**
+
+- [ ] **Tela ao vivo**: `/salas/<código>` mostra fila + mesa + código, e o host
+      vê a navegação **Player · Sala · Pulseiras · Bar**; o participante **não
+      vê** essa navegação.
+- [ ] **Host-only de verdade**: logado como participante, digitar
+      `/salas/<código>/sala` (ou `/player`, `/pulseiras`) volta para a sala;
+      digitar `/bar/<código>` de um bar que não é seu cai no dashboard; sem
+      sessão, `/bar/...` manda para o login preservando o `next`.
+- [ ] **Player**: link da TV copiável/rotacionável, fila com aprovação e
+      **"Pedidos de entrada" aparecendo só com "Entrada livre" desligado** (ligado,
+      o card some).
+- [ ] **Sala**: 4 toggles salvam e a tela ao vivo já reflete o badge novo; QR do
+      bar + QR por mesa; mesas 1–10 (com confirmação ao diminuir); quem está na
+      sala; trocar o código leva para a rota nova.
+- [ ] **Bar**: raio de presença gravando e valendo para o gate; **um card de
+      busca do YouTube por sala**; salvar a chave/desconectar refaz a busca sem
+      recarregar a página.
+- [ ] **Pulseiras**: rota abre com os dois cards esmaecidos e nenhum botão que
+      grave.
+- [ ] **Host pede música**: do botão "Pedir música" na própria sala — entra na
+      fila sem limite (fila manual: fica pendente e ele mesmo aprova); em **outra**
+      sala ele é participante comum (geolocalização e aprovação valem).
+- [ ] **Dashboard**: o botão **Bar** em cada bar abre `/bar/<código>`.
 
 ---
 

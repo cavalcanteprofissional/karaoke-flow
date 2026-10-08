@@ -38,10 +38,11 @@ Após o login, o fluxo de sessão/dashboard é comum aos dois perfis (ver [`flux
 flowchart TD
     A["/dashboard"] --> B["'Criar meu bar' (Dialog): nome, cidade, endereço,<br/>quantidade de mesas (+ código de entrada opcional)"]
     B --> C["Bar criado: código 3–12 chars — default do nome do bar<br/>(ex.: 'Karaokê do Zé' → KARAOKEDOZE) + QR do bar + QR das mesas"]
-    C --> D["Configura: modo de entrada (open/aprovação),<br/>fila (auto/manual), confirmação de música"]
-    D --> D1["Configura busca: 'Conexão YouTube do host'<br/>(conectar Google / colar chave de API)"]
-    D1 --> E["Tela do host: fila + painéis de aprovação"]
-    E --> F["Publica QR das mesas (cartaz) p/ participantes"]
+    C --> D["Tela <b>Sala</b> /salas/&lt;código&gt;/sala: modo de entrada,<br/>fila, confirmação, mesas (1–10), QR e código de entrada"]
+    D --> D1["Tela <b>Bar</b> /bar/&lt;código&gt;: raio de presença +<br/>busca YouTube (conectar conta ou colar chave)"]
+    D1 --> D2["Tela <b>Player</b> /salas/&lt;código&gt;/player:<br/>link da TV, fila com aprovação e pedidos de entrada"]
+    D2 --> E["Tela ao vivo /salas/&lt;código&gt;: fila + painéis de aprovação"]
+    E --> F["Publica QR das mesas (tela Sala) p/ participantes"]
     F --> G["Host acompanha em aprovação realtime e controla playback pelo celular"]
     G --> H["Fim da noite: fechar a sala (só o dono) —<br/>cancela a fila, interrompe e expulsa todos os participantes"]
 ```
@@ -106,17 +107,17 @@ flowchart TD
 >
 > **A busca destrava em tempo real, sem F5 (2026-10-07, Fase 8g):** enquanto a sua música toca, o botão "Adicionar" fica travado com o texto explicando que dá para pedir de novo quando ela terminar; quando a TV dá o `claim` e a faixa vira `played`, **a tela de busca reabre sozinha na hora** — era precisar navegar ou recarregar, porque a página lia a música ativa uma vez por render e a virada de status acontece dentro da TV, sem avisar a busca. Agora há **uma regra só** (`ownActiveSongView`), lida ao vivo por `useOwnActiveSong` (postgres_changes + broadcast + poll de 10 s + relê no foco) e pelas actions de playback, que revalidam `/salas/<código>` **e** `/salas/<código>/buscar`. O **host** não vê nenhum aviso nem trava (ele não tem limite) — a leitura que mostrava o aviso "sua música vai sair" para o host era um defeito, corrigido na mesma rodada. Roteiro em [`../../TESTING.md`](../../TESTING.md) §3.16.
 
-> **Pré-aprovação de 24h (2026-09-27, Fase 8a):** quem o host aprovou e **tem conta** volta aprovado por **24h** ao reconectar na sala, sem o host tocar em nada. Passou disso (ou com o toggle desligado no banco) a entrada volta a ser pedida normalmente, e **sair da sala** sempre exige aprovação nova — a linha do participante é apagada, então voltar é uma entrada do zero. **Visitante sem conta nunca é pré-aprovado**, mesmo que o host tenha aprovado antes. No painel do dono, o item "**Aprovação vale por 24h**" aparece **ligado e travado**, com o aviso de que sair da sala passa a exigir aprovação de novo (decisão de produto: o host não desliga isso). Detalhe da regra em [`banco-de-dados.md`](./banco-de-dados.md) §4.2 e [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §2.2.
+> **Pré-aprovação de 24h (2026-09-27, Fase 8a):** quem o host aprovou e **tem conta** volta aprovado por **24h** ao reconectar na sala, sem o host tocar em nada. Passou disso (ou com o toggle desligado no banco) a entrada volta a ser pedida normalmente, e **sair da sala** sempre exige aprovação nova — a linha do participante é apagada, então voltar é uma entrada do zero. **Visitante sem conta nunca é pré-aprovado**, mesmo que o host tenha aprovado antes. Na tela do dono, na tela **Sala**, o item "**Aprovação vale por 24h**" aparece **ligado e travado**, com o aviso de que sair da sala passa a exigir aprovação de novo (decisão de produto: o host não desliga isso). Detalhe da regra em [`banco-de-dados.md`](./banco-de-dados.md) §4.2 e [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §2.2.
 >
 > **Depois de pedir música, o celular vai para o player (Fase 8a):** `/salas/<código>/buscar` redireciona para `/player/<código>` ao adicionar — o participante vê a watch party da **sua** sala (o que está tocando e a fila) sem precisar do link da TV, que ele nunca recebe. Quem abre essa URL sem token entra pela **sessão**: host ou membro aprovado. Membro com pedido pendente, visitante sem aprovação e quem não é da sala recebem um aviso, não o player. A **troca** de música continua voltando para a busca, porque o ponto ali é escolher o vídeo novo.
 >
-> **Entrada por código puro (2026-09-24):** digitar o código do karaokê (ex.: `KARAOKE`, 3–12 caracteres, código do bar → vira o código de entrada) entra **direto na sala sem mesa** — a mesa é escolhida **dentro da sala** (`MesaPicker` → RPC `pick_mesa`) assim que o participante está `approved`. O QR de bar/mesa continua pré-selecionando a mesa no `join_room`. O host pode trocar o código da sala pelo RoomSettings (`updateRoomCodeAction`). **Fase 16 (2026-10-08): bar de mesa única não pergunta** — com `quantidade_mesas = 1`, o próprio `join_room` devolve `mesa_numero = 1` e o `MesaPicker` some do caminho (quem entra cai direto na tela de pedir música). Espectador (`fora_do_raio`) continua sem mesa, mesmo em bar de 1 mesa. O host mexe na quantidade pelo card **"Mesas do bar"** no RoomSettings (RPC `update_bar_mesas`, 1–10).
+> **Entrada por código puro (2026-09-24):** digitar o código do karaokê (ex.: `KARAOKE`, 3–12 caracteres, código do bar → vira o código de entrada) entra **direto na sala sem mesa** — a mesa é escolhida **dentro da sala** (`MesaPicker` → RPC `pick_mesa`) assim que o participante está `approved`. O QR de bar/mesa continua pré-selecionando a mesa no `join_room`. O host pode trocar o código da sala pela tela **Sala** (card "Código de entrada", `updateRoomCodeAction`, que em seguida leva para a rota nova). **Fase 16 (2026-10-08): bar de mesa única não pergunta** — com `quantidade_mesas = 1`, o próprio `join_room` devolve `mesa_numero = 1` e o `MesaPicker` some do caminho (quem entra cai direto na tela de pedir música). Espectador (`fora_do_raio`) continua sem mesa, mesmo em bar de 1 mesa. O host mexe na quantidade pelo card **"Mesas do bar"** na tela Sala (RPC `update_bar_mesas`, 1–10).
 
 > **Requisito presença física (2026-09-23, revisto em 2026-10-02):** o gate de geo (`kf-geo` × coordenadas do bar ± raio, validado no servidor) é obrigatório para **adicionar música** (`addSongToQueueAction` revalida) — impede participação remota. Para **entrar** ele foi revisto em 2026-10-02 e agora tem três desfechos (`src/lib/bars/geo.ts`): **dentro do raio** entra normalmente; **sem consentimento/coords, ou bar sem raio** segue **bloqueado** (banner "Permitir localização"), porque sem o cookie não dá nem para saber onde a pessoa está; **fora do raio** **entra sem mesa, como espectador** — fica na tela da sala, vê a fila, **sem busca**, **sem `MesaPicker`** e **sem conseguir pedir música**; o botão "Ver o player" abre `/player/<código>` em modo somente leitura (mudo, sem gate, sem "Trancar TV"). **Revisto em 2026-10-03:** a regra virou de UI para banco (`20261003000041`) — `addSongToQueueAction` recusa com `OUTSIDE_BAR`, `pick_mesa` recusa, e `claim_next_song` só aceita o token da TV. Antes os dois casos negativos bloqueavam a entrada e quem caía no "fora do raio" ficava numa tela sem caminho possível. Ver `fluxos-do-sistema.md` §2.2 e §3.1. **Exceção (2026-09-25):** quem já tem pedido `pending` volta direto para a tela de espera — o gate não esconde um pedido em andamento.
 >
 > **Pedido de entrada pendente (2026-09-25; status efetivo desde 2026-09-27):** `EntryApprovalWait` (tela de espera) é compartilhada por `/entrar` (QR de bar/mesa e código) e `/salas/[código]`; acompanha `room_members` via Realtime + poll de 8 s e, na aprovação, entra sozinho na sala. O pedido **sobrevive à navegação**: `getEntryPreviewAction` devolve a membership do participante, `getMyEntryRequestsAction` lista os pedidos `pending` no `/entrar` sem token e no dashboard (com "Acompanhar aprovação" → `/entrar?code=…` e "Cancelar"), e a lista resolve nome/código do bar via client de service role porque a RLS de `rooms` esconde a sala de quem não está `approved`. `cancelEntryRequestAction` apaga a linha só quando `status = 'pending'`; quando a linha some, `getEntryRequestStateAction` diz se foi cancelamento ou `close_room`, para não mostrar "sala encerrada" a quem cancelou. **A partir da Fase 8a** a tela de espera, o preview e a página da sala leem o status **efetivo** (`member_entry_state`), e não a linha crua — é o que faz a pré-aprovação de 24h valer na tela, sem a UI saber a regra.
 >
-> **Raio de presença no painel do host (2026-09-25, editável em 2026-09-26):** o card "Raio de presença" (abaixo dos toggles de "Como a sala funciona") explica que o gate de localização vale **mesmo com entrada livre ligada** e que o raio vale para **todas as salas do bar**, desenha o raio (padrão **500 m**) sobre o endereço do bar num mapa Leaflet/OpenStreetMap — com a metragem no HUD, os anéis internos rotulados ("anéis de 100 m") e links para abrir no Google Maps/OpenStreetMap. O host ajusta o valor no **input numérico ou no slider** (**50 a 1000 m**, de 50 em 50) e **vê o círculo e o aviso mudarem na hora, antes de gravar**; ao soltar o slider, sair do campo, apertar Enter ou parar por meio segundo, o valor é gravado e aparece "Salvo às HH:MM". Valor inválido (abaixo de 50 ou acima de 1000) é recusado no campo, erro do servidor devolve o valor anterior com aviso, e há "Restaurar 500 m" para voltar ao padrão. Bar sem endereço geolocalizado: aviso de que todo participante é bloqueado (o host entra). Quem não é dono do bar vê o mesmo mapa em modo somente leitura.
+> **Raio de presença (2026-09-25, editável em 2026-09-26; na tela do bar desde a Fase 17):** o card "Raio de presença" vive em **`/bar/<código>`** (junto da busca do YouTube, porque os dois valem para todas as salas do bar) e explica que o gate de localização vale **mesmo com entrada livre ligada** e que o raio vale para **todas as salas do bar**, desenha o raio (padrão **500 m**) sobre o endereço do bar num mapa Leaflet/OpenStreetMap — com a metragem no HUD, os anéis internos rotulados ("anéis de 100 m") e links para abrir no Google Maps/OpenStreetMap. O host ajusta o valor no **input numérico ou no slider** (**50 a 1000 m**, de 50 em 50) e **vê o círculo e o aviso mudarem na hora, antes de gravar**; ao soltar o slider, sair do campo, apertar Enter ou parar por meio segundo, o valor é gravado e aparece "Salvo às HH:MM". Valor inválido (abaixo de 50 ou acima de 1000) é recusado no campo, erro do servidor devolve o valor anterior com aviso, e há "Restaurar 500 m" para voltar ao padrão. Bar sem endereço geolocalizado: aviso de que todo participante é bloqueado (o host entra). Quem não é dono do bar nem chega nesta tela (guard na página).
 
 > **Busca (Fase 4; erros e credencial revisados na Fase 8f, 2026-10-05/06):** debounce ~500 ms + cache compartilhado (`song_cache`) entre karaokês; credencial resolvida **só no servidor** na ordem **chave do bar → OAuth do host**, e os degraus seguintes (OAuth do app e chave dev) **só para conta `dev`** — antes, qualquer bar sem nada gastava a cota do dono sem ele saber. **Política de credencial por bar** (`own_only` ou `platform_pool`, migration `20261005000043`) define quem paga a cota. A resposta do Google vira mensagem com **causa e o que fazer** (cota estourada, chave inválida, chave com restrição de origem — só aparece no deploy, API não habilitada), nunca um "algo deu errado"; 429 por excesso de buscas.
 
@@ -141,6 +142,8 @@ flowchart TD
 ---
 
 ## 4. Host — aprovar entradas e músicas
+
+> **Onde isso vive desde a Fase 17 (2026-10-08):** a fila com aprovação e o painel de **pedidos de entrada** ficam na tela **`/salas/<código>/player`**; a tela ao vivo `/salas/<código>` continua com a fila, para o host acompanhar sem sair do que está acontecendo. O host também **pede música** ali mesmo — sem limite, na própria sala (ver §7).
 
 ```mermaid
 flowchart TD
@@ -208,6 +211,43 @@ flowchart LR
 > **Sem música aprovada, os botões de tocar/pausar somem** e o painel diz "Nenhuma música aprovada na fila" — melhor que um botão morto.
 >
 > **O card acompanha a TV (2026-10-07, Fase 8g):** até essa fase o card era renderizado **uma vez** pela Server Component e nunca mais mudava — o host via "Retomar" a noite inteira numa sala que já estava ociosa, com os botões certos no banco e a tela mentindo. Ele ganhou `usePlaybackLive` (broadcast + poll de 10 s + relê no foco, as mesmas três camadas da fila), lendo `get_player_state` **pela sessão do host** — sem depender do token, que o "Gerar novo link" gira; se a leitura falhar, o card mantém o que está na tela em vez de zerar. E a **TV passou a anunciar também**: depois de cada `claim` e de cada liberação de faixa, no canal `player:{CODE}` que ela já assinava — antes só o host avisava.
+
+---
+
+## 7. Host — as quatro telas de configuração — entregue em 2026-10-08 (Fase 17)
+
+`/salas/<código>` deixou de ser a tela de configuração: virou a **tela ao vivo** (mesa, fila, código na mão, sair/encerrar) e as configurações saíram para **rotas filhas** — um assunto por tela, no lugar de um `room-settings.tsx` de 553 linhas com seis cards empilhados. O participante não vê nenhuma delas: quem não é host continua na tela ao vivo, e toda rota de configuração faz o guard **no servidor** (host da sala / dono do bar) e devolve para a sala.
+
+| Rota | O que fica lá |
+| --- | --- |
+| `/salas/<código>/player` | **Player da TV** (controles ao vivo + copiar/rotacionar link), **Fila de músicas** com moderação, **Pedidos de entrada** (este só existe com `Entrada livre` = OFF) |
+| `/salas/<código>/sala` | **Como a sala funciona** (4 toggles), **Cartaz e QR das mesas** + QR individual por mesa, **Mesas do bar** (1–10), **Quem está na sala**, **Código de entrada** |
+| `/bar/<código>` (**nova**) | **Raio de presença** (o gate) e **Busca de música (YouTube)** — um card por sala do bar, porque a chave é da sala e a cota é do projeto do Google Cloud |
+| `/salas/<código>/pulseiras` (**nova**) | **Distribuição de códigos** e **Valor da pulseira** — hoje placeholder esmaecido, sem ação; as tabelas chegam na Fase 18 |
+
+```mermaid
+flowchart TD
+    A["/salas/&lt;código&gt; — TELA AO VIVO<br/>(mesa, fila, código, sair/encerrar)"] -->|"navegação só para o host"| B["Player<br/>/salas/&lt;código&gt;/player"]
+    A --> C["Sala<br/>/salas/&lt;código&gt;/sala"]
+    A --> D["Pulseiras<br/>/salas/&lt;código&gt;/pulseiras"]
+    A --> E["Bar<br/>/bar/&lt;código&gt;"]
+    B --> B1["Controles da TV + link da TV<br/>+ fila com aprovação<br/>+ pedidos de entrada (só em modo aprovação)"]
+    C --> C1["4 toggles + QR do bar + QR das mesas<br/>+ quantidade de mesas + quem está + código"]
+    D --> D1["Cards esmaecidos (Fase 18)"]
+    E --> E1["Raio de presença (mapa + slider)<br/>+ Busca de música por sala"]
+    F["Participante / espectador"] --> A
+    A2["Não-host digita /salas/&lt;código&gt;/player"] -->|"redirect do servidor"| A
+```
+
+> **Host pede música (Fase 17):** o botão **"Pedir música"** aparece para o host **na própria sala**, sem limite — a isenção já vivia no banco (trigger `20261004000042` deixa o `host_id` da sala passar direto, fora do `KF001`), mas a UI escondia o link com `!isHost`. Nas salas/bares onde ele não é dono ele é **participante comum** e passa por tudo (geolocalização, aprovação, música ativa por vez). O atalho "configurações" da busca agora leva para a tela certa: `/bar/<código>` quando a sala tem casa, senão o player.
+>
+> **O `PendingEntries` virou condicional:** o card de pedidos de entrada só existe quando a sala está em **modo aprovação** — com "Entrada livre" ligado não há fila de espera e o card "Ninguém pediu entrada" seria ruído. Ele mora na tela **Player**.
+>
+> **Tela do bar é do bar, não da sala:** o mesmo bar pode ter várias salas (hoje 1 por produto, várias no modo dev), e raio + cota do YouTube são da casa. Por isso a rota é `/bar/<código>`, checada contra `bars.host_id` — a RLS de `bars` deixa qualquer autenticado **ler**, então a autorização é da página, e `/bar` entrou em `PROTECTED_PREFIXES` no proxy. No dashboard, cada bar ganhou o botão **Bar** ao lado dos karaokês.
+>
+> **Sala sem bar** (só fixture legada — o `create_room` sempre nasce de um bar): a chave do YouTube fica no card **Busca de música** do player, e a navegação mostra só as três telas da sala.
+
+**Depois de salvar:** cada action revalida as telas que mostram o dado — `/salas/[codigo]`, `/salas/[codigo]/sala`, `/salas/[codigo]/player` e `/bar/[codigo]` — para o card não voltar a mostrar o valor antigo na próxima visita. Trocar o código de sala navega para a rota nova (`/salas/<novo>/sala`), porque o código antigo deixa de existir.
 
 ---
 

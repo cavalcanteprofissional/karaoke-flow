@@ -1,31 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DoorOpen, Lock, Power, QrCode, Store, Table2, Tv, User } from "lucide-react";
+import { DoorOpen, Lock, Power, Store, Table2, Tv, User } from "lucide-react";
 
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { MesaPicker } from "@/components/rooms/mesa-picker";
-import { PendingEntries } from "@/components/rooms/pending-entries";
-import type { PendingEntry } from "@/components/rooms/pending-entries";
 import { QueueList } from "@/components/rooms/queue-list";
-import { PlaybackControls } from "@/components/rooms/playback-controls";
 import type { QueueItem } from "@/components/rooms/queue-list";
+import { HostScreenNav } from "@/components/rooms/host-screen-nav";
 import { QUEUE_VISIBLE_STATUSES } from "@/lib/rooms/queue";
-import { BarQr } from "@/components/rooms/bar-qr";
-import { RoomSettings } from "@/components/rooms/room-settings";
 import { CloseRoomButton } from "@/components/rooms/close-room-button";
 import { LeaveRoomButton } from "@/components/rooms/leave-room-button";
-import { MesaQrDialog } from "@/components/rooms/mesa-qr-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getEntryPreviewAction } from "@/lib/bars/actions";
-import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
@@ -59,6 +46,13 @@ function RoomClosedNotice() {
   );
 }
 
+/**
+ * Tela ao vivo da sala (Fase 17): mesa, fila, código e sair. As
+ * configurações do host saíram daqui e viraram rotas filhas — `Player`,
+ * `Sala`, `Pulseiras` (`/salas/[codigo]/…`) e `Bar` (`/bar/[codigo]`) —
+ * ligadas pelo `HostScreenNav`. O participante não vê essa navegação e
+ * continua com a fila na própria sala.
+ */
 export default async function RoomPage({ params }: RoomPageProps) {
   const { codigo } = await params;
   const code = normalizeRoomCode(codigo);
@@ -174,31 +168,6 @@ export default async function RoomPage({ params }: RoomPageProps) {
   // nesse caminho é só leitura, e ninguém vê a credencial da TV.
   const podeVerPlayer = !isHost && (myMembership?.status ?? null) === "approved";
 
-  let pendingInitial: PendingEntry[] = [];
-  if (isHost) {
-    const { data: members } = await supabase
-      .from("room_members")
-      .select("user_id, joined_at")
-      .eq("room_id", room.id)
-      .eq("status", "pending");
-
-    const list = members ?? [];
-    const profileIds = list.map((m) => m.user_id);
-    let names = new Map<string, string>();
-    if (profileIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from("profiles_public")
-        .select("id, name")
-        .in("id", profileIds);
-      names = new Map((profiles ?? []).map((p) => [p.id, p.name]));
-    }
-    pendingInitial = list.map((m) => ({
-      user_id: m.user_id,
-      name: names.get(m.user_id) ?? "Participante",
-      joined_at: m.joined_at,
-    }));
-  }
-
   const { data: queueRows } = await supabase
     .from("queue_items")
     .select(
@@ -209,32 +178,6 @@ export default async function RoomPage({ params }: RoomPageProps) {
     .order("position", { ascending: true })
     .limit(100);
   const queueInitial = (queueRows ?? []) as QueueItem[];
-
-  let youtubeConnectedAt: string | null = null;
-  // Os dois segredos da sala (credencial do link da TV e chave de API do
-  // YouTube) saíram do alcance do papel `authenticated` na migration
-  // `20260930000038`: a coluna não é mais legível pelo client, e sim por RPC
-  // `security definer` que só obedece ao dono. Aqui é o único lugar que precisa
-  // deles, e só quando `isHost` — que é exatamente quem as RPCs autorizam.
-  // O client é o do USUÁRIO (não o `createAdmin()`): o `auth.uid()` de dentro da
-  // RPC é o que faz a checagem de vínculo, e ele só existe com o JWT da sessão.
-  let playerToken: string | null = null;
-  let youtubeApiKey: string | null = null;
-  if (isHost) {
-    const [tokenRes, keyRes] = await Promise.all([
-      supabase.rpc("admin_get_room_player_token", { p_room_id: room.id }),
-      supabase.rpc("admin_get_room_youtube_api_key", { p_room_id: room.id }),
-    ]);
-    playerToken = tokenRes.data ?? null;
-    youtubeApiKey = keyRes.data ?? null;
-
-    const { data: oauth } = await createAdmin()
-      .from("youtube_oauth_tokens")
-      .select("updated_at")
-      .eq("host_id", user.id)
-      .maybeSingle();
-    youtubeConnectedAt = oauth?.updated_at ?? null;
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -310,67 +253,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
             </Badge>
           </div>
         </div>
+
+        {isHost && <HostScreenNav roomCode={room.code} barCode={bar?.code ?? null} />}
       </section>
-
-      {isHost && bar && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <QrCode className="text-muted-foreground size-4" />
-              Cartaz e QR das mesas
-            </CardTitle>
-            <CardDescription>
-              QR do bar para quem ainda vai escolher a mesa; QR de cada mesa para a galera
-              entrar direto na sala.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex justify-center">
-              <BarQr barCode={bar.code} barNome={bar.nome} />
-            </div>
-            {bar.quantidade_mesas > 1 && (
-              <div className="flex justify-center">
-                <MesaQrDialog
-                  barCode={bar.code}
-                  barNome={bar.nome}
-                  quantidadeMesas={bar.quantidade_mesas}
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {isHost && (
-        <RoomSettings
-          roomId={room.id}
-          roomCode={code}
-          initial={{
-            entry_mode: room.entry_mode,
-            queue_approval_mode: room.queue_approval_mode,
-            require_song_confirmation: room.require_song_confirmation,
-            pre_approval_24h: room.pre_approval_24h,
-            youtube_api_key: youtubeApiKey,
-          }}
-          youtubeConnectedAt={youtubeConnectedAt}
-          bar={
-            bar
-              ? {
-                  id: bar.id,
-                  nome: bar.nome,
-                  endereco: bar.endereco,
-                  cidade: bar.cidade,
-                  latitude: bar.latitude,
-                  longitude: bar.longitude,
-                  raio_permitido_metros: bar.raio_permitido_metros,
-                  quantidade_mesas: bar.quantidade_mesas,
-                }
-              : null
-          }
-        />
-      )}
-
-      {isHost && <PendingEntries roomId={room.id} initial={pendingInitial} />}
 
       {!isHost && isPendingMember && (
         <EntryApprovalWait
@@ -387,23 +272,6 @@ export default async function RoomPage({ params }: RoomPageProps) {
 
       {!isHost && needsMesa && bar && (
         <MesaPicker roomId={room.id} quantidadeMesas={bar.quantidade_mesas} />
-      )}
-
-      {/* Sem o token da TV não há link para montar, então os controles de
-          reprodução só aparecem com ele — passar `null` construiria uma URL
-          `/player/<código>?token=null` e o "copiar link" copiaria lixo. Na
-          prática o token sempre existe (o banco o gera); o que falta é a RPC,
-          e aí o sintoma é estes controles não aparecerem, e não um link quebrado. */}
-      {isHost && playerToken && (
-        <PlaybackControls
-          roomId={room.id}
-          roomCode={code}
-          playerToken={playerToken}
-          status={room.playback_status}
-          hasCurrent={Boolean(room.current_item_id)}
-          queueLength={queueInitial.filter((item) => item.status === "approved").length}
-          isHost={isHost}
-        />
       )}
 
       {(isHost ? true : !isPendingMember && !needsMesa) && (

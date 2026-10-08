@@ -369,7 +369,10 @@ export function QueueList({
         <CardTitle className="flex items-center gap-2 text-base">
           <ListMusic className="text-muted-foreground size-4" />
           Fila de músicas
-          {!isHost && canRequest && (
+          {/* Fase 17: o host também pede música (quantas quiser na própria sala,
+              o trigger `20261004000042` já isenta o dono do limite) — esconder o
+              link dele era a última peça faltando para o pedido funcionar na UI. */}
+          {canRequest && (
             <Link href={`/salas/${roomCode}/buscar`}>
               <Button size="sm" variant="outline">
                 <Mic2 className="size-3.5" />
@@ -452,7 +455,7 @@ export function QueueList({
                 ? "A fila está vazia — peça a primeira música!"
                 : "Nada tocando agora. A fila aparece aqui assim que o dono liberar uma música."}
             </p>
-            {!isHost && canRequest && (
+            {canRequest && (
               <Link href={`/salas/${roomCode}/buscar`}>
                 <Button>
                   <Mic2 className="size-4" />

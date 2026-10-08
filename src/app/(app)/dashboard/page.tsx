@@ -7,6 +7,7 @@ import {
   Mic2,
   Power,
   QrCode,
+  Settings2,
   Table2,
   UserRound,
   Store,
@@ -222,6 +223,15 @@ export default async function DashboardPage() {
                         demais a regra do produto continua 1 bar = 1 karaokê, e
                         mostrar o botão só levaria a um erro do banco. */}
                     {isDev && <CreateRoomDialog barId={bar.id} barName={bar.nome} />}
+                    {/* Fase 17: raio de presença e busca do YouTube saíram das
+                        salas e viraram a tela do bar — só ela é acessível ao
+                        dono, checado na página. */}
+                    <Button asChild variant="outline" size="xs">
+                      <Link href={`/bar/${bar.code}`}>
+                        <Settings2 className="size-3" />
+                        Bar
+                      </Link>
+                    </Button>
                   </div>
                 </div>
               );

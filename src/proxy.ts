@@ -7,7 +7,9 @@ import { safeNextPath, splitNextPath } from "@/lib/auth/next-path";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-const PROTECTED_PREFIXES = ["/dashboard", "/salas", "/entrar"];
+// `/bar` (Fase 17): a tela de configuração do bar é sessão + dono do bar,
+// igual às de sala. Sem `PROTECTED_PREFIXES` o anônimo chegava até a página.
+const PROTECTED_PREFIXES = ["/dashboard", "/salas", "/entrar", "/bar"];
 const AUTH_PREFIXES = ["/login"];
 
 function matchesPrefix(pathname: string, prefixes: string[]) {

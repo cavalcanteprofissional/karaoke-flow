@@ -479,7 +479,40 @@ describe("SongSearch — erros de busca (Fase 8f)", () => {
     expect(
       screen.getByText(/precisa salvar uma chave da YouTube Data API v3/)
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: /configurações da sala/i })).toBeTruthy();
+    // Fase 17: a chave virou card da tela do bar; sala sem bar cai no player,
+    // que é a home de configuração do host.
+    expect(screen.getByRole("link", { name: /abrir configurações/i })).toHaveAttribute(
+      "href",
+      "/salas/KARAOKE/player"
+    );
+  });
+
+  it("erro de configuração com bar leva para /bar/[codigo]", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 502,
+        json: async () => ({
+          error: "Nenhuma credencial do YouTube configurada para este bar.",
+          code: "CREDENTIAL_NOT_CONFIGURED",
+          hint: "O dono do bar precisa salvar uma chave da YouTube Data API v3 nas configurações do bar.",
+        }),
+      }))
+    );
+    renderSearch({ isHost: true, barCode: "BARZADA" });
+
+    fireEvent.change(screen.getByLabelText("Buscar música no YouTube"), {
+      target: { value: "evidencias" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.getByRole("link", { name: /configurações do bar/i })).toHaveAttribute(
+      "href",
+      "/bar/BARZADA"
+    );
   });
 
   it("chave com restrição de origem mostra o passo do Google Cloud", async () => {

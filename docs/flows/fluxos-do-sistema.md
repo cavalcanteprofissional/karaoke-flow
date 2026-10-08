@@ -106,7 +106,7 @@ Fase 3.5: **1 host = 1 bar** (`bars.host_id` único), que por padrão tem **1 ka
 
 Requisito presença (2026-09-23): o cadastro também registra a **localização física** (geocode Nominatim com fallback GPS do dispositivo) e o **raio de presença** (`raio_permitido_metros`, default 150 m) — base do gate de presença (§2.2 e §2.2.1).
 
-**Código da sala configurável** (2026-09-24, migration `20260924000022`): `rooms.code` passa a aceitar **3–12 alfanuméricos maiúsculos** (sem acentos/espaços). No create: o host pode informar `codigo_entrada` (opcional); **default = nome do bar todo junto em maiúsculas** (`driveRoomCodeFromName`: `Karaokê do Zé` → `KARAOKEDOZE`, truncado em 12; se o resultado ficar com <3 chars → `KARAOKE` + sufixo iterativo `KARAOKE1`, `KARAOKE2`…). Helpers RPC `unique_room_code`/`default_room_code`/`room_code_available` checam colisão com `rooms.code` **e** `bars.code` (a entrada resolve o bar primeiro). O host pode trocar o código depois: `updateRoomCodeAction` (RoomSettings) valida padrão + disponibilidade, atualiza `rooms.code` (RLS host-only) e redireciona a página para o novo código.
+**Código da sala configurável** (2026-09-24, migration `20260924000022`): `rooms.code` passa a aceitar **3–12 alfanuméricos maiúsculos** (sem acentos/espaços). No create: o host pode informar `codigo_entrada` (opcional); **default = nome do bar todo junto em maiúsculas** (`driveRoomCodeFromName`: `Karaokê do Zé` → `KARAOKEDOZE`, truncado em 12; se o resultado ficar com <3 chars → `KARAOKE` + sufixo iterativo `KARAOKE1`, `KARAOKE2`…). Helpers RPC `unique_room_code`/`default_room_code`/`room_code_available` checam colisão com `rooms.code` **e** `bars.code` (a entrada resolve o bar primeiro). O host pode trocar o código depois: `updateRoomCodeAction` (tela **Sala**, card "Código de entrada") valida padrão + disponibilidade, atualiza `rooms.code` (RLS host-only) e redireciona a página para o novo código.
 
 ```mermaid
 flowchart TD
@@ -211,15 +211,15 @@ flowchart TD
 | Anônimo (sem conta), qualquer idade | **nunca** pré-aprovado | nunca pré-aprovado |
 | Saiu da sala e voltou | **pendente** (a linha foi apagada) | pendente |
 
-> **Na UI o toggle é sempre ligado e travado** (`RoomSettings` → "Aprovação vale por 24h", com cadeado e o aviso de que sair da sala volta a exigir aprovação): decisão de produto de 2026-09-27, registrada no `CHANGELOG` e no `TODO.md`. O banco e a action aceitam os dois valores — desligado existe para teste e para dado legado, e é por update direto que os smokes rodaram a matriz.
+> **Na UI o toggle é sempre ligado e travado** (tela **Sala** → card "Como a sala funciona" → "Aprovação vale por 24h", com cadeado e o aviso de que sair da sala volta a exigir aprovação): decisão de produto de 2026-09-27, registrada no `CHANGELOG` e no `TODO.md`. O banco e a action aceitam os dois valores — desligado existe para teste e para dado legado, e é por update direto que os smokes rodaram a matriz.
 
 **Recuperar/cancelar o pedido (2026-09-25; leitura pelo status efetivo desde 2026-09-27):** o `pending` **sobrevive à navegação** — `getEntryPreviewAction` pergunta o status **efetivo** a `member_entry_state` (RLS `room_members_select_self_or_host` por baixo) e devolve `membership`, de modo que `/entrar?code=…`, `/entrar?bar=…` e `/salas/[código]` renderizam a mesma tela de espera (`EntryApprovalWait`) sem pedir entrada de novo. `getMyEntryRequestsAction` lista os pedidos `pending` com bar/código/mesa para o dashboard e o `/entrar` sem token; como a RLS de `rooms` esconde a sala de quem não está `approved`, nome e código são resolvidos com o client de service role (**somente leitura**, nunca `youtube_api_key`). Cancelar é `cancelEntryRequestAction` (`DELETE` da própria linha com `status = 'pending'`, permitido pela RLS) — sem migration nova.
 
-**Raio de presença no painel do host (2026-09-25, editável em 2026-09-26):** `bars.raio_permitido_metros` tem default **500 m** (migration `20260925000024`, `check` 50..1000 mantida; bars existentes migrados para 500) e é o número que o gate valida em `checkPresence`/`requirePresence` — a tela lê o mesmo campo, então mapa e gate não podem divergir. O card `PresenceGateInfo` (abaixo dos toggles, só para o host) mostra: o aviso de que o gate vale nos dois modos de entrada e de que o raio vale para **todas as salas do bar**, o mapa com o círculo do raio em metros (`PresenceRadiusMap` = Leaflet + tiles do OpenStreetMap, sem chave de API), links para Google Maps/OpenStreetMap e o campo "Raio de presença" (**input numérico + slider**, 50–1000 m de 50 em 50) com status de gravação, "Restaurar 500 m" e botão de reenvio em caso de erro. **Prévia antes de gravar:** mover o controle redesenha o círculo e reescreve o texto do aviso com o valor local; a gravação acontece no **commit** (soltar o slider, sair do campo, Enter ou debounce de 500 ms). Bar sem coordenadas: o gate cai em `geo-unavailable` e bloqueia todo participante (o host entra).
+**Raio de presença (2026-09-25, editável em 2026-09-26; mora na tela do bar desde a Fase 17):** `bars.raio_permitido_metros` tem default **500 m** (migration `20260925000024`, `check` 50..1000 mantida; bars existentes migrados para 500) e é o número que o gate valida em `checkPresence`/`requirePresence` — a tela lê o mesmo campo, então mapa e gate não podem divergir. O card `PresenceGateInfo` (**`/bar/[codigo]`**, só para o dono do bar) mostra: o aviso de que o gate vale nos dois modos de entrada e de que o raio vale para **todas as salas do bar**, o mapa com o círculo do raio em metros (`PresenceRadiusMap` = Leaflet + tiles do OpenStreetMap, sem chave de API), links para Google Maps/OpenStreetMap e o campo "Raio de presença" (**input numérico + slider**, 50–1000 m de 50 em 50) com status de gravação, "Restaurar 500 m" e botão de reenvio em caso de erro. **Prévia antes de gravar:** mover o controle redesenha o círculo e reescreve o texto do aviso com o valor local; a gravação acontece no **commit** (soltar o slider, sair do campo, Enter ou debounce de 500 ms). Bar sem coordenadas: o gate cai em `geo-unavailable` e bloqueia todo participante (o host entra).
 
 ```mermaid
 flowchart TD
-    A["Host abre Configurações da sala"] --> B["Card 'Raio de presença' (room-settings → PresenceGateInfo)"]
+    A["Host abre a tela do bar (/bar/&lt;código&gt;)"] --> B["Card 'Raio de presença' (PresenceGateInfo)"]
     B --> C{"Bar tem lat/lng?"}
     C -->|não| C1["Aviso: sem coordenadas o gate bloqueia todo participante"]
     C -->|sim| D["PresenceRadiusMap: marcador + círculo do raio (m) + HUD 'anéis de N m'"]
@@ -232,7 +232,7 @@ flowchart TD
     H -->|sim| I["UPDATE bars (RLS bars_update_own) + .select() anti-no-op"]
     I --> J{"Linha devolvida?"}
     J -->|não| J1["403/permission denied → aviso 'só o dono altera'"]
-    J -->|sim| K["revalidatePath('/salas/[codigo]') + 'Salvo às HH:MM'"]
+    J -->|sim| K["revalidatePath('/salas/[codigo]' + '/bar/[codigo]') + 'Salvo às HH:MM'"]
     D --> L["Links: abrir no Google Maps / OpenStreetMap"]
 ```
 
@@ -260,6 +260,36 @@ flowchart TD
     A6["Linha some (cancelamento em outra aba, expulsão ou close_room)"] --> A7["getEntryRequestStateAction → 'cancelled' ou 'closed'<br/>(status da sala via service role: RLS esconde rooms de pending)"]
     A7 --> A8["Espera mostra 'Pedido cancelado' ou 'Esta sala foi encerrada'"]
 ```
+
+---
+
+### 2.4 Rotas de configuração do host (Fase 17 — 2026-10-08)
+
+As configurações saíram de `/salas/[codigo]` (que virou a **tela ao vivo**) e passaram a ser **rotas filhas**, um assunto por tela. Nenhuma migration: tudo é corta-e-cola de componentes, com a regra de permissão continuando no banco.
+
+| Rota | Cards | Guard (na página, server component) |
+| --- | --- | --- |
+| `/salas/[codigo]/player` | `PlaybackControls`, `QueueList`, `PendingEntries` (só com `entry_mode = 'approval'`) e, em sala **sem bar**, `YoutubeSettingsCard` | `rooms.host_id === user.id` → senão `redirect("/salas/[codigo]")` |
+| `/salas/[codigo]/sala` | `RoomBehaviorCard`, Cartaz/QR (`BarQr` + `MesaQrDialog`), `MesasBarCard`, `RoomOccupancyCard`, `RoomCodeCard` | idem |
+| `/bar/[codigo]` | `PresenceGateInfo` + um `YoutubeSettingsCard` por sala (`rooms_public` do bar) | `bars.host_id === user.id` → senão `redirect("/dashboard")`; **`/bar` entrou em `PROTECTED_PREFIXES`** no `proxy.ts` (sem sessão nem chega) |
+| `/salas/[codigo]/pulseiras` | placeholder esmaecido (Fase 18) | idem da sala |
+
+Por que o guard é na página e não no RLS: `rooms_public` é legível por qualquer autenticado (é a visão sem segredos da auditoria de Fase 8c) e `bars` também tem `SELECT` amplo — a autorização de **ver a configuração** é decisão de UI e mora no servidor da página. Os **segredos** continuam atrás de RPC host-only (`admin_get_room_player_token`, `admin_get_room_youtube_api_key`), que rejeitam não-dono sozinhas.
+
+```mermaid
+flowchart TD
+    A["GET /salas/&lt;código&gt;/player (ou /sala, /pulseiras)"] --> B{host_id = sessão?}
+    B -->|sim| C["Render: segredos via RPC host-only + cards"]
+    B -->|não| D["redirect → /salas/&lt;código&gt; (tela ao vivo)"]
+    E["GET /bar/&lt;código&gt;"] --> F{bars.host_id = sessão?}
+    F -->|sim| G["PresenceGateInfo + YouTube por sala"]
+    F -->|não| H["redirect → /dashboard"]
+    I["sem sessão em /bar/*"] -->|proxy| J["redirect → /login?next=…"]
+```
+
+**Revalidação:** as actions passaram a revalidar as rotas novas junto da sala — `updateRoomSettingsAction` → `/salas/[codigo]/sala`; `closeRoomAction`/`reopenRoomAction` → `/salas/[codigo]/player`; `updateBarMesasAction` → `/salas/[codigo]/sala` (QR e ocupação mudam junto); `updateBarRadiusAction` e as actions de chave/OAuth do YouTube → `/bar/[codigo]`.
+
+**O host também pede música:** `QueueList` parou de esconder o link com `!isHost` — o que decide é a prop `canRequest`, a mesma resposta de `canRequestSongs` que a tela já lê. O banco já isentava o dono **na própria sala** (trigger `20261004000042`), então a mudança é só de UI: nas salas onde ele não é host ele é participante comum, com geolocalização, aprovação e música ativa por vez. O atalho de configuração do `SongSearch` passou a apontar para `/bar/<código>` (com `barCode` lido pela página de busca) e, em sala sem bar, para `/salas/<código>/player`.
 
 ---
 
@@ -380,7 +410,7 @@ sequenceDiagram
     S-->>P: lista (thumbnail + título + duração) + "Adicionar à fila"
 ```
 
-**OAuth por-host:** bloco "Conta do YouTube" no `RoomSettings` (mostra "conectado à conta Google + data" quando há token, com botão "Remover conexão" que **revoga na Google** e apaga a linha) → `/auth/youtube/authorize` (estado nonce em cookie httpOnly, `access_type=offline&prompt=consent`) → Google → `/auth/youtube/callback` (exchange → `youtube_oauth_tokens`, **sem policies — service role**) → redirect à sala. Fallback do app: `scripts/youtube-app-oauth.mjs` (loopback) coleta o `YOUTUBE_APP_REFRESH_TOKEN` para o `.env.local`.
+**OAuth por-host:** card **"Busca de música (YouTube)"** na tela do bar (`/bar/[codigo]`; um card por sala — mostra "Conectado à conta do YouTube · desde …" quando há token, com botão "Remover conexão" que **revoga na Google** e apaga a linha) → `/auth/youtube/authorize` (estado nonce em cookie httpOnly, `access_type=offline&prompt=consent`) → Google → `/auth/youtube/callback` (exchange → `youtube_oauth_tokens`, **sem policies — service role**) → redirect à sala. Sala sem bar (fixture legada) guarda o mesmo card no player. Fallback do app: `scripts/youtube-app-oauth.mjs` (loopback) coleta o `YOUTUBE_APP_REFRESH_TOKEN` para o `.env.local`.
 
 **A cadeia de credencial ganhou dono em cada degrau (Fase 8f — 2026-10-05, `20261005000043`):**
 

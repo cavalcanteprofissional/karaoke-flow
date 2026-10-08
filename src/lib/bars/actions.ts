@@ -121,6 +121,10 @@ export async function updateBarRadiusAction(
   }
 
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: o controle do raio (`PresenceGateInfo`) saiu da sala e virou a
+  // tela do bar — sem revalidar `/bar/[codigo]` o valor digitado voltaria a
+  // parecer o antigo em qualquer nova visita.
+  revalidatePath("/bar/[codigo]", "page");
   return { ok: true, radiusMeters: parsed.data };
 }
 
@@ -174,6 +178,10 @@ export async function updateBarMesasAction(
 
   const result = (data ?? {}) as { quantidade_mesas?: number; reallocados?: number };
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: "Mesas do bar", o QR e a ocupação da sala viraram a rota
+  // `/salas/[codigo]/sala` — sem ela o card continuaria mostrando a quantidade
+  // antiga até alguém recarregar a tela ao vivo.
+  revalidatePath("/salas/[codigo]/sala", "page");
   revalidatePath("/dashboard");
   return {
     ok: true,

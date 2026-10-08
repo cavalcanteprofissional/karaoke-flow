@@ -245,6 +245,19 @@ entregue em `spectator.test.ts`, `queue-actions.test.ts`, `queue-list.test.ts` e
 
 ---
 
+## Adendo 2026-10-08 — Fase 17: quatro telas de configuração + o host pede música
+
+**Pedido do dono (2026-10-05, item 3):** "tudo enfiado numa página só" — fila, mesa, cartaz/QR, seis cards de settings, pedidos de entrada e player em `/salas/[codigo]`.
+
+- **Um assunto por tela, com guard no servidor.** `/salas/<código>` virou a **tela ao vivo** (fila + mesa + código + sair/encerrar) e as configurações saíram para rotas filhas: **`/sala`** (4 toggles com a pré-aprovação travada, Cartaz/QR, mesas 1–10, ocupação, código de entrada), **`/player`** (controles da TV com link copiável, fila com moderação e os pedidos de entrada **só quando a entrada não é livre**) e **`/pulseiras`** (rota nova, placeholder esmaecido até a Fase 18). O que é da casa ganhou a rota nova **`/bar/<código>`**: raio de presença e **um card de busca do YouTube por sala** do bar — a busca é por sala (a chave é coluna de `rooms`), a política e o raio são do bar. As rotas conferem `rooms.host_id`/`bars.host_id` na página e devolvem; **`/bar` entrou no `PROTECTED_PREFIXES`** do proxy, e o dashboard ganhou o botão **Bar**. Os segredos continuam atrás das RPCs host-only (`admin_get_room_player_token`, `admin_get_room_youtube_api_key`) — `rooms_public`/`bars` já eram legíveis por qualquer autenticado (visão sem segredos da auditoria da Fase 8c), então a autorização de configuração é de UI por decisão.
+- **O host também pede música na própria sala.** O trigger `20261004000042` já isentava o dono do limite (só na sala dele — caso Q6 do `smoke-rls-audit.sql`), mas a UI escondia o atalho por `!isHost`. Agora vale `canRequest` (a mesma resposta de `canRequestSongs`): quantas quiser em casa, e nas salas/bares de outros ele é participante comum — geolocalização, aprovação e "uma ativa por vez" seguem valendo.
+- **`room-settings.tsx` (553 linhas) saiu**, partido em cards próprios (que têm teste de unidade individual), e o `revalidatePath` de cada action passou a apontar para a rota nova.
+- **Validação:** suíte **709 → 729 testes**, 52 → 56 arquivos (4 arquivos de teste dos cards + `host-screen-nav`, `room-settings.test.tsx` removido); roteiro de aparelho em [`../../TESTING.md`](../../TESTING.md) §3.18; fluxos em [`../flows/fluxos-do-usuario.md`](../flows/fluxos-do-usuario.md) §7 e [`../flows/fluxos-do-sistema.md`](../flows/fluxos-do-sistema.md) §2.4. **Nenhuma migration.**
+
+**Gates:** lint, `tsc`, **729 testes / 56 arquivos** e `build` (as 6 rotas novas) verdes; **`scan:secrets` vermelho pelos mesmos 7 achados pré-existentes** (nenhum em arquivo desta fase), sem allowlist nova.
+
+---
+
 ## Fase 11 — Visibilidade em dois níveis: agregado da sala + detalhe da mesa
 
 **Decidido com o PO (2026-09-25) — D3:** quem está fora do raio (após aprovado

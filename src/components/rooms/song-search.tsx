@@ -84,6 +84,13 @@ type SongSearchProps = {
    * ativa, que é por participante.
    */
   isHost?: boolean;
+  /**
+   * Código do bar da sala (`null` quando a sala não tem casa). Fase 17: a
+   * chave de API virou card da tela `/bar/[codigo]`, então o atalho do passo
+   * de configuração vai para lá — sala sem bar cai no `/salas/[codigo]/player`,
+   * que é a home de configuração do host e guarda a própria chave.
+   */
+  barCode?: string | null;
 };
 
 const DEBOUNCE_MS = 500;
@@ -143,6 +150,7 @@ export function SongSearch({
   replaceItemTitle,
   ownActiveSong,
   isHost = false,
+  barCode = null,
 }: SongSearchProps) {
   const isReplace = Boolean(replaceItemId);
   /**
@@ -457,9 +465,11 @@ export function SongSearch({
                 <p className="text-sm">{state.hint}</p>
                 {isHost && (
                   <Button asChild size="sm" variant="outline" className="w-fit">
-                    <Link href={`/salas/${roomCode}`}>
+                    <Link
+                      href={barCode ? `/bar/${barCode}` : `/salas/${roomCode}/player`}
+                    >
                       <Settings2 className="size-3.5" />
-                      Abrir configurações da sala
+                      {barCode ? "Abrir configurações do bar" : "Abrir configurações"}
                     </Link>
                   </Button>
                 )}

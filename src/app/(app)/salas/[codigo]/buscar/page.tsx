@@ -131,22 +131,29 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
   }
 
   let presence: PresenceDecision = { ok: true };
-  if (!isHost && room.bar_id) {
+  let barCode: string | null = null;
+  if (room.bar_id) {
     const { data: bar } = await supabase
       .from("bars")
-      .select("latitude, longitude, raio_permitido_metros")
+      .select("code, latitude, longitude, raio_permitido_metros")
       .eq("id", room.bar_id)
       .maybeSingle();
-    const cookieStore = await cookies();
-    presence = requirePresence({
-      isHost,
-      bar: {
-        latitude: bar?.latitude ?? null,
-        longitude: bar?.longitude ?? null,
-        raioPermitidoMetros: bar?.raio_permitido_metros ?? null,
-      },
-      store: cookieStore,
-    });
+    // Fase 17: o atalho de "configure a chave do YouTube" aponta para a tela
+    // do bar — por isso o código do bar é lido também para o host (antes só o
+    // participante buscava a casa, para o gate de presença).
+    barCode = bar?.code ?? null;
+    if (!isHost) {
+      const cookieStore = await cookies();
+      presence = requirePresence({
+        isHost,
+        bar: {
+          latitude: bar?.latitude ?? null,
+          longitude: bar?.longitude ?? null,
+          raioPermitidoMetros: bar?.raio_permitido_metros ?? null,
+        },
+        store: cookieStore,
+      });
+    }
   }
 
   // Bloco D: valida o item no servidor para o modo troca. Quem não puder trocar
@@ -226,6 +233,7 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
               }
             }
             isHost={room.host_id === user.id}
+            barCode={barCode}
           />
         </CardContent>
       </Card>

@@ -679,3 +679,22 @@ describe("QueueList — o espectador que entrou fora do raio", () => {
     expect(screen.getByText(/atualiza ao vivo/i)).toBeInTheDocument();
   });
 });
+
+describe("QueueList — o host também pede música (Fase 17)", () => {
+  it("vê o 'Pedir música' no cabeçalho e com a fila vazia", async () => {
+    mocks.state.items = [];
+    renderList({ isHost: true, canRequest: true, initial: [] });
+    await waitFor(() => expect(screen.getByText(/peça a primeira música/i)).toBeInTheDocument());
+
+    expect(screen.getAllByRole("link", { name: /Pedir música/i })).toHaveLength(2);
+  });
+
+  it("host sem permissão de pedido (sala de outro) não vê o atalho", async () => {
+    // A regra do banco só isenta o dono NA PRÓPRIA sala; nas salas onde ele é
+    // usuário comum `canRequest` vem falso e a tela trata ele como participante.
+    renderList({ isHost: false, currentUserId: "user-9", canRequest: false });
+    await screen.findByText("Evidências");
+
+    expect(screen.queryByRole("link", { name: /Pedir música/i })).toBeNull();
+  });
+});

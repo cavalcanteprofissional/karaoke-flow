@@ -36,7 +36,7 @@ Justificativa:
 - **Viabilidade de MVP e validação com mercado (bar)**: prioriza aprender com fluxo real (público pedindo pelo celular, fila, aprovação, TV) antes de assumir custo fixo de licenciamento por estabelecimento.
 - **Alinhamento ao posicionamento** ([Estado da Arte](../produto/estado-da-arte.md)): combina viralidade/watch-together (baixo atrito, anônimo) com operacional B2B. Diferencia de Karafun/Singa (fechados/licenciados) sem abrir mão de evolução futura.
 - **Arquitetura desacoplada**: busca (YouTube Data API) e reprodução (IFrame Player) estão isolados. Trocar fonte de catálogo não exige reescrever núcleo de fila/player/Realtime — decisão **reversível**.
-- **Mitigações pragmáticas já implementadas**: cadeia de credenciais com cota por-host (`RoomSettings` OAuth Google do host), fallback OAuth do app + chave dev, cache compartilhado, rate limit, e hardening de player (gate humano obrigatório) — endereçam pontos técnicos relevantes.
+- **Mitigações pragmáticas já implementadas**: cadeia de credenciais com cota por-host (OAuth do host no card do YouTube da tela do bar), fallback OAuth do app + chave dev, cache compartilhado, rate limit, e hardening de player (gate humano obrigatório) — endereçam pontos técnicos relevantes.
 - **Trade-off explícito**: risco de TOS/comercial é conhecido, aceito no estágio atual e **documentado** (ver §5 + [Estado da Arte §7](../produto/estado-da-arte.md#7-riscos-e-trade-offs-youtube-first)).
 
 ## 5. Trade-offs
@@ -66,7 +66,7 @@ Justificativa:
 
 - Busca: [`src/app/api/youtube/search/route.ts`](../../src/app/api/youtube/search/route.ts) — usa cadeia YouTube (por-host/app/dev) com Bearer OAuth quando conectado.
 - Player: [`src/components/player/youtube-player.tsx`](../../src/components/player/youtube-player.tsx), [`src/app/player/[codigo]/page.tsx`](../../src/app/player/[codigo]/page.tsx) — IFrame Player API, gate humano (armado por clique).
-- Config por-host: [`src/lib/rooms/settings.ts`](../../src/lib/rooms/settings.ts), [`RoomSettings`](../../src/components/rooms/room-settings.tsx) — conexão Google (OAuth por-host) para aproveitar cota do dono.
+- Config por-host: [`src/lib/rooms/settings.ts`](../../src/lib/rooms/settings.ts), [`YoutubeSettingsCard`](../../src/components/rooms/settings/youtube-settings-card.tsx) (tela do bar, `/bar/[codigo]`) — conexão Google (OAuth por-host) para aproveitar cota do dono.
 - Fallbacks/cadeia: [`src/lib/youtube/*`](../../src/lib/youtube/) — estratégia de credenciais com prioridade por-host → app → dev.
 - Docs: [Estado da Arte](../produto/estado-da-arte.md#7-riscos-e-trade-offs-youtube-first), [Especificação](../../karaoke-watch-party-spec.md#125-consideracoes-legais-youtube-tos), [Manifesto](../../MANIFEST.md).
 

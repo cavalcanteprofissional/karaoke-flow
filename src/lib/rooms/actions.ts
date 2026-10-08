@@ -57,6 +57,8 @@ export async function updateRoomSettingsAction(
   }
 
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: o card "Como a sala funciona" mora em `/salas/[codigo]/sala`.
+  revalidatePath("/salas/[codigo]/sala", "page");
   return { ok: true };
 }
 
@@ -100,6 +102,8 @@ export async function closeRoomAction(
     return { ok: false, error: "Só o dono pode encerrar a sala." };
   }
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: abrir/fechar também muda a tela `Player` (controles e fila do host).
+  revalidatePath("/salas/[codigo]/player", "page");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -119,6 +123,8 @@ export async function reopenRoomAction(
     return { ok: false, error: "Só o dono pode reabrir a sala." };
   }
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: abrir/fechar também muda a tela `Player` (controles e fila do host).
+  revalidatePath("/salas/[codigo]/player", "page");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -158,6 +164,8 @@ export async function updateYoutubeKeyAction(
   }
 
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: a chave do YouTube virou card da tela do bar.
+  revalidatePath("/bar/[codigo]", "page");
   return { ok: true };
 }
 
@@ -184,6 +192,8 @@ export async function cancelEntryRequestAction(
   }
   revalidatePath("/entrar");
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: abrir/fechar também muda a tela `Player` (controles e fila do host).
+  revalidatePath("/salas/[codigo]/player", "page");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -341,5 +351,7 @@ export async function youtubeDisconnectAction(
   invalidateCachedHostToken(user.id);
 
   revalidatePath("/salas/[codigo]", "page");
+  // Fase 17: o card "Busca de música" fica em `/bar/[codigo]`.
+  revalidatePath("/bar/[codigo]", "page");
   return { ok: true };
 }

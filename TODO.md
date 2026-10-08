@@ -23,6 +23,47 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-10-08, tarde)
+
+> ### Duas fases no mesmo dia: 16 (mesas) e 17 (quatro telas do host) — commitadas, falta aparelho e deploy
+>
+> **Fase 16 ✅** (commit anterior, `mesas: 1 por padrão até 10`): teto de 10 no
+> banco, RPC `update_bar_mesas`, auto-mesa-1 de volta no `join_room`,
+> `smoke-mesas.sql` **12/12 no Cloud**. **Fase 17 ✅** (nesta commit): as
+> configurações saíram de `/salas/[codigo]` para **4 rotas** — `player`,
+> `sala`, `pulseiras` (placeholder) e a nova **`/bar/[codigo]`** — com guard
+> host-only **na página** + `/bar` no `PROTECTED_PREFIXES` do `proxy.ts`
+> (**não mexeu no RLS**: `bars` segue legível por autenticado, os segredos
+> ficam atrás das RPCs host-only). `room-settings.tsx` (553 linhas) e seu
+> teste saíram do repo; entraram 4 cards com teste próprio + `HostScreenNav`.
+> **O host passou a pedir música** olhando `canRequest` em vez de `!isHost`
+> (o trigger `20261004000042` já isentava o dono na própria sala).
+>
+> **Suíte: 709 → 729 testes / 52 → 56 arquivos.** Gates `lint`, `typecheck`,
+> `test`, `build` (6 rotas novas no output) verdes; **`scan:secrets` segue
+> vermelho só com os 7 fixtures pré-existentes** (nenhum arquivo desta fase) —
+> decisão mantida: reportar, sem allowlist.
+>
+> **Docs desta sessão:** `TESTING.md` §3.18 (roteiro de aparelho novo) e
+> contagem atualizada · `CHANGELOG.md` (entrada da Fase 17) · `README.md`
+> (estado atual + roadmap) · `fluxos-do-usuario.md` §7 · `fluxos-do-sistema.md`
+> §2.4 · `roadmap-experiencia.md` (adendo) · `ADR-001` (o card do YouTube mudou
+> de arquivo) · este bloco.
+>
+> **Falta (ordem):**
+>
+> - [ ] **`vercel deploy --prod`** — decisão do dono; até lá tudo fica em preview
+> - [ ] **Aparelho `ZEHBAR`** — `TESTING.md` §3.18 inteiro: navegação do host
+>       nas 4 telas (e o participante **sem** ela), guards batendo com os
+>       cenários de não-host/não-dono, `Pedidos de Entrada` sumindo com
+>       "Entrada livre" ON, raio gravando no `/bar`, host pedindo música na
+>       própria sala e sendo comum em sala alheia
+> - [ ] **Fase 18 — pulseiras** (próxima da leva 8g→16→17→18): as telas já
+>       existem esmaecidas; falta `bars.pulseiras_ativadas`, as tabelas
+>       `pulseiras_*` e a RPC `resgatar_pulseira`
+> - [ ] Pendências de sempre: canal de longa duração (8c·bis), auditoria de
+>       RLS, LGPD, `smoke-mesas`/`§3.17` no aparelho (ainda não feito)
+
 ## Retomada — contexto da próxima sessão (2026-10-04, noite)
 
 > ### Fase 8d·ter — uma música ativa por participante (migration `20261004000042`)
@@ -331,8 +372,13 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 > o karaokê — o pedido é **manter qualquer legenda desligada por padrão**; (6)
 > **pulseira** com valor que muda por dia da semana e faixa de horas.
 >
-> **Estado: só registrado.** Nada implementado, nenhuma migration escrita, nenhum
-> arquivo de código tocado. As quatro fases abaixo são o plano acordado.
+> **Estado (atualizado em 2026-10-08):** registrado em 10/05 e **entregue por
+> partes** — (1) demora para a próxima música e (2) card do Player que não
+> atualizavam, na **Fase 8g**; (3) as três telas de configuração do host, na
+> **Fase 17** (Player, Sala e Pulseiras + a rota nova `/bar/[codigo]`); (4) mesas
+> 1 por padrão até 10, na **Fase 16**; (5) legenda desligada por padrão, na
+> **Fase 8g**; (6) pulseira com preço por dia/faixa de horas continua **pendente
+> na Fase 18**. O plano acordado abaixo é o histórico da decisão.
 >
 > **Numeração:** a 8g continua a série de defeitos achados no uso real (8a–8f);
 > 16, 17 e 18 continuam o roadmap de Fases 9–15 já documentado em
@@ -440,8 +486,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
       excluído), e só então aperta os checks
 - [x] RPC **`update_bar_mesas`** (`security definer`, host-only, `revoke` do
       `anon`) — realoca quem estava na mesa removida, sincroniza as linhas de
-      `mesas` e atualiza `bars.quantidade_mesas` numa transação; UI no
-      `RoomSettings` (**card "Mesas do bar"**, confirmação ao diminuir, toast
+      `mesas` e atualiza `bars.quantidade_mesas` numa transação; UI no card
+      **"Mesas do bar"** (`settings/mesas-bar-card`, na tela **Sala** desde a
+      Fase 17; era no `RoomSettings`), confirmação ao diminuir, toast
       com o nº de realocados)
 - [x] Auto-mesa-1 de volta **dentro do `join_room`** (regra no banco, como manda
       o ADR-003): `p_mesa null` + bar de **1** mesa → `mesa_numero = 1`, com
@@ -469,24 +516,41 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
       `MesaPicker`, `BARSEG` perguntando, card de mesas do host) e `vercel
       deploy --prod` (decisão do dono — a árvore da 16 está nesta commit).
 
-### Fase 17 — Quatro telas de configuração
+### Fase 17 — Quatro telas de configuração ✅ (2026-10-08)
 
 | Rota | Cartões |
 | --- | --- |
-| `/salas/[codigo]/player` | `Player da TV`, `Fila de Músicas`, `Pedidos de Entrada` (este último só quando `Entrada livre` = OFF) |
-| `/salas/[codigo]/sala` | `Como a sala funciona`, `Cartaz e QR das mesas`, `Código de Entrada`, `Quem está na sala` |
-| `/bar/[codigo]` (nova) | `Raio de presença`, `Busca de música (YouTube)` → pool da plataforma + consumo de cota |
-| `/salas/[codigo]/pulseiras` (nova) | `Distribuição de códigos`, `Valor da pulseira` — esmaecida e desabilitada se o toggle do bar estiver OFF |
+| `/salas/[codigo]/player` | `Player da TV` (com os controles ao vivo e o link da TV), `Fila de Músicas`, `Pedidos de Entrada` (este último **só** quando `Entrada livre` = OFF) |
+| `/salas/[codigo]/sala` | `Como a sala funciona`, `Cartaz e QR das mesas`, `Mesas do bar` (1–10), `Quem está na sala`, `Código de Entrada` |
+| `/bar/[codigo]` (nova) | `Raio de presença`, um `Busca de música (YouTube)` **por sala** do bar (a chave é coluna de `rooms`; a política/pool continua em `bars`) |
+| `/salas/[codigo]/pulseiras` (nova) | `Distribuição de códigos`, `Valor da pulseira` — esmaecidas até a Fase 18 (`pulseiras_*` ainda não existe) |
 
-- [ ] `/salas/[codigo]` deixa de ser a tela de configuração e vira a **tela ao
-      vivo** (mesa, código, sair) com navegação para as três telas acima
-- [ ] `PendingEntries` passa a respeitar `entry_mode = 'approval'` — hoje
-      renderiza para todo host (`page.tsx:365`), e o cartão não deve existir com
-      entrada livre ligada
-- [ ] `room-settings.tsx` (472 linhas) partido em `Como a sala funciona` +
-      `Código de Entrada` (hoje o código vive dentro do card de settings)
-- [ ] Link para `/bar/[codigo]` em cada bar do dashboard (`dashboard/page.tsx:154`)
-- [ ] Telas do bar são host-only por `bars.host_id` no RLS
+- [x] `/salas/[codigo]` deixa de ser a tela de configuração e vira a **tela ao
+      vivo** (fila, mesa, código, sair/encerrar) com `HostScreenNav` (**host só**)
+      nas quatro telas
+- [x] `PendingEntries` passa a respeitar `entry_mode = 'approval'` — com entrada
+      livre ligada o card não existe mais
+- [x] `room-settings.tsx` (**553 linhas**, não 472) partido em cards com teste
+      próprio (`settings/room-behavior-card`, `settings/room-code-card`,
+      `settings/mesas-bar-card`, `settings/youtube-settings-card`); o componente
+      e `room-settings.test.tsx` saíram do repo
+- [x] Link **Bar** no dashboard, apontando para `/bar/[codigo]`
+- [x] Telas do bar são host-only **na página** (`bars.host_id`, devolvendo para o
+      dashboard) + `/bar` em `PROTECTED_PREFIXES` no `proxy.ts` — **sem mudança
+      no RLS**: `bars` é legível por qualquer autenticado de propósito (visão sem
+      segredos da auditoria da Fase 8c), e os segredos ficam atrás de
+      `admin_get_room_player_token`/`admin_get_room_youtube_api_key`
+- [x] **Host pede música** (o item que faltava do pedido): o atalho em
+      `QueueList`/`SongSearch` passou a olhar `canRequest` em vez de `!isHost` —
+      o trigger `20261004000042` já isentava o dono **na própria sala**; em
+      sala/bairro de outro ele é participante comum
+- [x] `revalidatePath` de cada action cobrindo a rota nova (settings → `/sala`,
+      close/reopen → `/player`, mesas → `/sala`, raio/chave/OAuth → `/bar`)
+- [x] Docs: README (estado atual + roadmap), `TESTING.md` §3.18,
+      `CHANGELOG.md`, `fluxos-do-usuario.md` §7, `fluxos-do-sistema.md` §2.4,
+      `roadmap-experiencia.md` (adendo), `ADR-001` (o card mudou de arquivo)
+- [ ] **Falta:** validar no aparelho (`TESTING.md` §3.18) e `vercel deploy
+      --prod` (decisão do dono — a árvore da 17 está nesta commit)
 
 ### Fase 18 — Pulseira: código/QR de uso único, sem cobrança por enquanto
 
@@ -525,8 +589,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ### Ordem, gates e o que falta decidir
 
-- [ ] **Ordem:** 8g → 16 → 17 → 18. A 8g é defeito de uso real e é o que mais
-      incomoda; a 18 é domínio novo e a que mais precisa de decisão de negócio
+- [ ] **Ordem:** ~~8g → 16 → 17~~ ✅ (8g em 07/10, 16 e 17 em 08/10) **→ 18**. A 18 é
+      domínio novo e a que mais precisa de decisão de negócio — só ela ficou desta
+      leva; o `pulseiras_ativadas` e as telas de distribuição/valor são dela
 - [ ] **Gates por fase:** migration + smoke SQL, testes, `npm run lint`, `tsc`,
       `npm run build`, `npm run scan:secrets`, docs (README/TESTING/CHANGELOG) e
       commit + push. `vercel deploy --prod` **só com confirmação** do dono — até lá

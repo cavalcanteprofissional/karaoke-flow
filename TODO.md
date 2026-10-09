@@ -55,7 +55,9 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 >       lote na tela própria, imprime a folha, desliga o recurso (tudo escurece),
 >       monta faixa de valor; visitante logado ativa por QR/digitação, anônimo é
 >       barrado na porta; segundo "ativo" no mesmo código não passa
-> - [ ] `vercel deploy --prod` — decisão do dono; até lá tudo fica em preview
+> - [x] `vercel deploy --prod` — **feito em 2026-10-09** (`https://karaoke-flow.vercel.app`,
+>       com a confirmação do dono; rotas verificadas no ar, `307 → /login?next=` nas
+>       protegidas); resta a validação no aparelho acima
 > - [ ] Cobrança real (Fase 15 / D12) — o que o cartaz da pulseira já prepara, e
 >       a contradição com o MANIFEST registrada no bloco da Fase 18
 

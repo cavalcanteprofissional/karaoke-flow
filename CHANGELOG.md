@@ -72,6 +72,14 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
   `scan:secrets` segue vermelho só com os 7 fixtures pré-existentes. Pendências:
   aparelho (§3.19) e `vercel deploy --prod` (decisão do dono).
 
+### Deploy em produção (2026-10-09)
+
+- **A árvore das Fases 16/17/18 foi para produção** com `vercel deploy --prod`
+  (`https://karaoke-flow.vercel.app`, build `Ready in 45s`), com a confirmação do
+  dono. Verificação no ar: `/`, `/sobre` e o quiosque `/player/[codigo]` respondem
+  `200` publicamente (o aviso de "Deployment Protection" do CLI vale só para
+  previews); as rotas protegidas (`/entrar`, `/dashboard`, `/salas/[codigo]/{pulseiras,player,sala}`, `/bar/[codigo]`) devolvem `307 → /login?next=…` — o proxy de sessão funcionando no deploy. A **validação no aparelho** (roteiros §3.17/§3.18/§3.19 no ZEHBAR) continua sendo o pendente.
+
 ### Fase 17 — quatro telas de configuração do host + o host pede música (2026-10-08)
 
 - **`/salas/[codigo]` deixou de ser a tela de configuração e virou a tela ao vivo.** O relato do dono (2026-10-05, item 3) era que tudo estava "enfiado" numa página só: fila, mesa, cartaz/QR, seis cards de settings, pedidos de entrada e player. A ordem acordada no `TODO.md` é 8g → 16 → 17 → 18. As configurações saíram para **rotas filhas**, um assunto por tela:

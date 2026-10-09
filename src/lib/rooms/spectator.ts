@@ -29,7 +29,11 @@ export type RoomAudienceRule = {
 /** Está na sala e pode pedir música? O host é isento, como em `requirePresence`. */
 export function canRequestSongs({ isHost, membership }: RoomAudienceRule): boolean {
   if (isHost) return true;
-  return isActiveParticipant(membership) && !membership.fora_do_raio;
+  return (
+    isActiveParticipant(membership) &&
+    !membership.fora_do_raio &&
+    !pulseiraBarrada({ isHost, membership })
+  );
 }
 
 /**
@@ -50,6 +54,34 @@ export function canPickMesa({ isHost, membership }: RoomAudienceRule): boolean {
  */
 export const SPECTATOR_QUEUE_NOTICE =
   "Você entrou de fora do raio do bar: dá para acompanhar a fila, mas não para pedir música.";
+
+/**
+ * O bar exige pulseira e a pessoa não ativou (Fase 18). Texto do membro
+ * autenticado — o anônimo não consegue resgatar, então lê a versão própria.
+ */
+export const PULSEIRA_QUEUE_NOTICE =
+  "O bar exige pulseira para pedir música. Peça a sua no balcão e ative pelo QR ou pelo código.";
+
+/** O anônimo não pode usar o QR: o resgate exige conta real (migration 00002). */
+export const PULSEIRA_ANON_QUEUE_NOTICE =
+  "Crie uma conta para usar a pulseira deste bar: só ela libera o pedido de música.";
+
+/**
+ * A pessoa é membro aprovado, dentro do raio, mas o bar usa pulseira e ela não
+ * tem a dela ativa. Separada da `pulseiraBarrada` por um motivo: o espectador e
+ * o sem-pulseira são impedimentos DIFERENTES — o primeiro também não escolhe
+ * mesa, o segundo só não canta — e as mensagens (e o que a tela oferece) seguem
+ * cada causa.
+ */
+export function pulseiraBarrada({ isHost, membership }: RoomAudienceRule): boolean {
+  if (isHost) return false;
+  return (
+    isActiveParticipant(membership) &&
+    !membership.fora_do_raio &&
+    membership.pulseira_exigida &&
+    !membership.tem_pulseira
+  );
+}
 
 /**
  * Membro de verdade: aprovado e com estado de entrada utilizável. O predicado

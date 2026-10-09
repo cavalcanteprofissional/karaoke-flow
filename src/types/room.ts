@@ -64,7 +64,14 @@ export type RoomMember = {
   approved_at?: string | null;
 };
 
-export type EntryMembership = Pick<RoomMember, "status" | "mesa_numero">;
+export type EntryMembership = Pick<RoomMember, "status" | "mesa_numero"> & {
+  /**
+   * Decisão da pulseira do status EFETIVO (Fase 18): `true` quando o bar pede
+   * pulseira e a pessoa está com o acesso vigente. Opcional por ser leitura
+   * derivada — o resto do app usa `member_entry_state` completo.
+   */
+  tem_pulseira?: boolean;
+};
 
 /** Retorno de `member_entry_state`: o status EFETIVO para efeitos de entrada. */
 export type MemberEntryState = EntryMembership & {
@@ -79,6 +86,15 @@ export type MemberEntryState = EntryMembership & {
   fora_do_raio: boolean;
   /** Metros até o bar no momento da entrada, quando deu para medir. */
   distancia_m: number | null;
+  /**
+   * O bar da sala usa pulseira como ingresso (Fase 18, migration
+   * `20261008000002`). Vem de `bars.pulseiras_ativadas` do bar da sala — não há
+   * como a regra discordar da tela: é a MESMA `member_entry_state` que a fila
+   * lê.
+   */
+  pulseira_exigida: boolean;
+  /** A pessoa tem a pulseira ATIVA agora (`acesso_ate` ainda no futuro). */
+  tem_pulseira: boolean;
 };
 
 /** Retorno da RPC `get_room_preview` (lista com 1 item). */

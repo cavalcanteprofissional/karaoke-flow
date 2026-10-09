@@ -220,6 +220,7 @@ export async function createBarAction(raw: unknown): Promise<CreateBarResult> {
       p_longitude: input.longitude ?? null,
       p_raio_permitido_metros: input.raio_permitido_metros,
       p_codigo: input.codigo_entrada ?? deriveRoomCodeFromName(input.nome),
+      p_pulseiras_ativadas: input.pulseiras_ativadas,
     })
     .single()) as { data: CreateBarRpcRow | null; error: { message: string } | null };
 
@@ -348,7 +349,11 @@ export async function getEntryPreviewAction(
     // há mais de 24h precisa ver a tela de entrada de novo, não entrar direto.
     const entry = await getMemberEntryState(first.room_id);
     if (entry.ok && entry.state) {
-      membership = { status: entry.state.status, mesa_numero: entry.state.mesa_numero };
+      membership = {
+        status: entry.state.status,
+        mesa_numero: entry.state.mesa_numero,
+        tem_pulseira: entry.state.tem_pulseira,
+      };
     }
   }
 

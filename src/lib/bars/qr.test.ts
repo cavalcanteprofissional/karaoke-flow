@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { barJoinUrl, entryRoute, mesaJoinUrl, parseEntryToken } from "./qr";
+import { barJoinUrl, entryRoute, mesaJoinUrl, parseEntryToken, pulseiraRedeemUrl } from "./qr";
 import { createBarSchema } from "./schema";
 
 describe("parseEntryToken", () => {
@@ -61,6 +61,43 @@ describe("parseEntryToken", () => {
       bar: "ZEHBAR",
       mesa: 10,
     });
+  });
+
+  it("lê a pulseira que vem no QR da casa (Fase 18)", () => {
+    expect(parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&pulseira=ABC234")).toEqual({
+      bar: "ZEHBAR",
+      pulseira: "ABC234",
+    });
+  });
+
+  it("normaliza a pulseira para maiúsculas", () => {
+    expect(
+      parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&mesa=2&pulseira=abc234")
+    ).toEqual({ bar: "ZEHBAR", mesa: 2, pulseira: "ABC234" });
+  });
+
+  it("ignora pulseira sem bar (sozinha não identifica a casa)", () => {
+    expect(parseEntryToken("https://karaoke.app/entrar?pulseira=ABC234")).toBeNull();
+  });
+
+  it("ignora pulseira inválida mantendo o resto do token", () => {
+    expect(
+      parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&pulseira=AB")
+    ).toEqual({ bar: "ZEHBAR" });
+  });
+});
+
+describe("pulseiraRedeemUrl (Fase 18)", () => {
+  it("monta a URL que abre a entrada com o código preenchido", () => {
+    expect(pulseiraRedeemUrl("ZEHBAR", "ABC234", "https://karaoke.app")).toBe(
+      "https://karaoke.app/entrar?bar=ZEHBAR&pulseira=ABC234"
+    );
+  });
+
+  it("o token preserva bar + pulseira na rota", () => {
+    expect(entryRoute({ bar: "ZEHBAR", pulseira: "ABC234" })).toBe(
+      "/entrar?bar=ZEHBAR&pulseira=ABC234"
+    );
   });
 });
 

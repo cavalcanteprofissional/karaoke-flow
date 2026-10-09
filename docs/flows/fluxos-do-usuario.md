@@ -223,7 +223,7 @@ flowchart LR
 | `/salas/<código>/player` | **Player da TV** (controles ao vivo + copiar/rotacionar link), **Fila de músicas** com moderação, **Pedidos de entrada** (este só existe com `Entrada livre` = OFF) |
 | `/salas/<código>/sala` | **Como a sala funciona** (4 toggles), **Cartaz e QR das mesas** + QR individual por mesa, **Mesas do bar** (1–10), **Quem está na sala**, **Código de entrada** |
 | `/bar/<código>` (**nova**) | **Raio de presença** (o gate) e **Busca de música (YouTube)** — um card por sala do bar, porque a chave é da sala e a cota é do projeto do Google Cloud |
-| `/salas/<código>/pulseiras` (**nova**) | **Distribuição de códigos** e **Valor da pulseira** — hoje placeholder esmaecido, sem ação; as tabelas chegam na Fase 18 |
+| `/salas/<código>/pulseiras` (**nova**) | **Distribuição de códigos** e **Valor da pulseira** — entregues na Fase 18 (ver §8); até lá os cards ficavam esmaecidos, sem ação |
 
 ```mermaid
 flowchart TD
@@ -251,6 +251,48 @@ flowchart TD
 
 ---
 
+## 8. Pulseira — o ingresso de uso único do bar — entregue em 2026-10-08 (Fase 18)
+
+A pulseira é **modo do bar** (`bars.pulseiras_ativadas`, switch host-only na tela própria). Desligada, nada disso aparece: o `/entrar` não mostra cartaz nem campo de código, e o gate de cantar fica mudo (o trigger devolve o insert ao normal). Ligada, o host monta a noite e o participante libera o canto.
+
+**Lado do host** — `/salas/<código>/pulseiras`:
+
+| Etapa | O que aparece / acontece |
+| --- | --- |
+| **Ligar o recurso** | switch mestre; os cards de **Distribuição de códigos** e **Valor de pulseira** acendem |
+| **Gerar lote** | input 1–100 + botão → `gerar_pulseiras` grava códigos de 6 caracteres (alfabeto sem I/O/1/0), cada um com validade de **24h** (nascida na geração) |
+| **Imprimir folha** | botão → `Ctrl+P` mostra **só os QR codes** (a folha não vai o resto da tela); cada QR aponta para `/entrar?pulseira=…` |
+| **Valor** | uma faixa por dia da semana + hora inicial/final + preço (reais); preço **de hoje** em destaque; faixa vazia não mostra cartaz (e não cobra — pagamento real é fase futura) |
+| **Desligar o recurso** | cards voltam a esmaecer; os códigos gerados **ficam no banco** mas nada mais os aceita (`resgatar_pulseira` recusa `PULSEIRA_INATIVA`) |
+
+**Lado do participante** — `/entrar`:
+
+1. Entra no bar (pelo QR do balcão/mesa, `?bar=…` ou `?pulseira=…`) → preview mostra o **cartaz aberto**: valor, faixa de hoje e o campo de código.
+2. **Ativa a pulseira**: escaneia o QR da folha (URL vem pré-preenchida) ou **digita o código anotado** no balcão → confirmar chama `resgatar_pulseira`.
+3. Resgate OK: o acesso nasce com **24h** e o **preço vigente congelado** — muda o cartaz no meio da noite, quem já resgatou pagou o que viu.
+4. A partir daí **pode pedir música**: o gate (`KF002`) aceita; a fila some o aviso "pulseira exigida".
+5. **Mesmo código de novo** (na mesma conta ou em outra): recusa com a causa no lugar — código já usado / conta anônima / bar desligado / etc.
+
+```mermaid
+flowchart LR
+    H["Host — /salas/&lt;código&gt;/pulseiras"] -->|"switch ON"| G["gerar_pulseiras<br/>lote de códigos (24h)"]
+    G --> F["Folha de QR imprimível<br/>/entrar?pulseira=CODIGO"]
+    G --> V["preco_vigente<br/>cartaz por dia/hora"]
+    F -->|"escaneia / digita"| P["Participante em /entrar"]
+    V --> P
+    P -->|"resgatar_pulseira"| R{"gate no banco<br/>KF002?"}
+    R -->|"sem acesso válido"| X["recusa o pedido de música<br/>(aviso na fila)"]
+    R -->|"acesso OK / host isento"| Y["música entra na fila"]
+```
+
+> **O adversário de verdade é o banco, não a tela.** A trigger `queue_items_exige_pulseira` (`BEFORE INSERT` em `queue_items`) barra `KF002`, e é a **única** porta: a UI apenas mostra o aviso. Host da própria sala passa **sem resgatar**; `auth.uid()` nulo (service role/seed) passa direto.
+>
+> **Anônimo não perfura a casa:** conta anônima (login "Continuar sem login") vê o card, mas `resgatar_pulseira` recusa `ANONYMOUS` **sem gastar o código** — o cartaz manda "Crie uma conta…" para o `/entrar`.
+>
+> **Acesso expirado renova:** `acesso_ate` passou → o mesmo participante pode resgatar **de novo** com um código novo (`ON CONFLICT … DO UPDATE WHERE acesso_ate <= now()`); o `FOR UPDATE` na linha do código serializa dois resgates do mesmo ingresso.
+
+---
+
 ## Anexo — decisões que afetam os fluxos acima (fechadas com o PO)
 
 | #   | Decisão                            | Impacto                                                                                       |
@@ -263,5 +305,6 @@ flowchart TD
 | D6  | Efeito de sair da sala             | §3: **apaga a linha** → voltar é entrada nova e precisa de aprovação (com entrada livre OFF) |
 | D7  | Autorização do player              | §5: **duas portas** — token (TV, sem sessão) ou sessão (host/membro aprovado); token errado não cai para a sessão |
 | D8  | Para onde vai o celular depois de pedir música | §3: para o **player da própria sala** (`/player/<código>`); a troca de música volta para a busca |
+| D9  | Scanner de QR da pulseira                      | §8: o QR impresso **pré-preenche** `/entrar?pulseira=…` e há digitação manual — `BarcodeDetector`/match ficam de fora nesta fase (o scan só **ativa** a pulseira, não valida música) |
 
 As opções detalhadas estão na **seção 5 de [`fluxos-do-sistema.md`](./fluxos-do-sistema.md)**.

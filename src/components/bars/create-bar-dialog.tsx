@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { createBarAction, geocodeBarAddressAction } from "@/lib/bars/actions";
 import { captureGeolocation, roundCoords, type GeoCoordinates } from "@/lib/consent/geo";
 import { deriveRoomCodeFromName } from "@/lib/rooms/utils";
@@ -46,6 +47,8 @@ export function CreateBarDialog({
     raio_permitido_metros: "500",
     codigo_entrada: "",
   });
+  /** Fase 18: a pulseira é decidida já na criação do bar (campo do contrato). */
+  const [pulseirasAtivadas, setPulseirasAtivadas] = useState(false);
   const [coords, setCoords] = useState<GeoCoordinates | null>(null);
   const [locSource, setLocSource] = useState<"address" | "gps" | null>(null);
 
@@ -97,6 +100,7 @@ export function CreateBarDialog({
       latitude: coords ? roundCoords(coords.latitude, 5) : null,
       longitude: coords ? roundCoords(coords.longitude, 5) : null,
       codigo_entrada: form.codigo_entrada || undefined,
+      pulseiras_ativadas: pulseirasAtivadas,
     });
     setBusy(false);
     if (!result.ok) {
@@ -268,6 +272,24 @@ export function CreateBarDialog({
               max={1000}
               value={form.raio_permitido_metros}
               onChange={(e) => set("raio_permitido_metros", e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="bar-pulseiras" className="text-xs">
+                Pulseiras
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                {pulseirasAtivadas
+                  ? "O bar usa pulseira: só canta quem ativar um código no balcão."
+                  : "Sem pulseira: todo mundo dentro do raio entra e pede música."}
+              </p>
+            </div>
+            <Switch
+              id="bar-pulseiras"
+              checked={pulseirasAtivadas}
+              onCheckedChange={setPulseirasAtivadas}
             />
           </div>
 

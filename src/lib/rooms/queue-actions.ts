@@ -17,7 +17,12 @@ import {
 } from "./queue";
 import type { MembershipStatus, QueueSongInput, QueueSongVideo } from "./queue";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
-import { canRequestSongs } from "@/lib/rooms/spectator";
+import {
+  canRequestSongs,
+  pulseiraBarrada,
+  PULSEIRA_ANON_QUEUE_NOTICE,
+  PULSEIRA_QUEUE_NOTICE,
+} from "@/lib/rooms/spectator";
 
 type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -205,12 +210,30 @@ export async function addSongToQueueAction(
    * Só entra aqui o membro aprovado; `pending` e `none` seguem para as mensagens
    * que já existiam, em `buildQueueSongItem`.
    */
-  if (entryState?.status === "approved" && !canRequestSongs({ isHost, membership: entryState })) {
-    return {
-      ok: false,
-      error: "Você entrou de fora do raio do bar: acompanha a fila, mas não pode pedir música.",
-      code: "OUTSIDE_BAR",
-    };
+  if (entryState?.status === "approved") {
+    // Fase 18: o bar usa pulseira e esta pessoa não ativou a dela. A trigger
+    // `queue_items_exige_pulseira` (KF002) é a autoridade da recusa; aqui a
+    // mensagem chega ANTES do insert, com o motivo certo — e o anônimo, que
+    // nem consegue resgatar, lê o caminho de criar a conta.
+    if (pulseiraBarrada({ isHost, membership: entryState })) {
+      const anonymous =
+        user.is_anonymous ?? user.app_metadata?.is_anonymous === true;
+      return {
+        ok: false,
+        error: anonymous
+          ? PULSEIRA_ANON_QUEUE_NOTICE
+          : PULSEIRA_QUEUE_NOTICE,
+        code: "PULSEIRA_REQUIRED",
+      };
+    }
+
+    if (!canRequestSongs({ isHost, membership: entryState })) {
+      return {
+        ok: false,
+        error: "Você entrou de fora do raio do bar: acompanha a fila, mas não pode pedir música.",
+        code: "OUTSIDE_BAR",
+      };
+    }
   }
 
   const cookieStore = await cookies();

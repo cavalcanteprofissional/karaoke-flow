@@ -3,28 +3,25 @@ import { Ticket } from "lucide-react";
 
 import { BackLink } from "@/components/rooms/back-link";
 import { HostScreenNav } from "@/components/rooms/host-screen-nav";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { PulseiraCodesCard } from "@/components/rooms/pulseiras/pulseira-codes-card";
+import { PulseiraMasterSwitch } from "@/components/rooms/pulseiras/pulseira-master-switch";
+import { PulseiraPricesCard } from "@/components/rooms/pulseiras/pulseira-prices-card";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
+import type { PulseiraCodeRow, PulseiraPreco } from "@/types/bar";
 
 type PulseirasScreenProps = {
   params: Promise<{ codigo: string }>;
 };
 
 /**
- * Tela `Pulseiras` (Fase 17, PLACEHOLDER): a rota e a navegação já existem
- * para a Fase 18 não precisar mexer em menu — hoje os dois cards estão
- * esmaecidos e sem ação, porque as tabelas (`pulseiras_codigos`,
- * `pulseiras_acessos`, `pulseiras_precos`) e a RPC `resgatar_pulseira` ainda
- * não foram criadas. O toggle mestre (`bars.pulseiras_ativadas`) também é
- * da 18; quando ele entrar, este aviso sai e o card passa a respeitar o
- * estado OFF esmaecido (decisão 2 do PO).
+ * Tela `Pulseiras` do host (Fase 18): interruptor mestre, lote de códigos com
+ * QR/folha de impressão e o cartável de valores por dia/hora. A página é a
+ * única que lê `bars.pulseiras_ativadas`, `pulseiras_codigos` (RLS host-only) e
+ * `pulseiras_precos`; os cards são client e só chamam as Server Actions.
+ *
+ * Pulseira é do BAR (o código é único por casa), então uma sala sem bar não
+ * tem pulseira — a tela diz isso em vez de oferecer um controle que não existe.
  */
 export default async function PulseirasScreenPage({ params }: PulseirasScreenProps) {
   const { codigo } = await params;
@@ -44,75 +41,75 @@ export default async function PulseirasScreenPage({ params }: PulseirasScreenPro
   if (!room) redirect(`/salas/${code}`);
   if (room.host_id !== user.id) redirect(`/salas/${code}`);
 
-  let barCode: string | null = null;
+  let bar: { id: string; code: string; nome: string; pulseiras_ativadas: boolean } | null = null;
   if (room.bar_id) {
-    const { data: barData } = await supabase
+    const { data } = await supabase
       .from("bars")
-      .select("code")
+      .select("id, code, nome, pulseiras_ativadas")
       .eq("id", room.bar_id)
       .maybeSingle();
-    barCode = barData?.code ?? null;
+    bar = data ?? null;
+  }
+
+  let codigos: PulseiraCodeRow[] = [];
+  let precos: PulseiraPreco[] = [];
+  if (bar) {
+    const [{ data: codeRows }, { data: priceRows }] = await Promise.all([
+      supabase
+        .from("pulseiras_codigos")
+        .select("*")
+        .eq("bar_id", bar.id)
+        .order("criado_em", { ascending: false })
+        .limit(200),
+      supabase.from("pulseiras_precos").select("*").eq("bar_id", bar.id),
+    ]);
+    codigos = (codeRows ?? []) as PulseiraCodeRow[];
+    precos = (priceRows ?? []) as PulseiraPreco[];
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-3 print:hidden">
         <BackLink roomCode={room.code} />
         <div className="flex items-center gap-2">
-          <h1 className="font-mono text-2xl font-bold tracking-[0.2em]">
-            Pulseiras
-          </h1>
+          <h1 className="font-mono text-2xl font-bold tracking-[0.2em]">Pulseiras</h1>
           <span className="text-muted-foreground text-sm">Códigos e valores</span>
         </div>
-        <HostScreenNav roomCode={room.code} barCode={barCode} />
+        <HostScreenNav roomCode={room.code} barCode={bar?.code ?? null} />
       </section>
 
-      <div className="bg-muted/40 text-muted-foreground flex items-start gap-2 rounded-xl border border-dashed p-4 text-sm">
-        <Ticket className="mt-0.5 size-4 shrink-0" />
-        <p>
-          Esta tela chega na <span className="font-medium">Fase 18</span>: códigos de
-          uso único, faixa de valores por dia e hora, e a pulseira liberando o pedido
-          de música. Por enquanto nada é gerado aqui.
-        </p>
-      </div>
-
-      <div aria-disabled className="flex flex-col gap-6 opacity-60">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              Distribuição de códigos
-            </CardTitle>
-            <CardDescription>
-              Gerar códigos em lote, ver quem já usou (disponível / usado / expirado) e
-              imprimir a folha de QR de cada pulseira.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground text-xs">
-              Em breve — a chave de cada código expira em 24h e não tem caminho de
-              reset.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              Valor da pulseira
-            </CardTitle>
-            <CardDescription>
-              Preço por dia da semana e faixa de horas, com o valor de hoje em
-              destaque. O card público de valores aparece na entrada.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground text-xs">
-              Em breve — sem cobrança agora: a tela serve como calendário e memorando
-              para quem chega.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {!bar ? (
+        <div className="bg-muted/40 text-muted-foreground flex items-start gap-2 rounded-xl border border-dashed p-4 text-sm">
+          <Ticket className="mt-0.5 size-4 shrink-0" />
+          <p>
+            Este karaokê não faz parte de um bar: a pulseira é do bar (o código é único
+            por casa), então não há o que configurar aqui.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="print:hidden">
+            <PulseiraMasterSwitch
+              barId={bar.id}
+              barNome={bar.nome}
+              initialAtivadas={bar.pulseiras_ativadas}
+            />
+          </div>
+          <PulseiraCodesCard
+            barId={bar.id}
+            barCode={bar.code}
+            codigos={codigos}
+            disabled={!bar.pulseiras_ativadas}
+          />
+          <div className="print:hidden">
+            <PulseiraPricesCard
+              barId={bar.id}
+              precos={precos}
+              disabled={!bar.pulseiras_ativadas}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

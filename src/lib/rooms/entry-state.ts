@@ -47,6 +47,8 @@ export async function getMemberEntryState(
     approved_at?: string | null;
     fora_do_raio?: boolean;
     distancia_m?: number | null;
+    pulseira_exigida?: boolean;
+    tem_pulseira?: boolean;
   };
 
   if (!raw.status) {
@@ -71,6 +73,11 @@ export async function getMemberEntryState(
       // estava na sala.
       fora_do_raio: raw.fora_do_raio === true,
       distancia_m: Number.isFinite(raw.distancia_m) ? Number(raw.distancia_m) : null,
+      // Igual ao `?? false` do fora_do_raio: app rodando contra banco sem a
+      // 00002 (pulseira) trata "campo ausente" como "casa não usa pulseira" —
+      // o default menos restritivo para quem já estava na sala antes da regra.
+      pulseira_exigida: raw.pulseira_exigida === true,
+      tem_pulseira: raw.tem_pulseira === true,
     },
   };
 }

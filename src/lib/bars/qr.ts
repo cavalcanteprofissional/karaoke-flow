@@ -12,6 +12,8 @@ export type EntryToken = {
   bar?: string;
   mesa?: number;
   roomCode?: string;
+  /** Código de pulseira que veio no QR (Fase 18) — só existe junto de `bar`. */
+  pulseira?: string;
 };
 
 function isCode(value: string): value is string {
@@ -42,6 +44,11 @@ export function parseEntryToken(text: string): EntryToken | null {
       if (!isCode(bar)) return null;
       const token: EntryToken = { bar };
       if (Number.isInteger(mesa) && mesa! >= 1 && mesa! <= MESA_MAX) token.mesa = mesa;
+      // O QR da pulseira leva `?bar=…&pulseira=…`: a pulseira só faz sentido
+      // dentro da casa, então é ignorada sem o bar. O parâmetro vem do QR já
+      // em maiúsculas, mas o parse normaliza para aceitar "abc234" também.
+      const pulseira = url.searchParams.get("pulseira")?.toUpperCase();
+      if (pulseira && isCode(pulseira)) token.pulseira = pulseira;
       return token;
     }
     if (code && isCode(code)) {
@@ -69,6 +76,8 @@ export function entryRoute(token: EntryToken): string {
     params.set("code", token.roomCode);
     if (token.mesa) params.set("mesa", String(token.mesa));
   }
+  // A pulseira acompanha o bar no mesmo QR; a rota preserva os dois.
+  if (token.pulseira) params.set("pulseira", token.pulseira);
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
 }
@@ -95,4 +104,17 @@ export function mesaJoinUrl(
   appUrl?: string | null
 ): string {
   return `${resolveAppUrl(appUrl)}/entrar?bar=${barCode}&mesa=${mesa}`;
+}
+
+/**
+ * URL do QR de uma pulseira: já abre na casa **com o código preenchido**, para
+ * o resgate acontecer com um toque. O código é único POR BAR (migration 00002)
+ * — por isso o QR carrega os dois valores; sozinho ele não identifica nada.
+ */
+export function pulseiraRedeemUrl(
+  barCode: string,
+  pulseiraCode: string,
+  appUrl?: string | null
+): string {
+  return `${resolveAppUrl(appUrl)}/entrar?bar=${barCode}&pulseira=${pulseiraCode}`;
 }

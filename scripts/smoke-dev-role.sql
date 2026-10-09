@@ -76,7 +76,8 @@ begin
   perform set_config('request.jwt.claims',
     '{"sub":"' || v_dev || '","role":"authenticated","is_anonymous":"false"}', false);
 
-  perform public.create_bar('Smoke Bar 2', 'Smoke', 'Smoke st 2', 1, null, -23.5, -46.6, 500, null);
+  perform public.create_bar('Smoke Bar 2', 'Smoke', 'Smoke st 2', 1, null, -23.5, -46.6, 500, null,
+      p_pulseiras_ativadas => false);
   insert into smoke_dev_role
   select '2a dev cria 2o bar',
          (select count(*)::text from public.bars where host_id = v_dev),
@@ -95,7 +96,8 @@ begin
     '{"sub":"' || v_nd || '","role":"authenticated","is_anonymous":"false"}', false);
 
   begin
-    perform public.create_bar('Smoke Invasor', 'Smoke', 'Smoke st 9', 1, null, -23.5, -46.6, 500, null);
+    perform public.create_bar('Smoke Invasor', 'Smoke', 'Smoke st 9', 1, null, -23.5, -46.6, 500, null,
+      p_pulseiras_ativadas => false);
     insert into smoke_dev_role values ('3a nao-dev cria 2o bar', 'PERMITIU (BUG)', false);
   exception when others then
     insert into smoke_dev_role values ('3a nao-dev cria 2o bar', 'recusado', true);

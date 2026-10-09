@@ -8,6 +8,70 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### Fase 18 — pulseira: o ingresso de uso único do bar (2026-10-08)
+
+- **Pulseira é modo do bar, não da sala.** `bars.pulseiras_ativadas` nasce
+  `false` e virou argumento **obrigatório** do `create_bar` (os 10 argumentos
+  agora são todos obrigatórios — o Postgres recusa parâmetro sem default depois
+  de um com default, então o contrato ficou deliberadamente sem atalho; o app
+  sempre passa tudo por nome). Com o switch OFF, a tela do host (`/salas/
+  [codigo]/pulseiras`) mostra o mestre desligado com os dois cards esmaecidos, e
+  o `/entrar` não exibe cartaz nem campo de código. ON liga tudo.
+- **O código é o ingresso.** `gerar_pulseiras(bar_id, qtd default 10)` grava
+  lotes de 1–100 códigos de 6 caracteres (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`,
+  sem I/O/1/0), cada um com `expira_em = agora + 24h` — geração e validade
+  nascem juntas. `usado_em` desarma o código **para sempre** (sem caminho de
+  reset: quem ativou, ativou), e a RLS de `pulseiras_codigos` só deixa o **dono
+  do bar** ver a coleção — o código é segredo de balcão.
+- **A pulseira no pulso dura 24h e congela o preço.** `resgatar_pulseira` cria o
+  acesso (único por `(bar_id, user_id)`) com `acesso_ate = agora + 24h` e o
+  `preco_centavos` **vigente no momento** — muda o cartaz no meio da noite, quem
+  já resgatou paga o que viu. Recusas com código no corpo: `UNAUTHENTICATED`
+  (sem sessão), `ANONYMOUS` (conta anônima **explícita** — o login anônimo passa
+  pelo `/entrar`, checar `is_anonymous` é obrigatório), `PULSEIRA_INATIVA` (bar
+  OFF), `JA_TEM_ACESSO` (acesso vigente, com `acesso_ate`), `CODIGO_INVALIDO`
+  (inclui o vazio), `CODIGO_USADO`. Acesso **expirado renova** com um código
+  novo (`ON CONFLICT … DO UPDATE WHERE acesso_ate <= now()`); o `FOR UPDATE` na
+  linha do código serializa dois resgates do mesmo "ingresso".
+- **O cartaz é dado por faixa, no fuso do bar.** `pulseiras_precos` guarda
+  faixas por dia da semana (0=domingo … 6=sábado) e hora, sem sobreposição
+  (`EXCLUDE USING GIST` — **não existe `timerange` no PostgreSQL**, a migration
+  ancora as horas num dia fixo e compara como `tsrange`). `preco_vigente`
+  calcula em `America/Sao_Paulo` e devolve o preço de **agora** (faixa vazia =
+  sem cartaz = resgate sem cobrança — não há pagamento nesta fase). Só RPCs
+  host-only escrevem; a leitura do valor é pública para autenticados.
+- **O gate de cantar mora no banco** (mesma decisão das migrações
+  `20261003000041`/`20261004000042`): a trigger `queue_items_exige_pulseira`
+  `BEFORE INSERT` em `queue_items` barra **KF002** quem não tem acesso válido —
+  host da própria sala isento, `auth.uid()` nulo passa direto (seed/Management
+  API). A UI só sugere (`canRequestSongs` + aviso "pulseira exigida" na fila);
+  `member_entry_state` passou a devolver `pulseira_exigida`/`tem_pulseira` e
+  `get_entry_preview` ganhou `pulseiras_ativadas` (o RLS de `bars` não libera
+  SELECT para o visitante — a `/entrar` lê o cartaz **da preview**, não do bar).
+- **Tela do host** (`/salas/[codigo]/pulseiras`): switch mestre, lote com input
+  1–100, lista de códigos com status (disponível/usado), **folha de QR
+  imprimível** (`print:*` + `window.print`, reaproveitando `RoomQr`) e o card de
+  valores por dia/hora com o preço de hoje em destaque. **Tela do cliente**
+  (`/entrar`): card público de valores + campo de código; o QR impresso aponta
+  para `/entrar?pulseira=CODIGO` (conta logada precisa — anônimo vê "Crie uma
+  conta…"). **Decisão registrada:** o scan nesse ponto é só para ativar a
+  pulseira e liberar o canto — o fluxo implementado é QR impresso → URL
+  pré-preenchida + digitação manual; `BarcodeDetector`/`match` ficou de fora.
+- **Dois ajustes de contrato no caminho (migration, não smoke):** `drop
+  function` de `get_entry_preview` antes do `create or replace` (o Postgres
+  recusa mudar o retorno de uma função existente) e o `create_bar` 100%
+  obrigatório. E o `smoke-pulseiras.sql` — **31/31 no Supabase Cloud** —
+  encontrou e corrigiu dois erros **do próprio smoke** (claims de sessão
+  erradas no resgate de renovação e no "resgate liberta").
+- **Testes:** `src/lib/bars/pulseiras.test.ts` (hora/faixa/preço/status),
+  `qr.test.ts` (+pulseira, incluindo o bug do código em minúscula rejeitado),
+  `pulseira-entry-card.tsx` (8). Suíte: **729 → 768 testes**, 56 → 58 arquivos.
+  Roteiro manual novo em `TESTING.md` §3.19. Migration `20261008000002` aplicada
+  no Cloud via `apply-sql.mjs` (padrão do time — sem `SUPABASE_DB_PASSWORD`,
+  `supabase db push` falha em auth). **Gates:** lint, `tsc`, build verdes;
+  `scan:secrets` segue vermelho só com os 7 fixtures pré-existentes. Pendências:
+  aparelho (§3.19) e `vercel deploy --prod` (decisão do dono).
+
 ### Fase 17 — quatro telas de configuração do host + o host pede música (2026-10-08)
 
 - **`/salas/[codigo]` deixou de ser a tela de configuração e virou a tela ao vivo.** O relato do dono (2026-10-05, item 3) era que tudo estava "enfiado" numa página só: fila, mesa, cartaz/QR, seis cards de settings, pedidos de entrada e player. A ordem acordada no `TODO.md` é 8g → 16 → 17 → 18. As configurações saíram para **rotas filhas**, um assunto por tela:

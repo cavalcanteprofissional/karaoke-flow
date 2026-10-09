@@ -88,6 +88,13 @@ type QueueListProps = {
    * em `canRequestSongs` — aqui só chega a resposta.
    */
   canRequest?: boolean;
+  /**
+   * Fração que explica por que `canRequest` é `false`, para o card da fila.
+   * Sem ela o default é a mensagem do espectador (`SPECTATOR_QUEUE_NOTICE`); a
+   * página da sala troca pela mensagem da pulseira quando o impedimento é a
+   * Fase 18 (regra em `pulseiraBarrada`).
+   */
+  canRequestNotice?: string | null;
 };
 
 /**
@@ -104,6 +111,7 @@ export function QueueList({
   isHost,
   currentUserId,
   canRequest = true,
+  canRequestNotice,
 }: QueueListProps) {
   const [items, setItems] = useState<QueueItem[]>(initial);
   const [names, setNames] = useState<Map<string, string | null>>(new Map());
@@ -394,7 +402,7 @@ export function QueueList({
         ) : (
           /* Sem botão desabilitado: um controle que a pessoa vê e não funciona
              lê como defeito. A regra em uma frase, e a lista segue viva. */
-          <CardDescription>{SPECTATOR_QUEUE_NOTICE}</CardDescription>
+          <CardDescription>{canRequestNotice ?? SPECTATOR_QUEUE_NOTICE}</CardDescription>
         )}
       </CardHeader>
 

@@ -23,6 +23,42 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-10-08, noite)
+
+> ### Fase 18 — pulseiras: código/QR de uso único, gate de cantar no banco
+>
+> **Blocos A–D** (código + testes, da rodada anterior) **+ Bloco E** (esta):
+> migration `20261008000002_pulseiras.sql` aplicada no Cloud via `apply-sql.mjs`
+> e `smoke-pulseiras.sql` **31/31 verde no Cloud**. Três armadilhas do caminho
+> corrigidas **na migration** (não no smoke): `timerange` não existe no PG →
+> `EXCLUDE` das faixas com `tsrange` ancorado em `1970-01-01`; `create_or_replace`
+> de `get_entry_preview` precisa de `drop` (retorno mudou); PostgreSQL recusa
+> parâmetro sem default depois de um com default → `create_bar` com **10 args
+> obrigatórios** (o app passa todos por nome). Duas do **smoke** (JWT de sessão):
+> o `08h` (renovação) resgatava como a Betânia e não a Ana que envelheceu; o
+> `09d` (resgate liberta) não trocava a claims de volta para a Betânia. Depois de
+> corrigidas, os 31 passos fecham.
+>
+> **Suíte: 768 testes / 58 arquivos** (Fase 18 entrou com as suites de
+> `pulseiras.ts`, `qr.ts` e `pulseira-entry-card`). Gates `lint`, `typecheck`,
+> `test`, `build` verdes. Smoke transacional (`begin`/`rollback`) — verificado que
+> **não sobrou** sala/barr/item da smoke (`SMKPUL`), nem da diag (`DIAGPL`).
+>
+> **Decisão do PO registrada:** o scan de QR na fase é só para **ativar a
+> pulseira** e liberar o canto — implementado como **QR impresso → URL
+> pré-preenchida + digitação manual**; `BarcodeDetector`/`match` ficou de fora
+> (anotado no bloco da Fase 18).
+>
+> **Falta (ordem):**
+>
+> - [ ] Aparelho — `TESTING.md` §3.19 inteiro (ver bloco da Fase 18): host gera
+>       lote na tela própria, imprime a folha, desliga o recurso (tudo escurece),
+>       monta faixa de valor; visitante logado ativa por QR/digitação, anônimo é
+>       barrado na porta; segundo "ativo" no mesmo código não passa
+> - [ ] `vercel deploy --prod` — decisão do dono; até lá tudo fica em preview
+> - [ ] Cobrança real (Fase 15 / D12) — o que o cartaz da pulseira já prepara, e
+>       a contradição com o MANIFEST registrada no bloco da Fase 18
+
 ## Retomada — contexto da próxima sessão (2026-10-08, tarde)
 
 > ### Duas fases no mesmo dia: 16 (mesas) e 17 (quatro telas do host) — commitadas, falta aparelho e deploy
@@ -552,46 +588,90 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 - [ ] **Falta:** validar no aparelho (`TESTING.md` §3.18) e `vercel deploy
       --prod` (decisão do dono — a árvore da 17 está nesta commit)
 
-### Fase 18 — Pulseira: código/QR de uso único, sem cobrança por enquanto
+### Fase 18 — Pulseira: código/QR de uso único, sem cobrança por enquanto ✅ (2026-10-08)
 
-- [ ] `bars.pulseiras_ativadas boolean default false`, parâmetro **obrigatório**
+Migration **`20261008000002_pulseiras.sql`** aplicada no Cloud via `apply-sql.mjs`
+(aproveitando o caminho — sem `SUPABASE_DB_PASSWORD`, `supabase db push` falha em
+auth) e `smoke-pulseiras.sql` **31/31 no Cloud**. As três armadilhas descobertas
+no caminho (e a correção):
+
+- **Não existe `timerange` no PostgreSQL.** O `EXCLUDE USING GIST` das faixas
+  de preço sem sobreposição passou a ancorar as horas num dia fixo e comparar
+  como `tsrange` (`date '1970-01-01' + hora_inicio`); `24:00` vira o "amanhã
+  00:00" do mesmo intervalo, excluído.
+- **`create_or_replace` não muda o retorno do corpo antigo** de
+  `get_entry_preview`: a migration faz `drop function if exists … (text,int)`
+  antes de recriar com `pulseiras_ativadas`.
+- **PostgreSQL não aceita parâmetro sem default depois de um com default.**
+  O contrato novo do `create_bar` ficou com **os 10 argumentos obrigatórios**
+  (sem `default` nos geo/código) — o app sempre passa todos por nome, e uma
+  chamada de 9 argumentos cai em "function does not exist" (que é o que o smoke
+  testa, a 01).
+
+- [x] `bars.pulseiras_ativadas boolean default false`, parâmetro **obrigatório**
       no `create_bar`, e `Switch` no modal de criação com a caixa explicativa da
       decisão 2
-- [ ] `pulseiras_codigos` (`codigo` único por bar, `expira_em = criado_em + 24h`,
-      `usado_por`/`usado_em` **sem caminho de reset** — decisão 1)
-- [ ] `pulseiras_acessos` — **único por `(bar_id, user_id)`**, `acesso_ate`
-- [ ] `pulseiras_precos` — dia da semana + faixa de horas + `preco_centavos`, sem
-      sobreposição (trigger, não `if` de TypeScript)
-- [ ] `resgatar_pulseira(p_bar_id, p_codigo)` (`security definer`) — recusa
-      anônimo (`auth.jwt() ->> 'is_anonymous'`), recusa bar com toggle OFF, recusa
-      código usado ou expirado, e devolve o **preço vigente do momento**
-- [ ] **Gate de cantar:** trigger `BEFORE INSERT` em `queue_items` barra o pedido
-      quando o bar exige pulseira e a conta não tem acesso válido. E o reflexo no
-      padrão do repo: `member_entry_state` passa a devolver `tem_pulseira` e
-      `canRequestSongs` (`src/lib/rooms/spectator.ts`) ganha o mesmo corte — a UI
-      sugere, o banco manda
-- [ ] Tela do host (`/salas/[codigo]/pulseiras`): switch mestre, gerar códigos em
-      lote, lista com status (disponível / usado / expirado), folha de QR
-      imprimível reaproveitando o `RoomQr` que já existe, e o card de valores por
-      dia/hora com o preço de hoje em destaque
-- [ ] Tela do cliente (`/entrar`): **card público de valores** (leitura) + campo de
-      código; o QR da pulseira aponta para `/entrar?pulseira=CODIGO`, que exige
-      **conta logada** e resgata antes de mostrar o preço e entrar
-- [ ] Leitura de QR pela câmera com `BarcodeDetector` nativo e queda para
-      digitação — a lib `qrcode` do repo só **gera**, e o modo digitado é a outra
-      opção que o host escolhe, então nada trava se o navegador não tiver a API
-- [ ] Smoke SQL com casos **ATAQUE/LEGITIMO**: código já usado, expirado, conta
-      anônima, bar com toggle OFF, e segunda conta no mesmo código
-- [ ] Registrar a contradição: cobrar do cantor tensiona `MANIFEST.md:43-47,68-69`
+- [x] `pulseiras_codigos` (`codigo` único por bar, `expira_em = criado_em +
+      24h`, `usado_por`/`usado_em` **sem caminho de reset** — decisão 1);
+      `gerar_pulseiras(bar_id, qtd default 10)` com 1–100 por lote, códigos de
+      6 chars do alfabeto sem I/O/1/0 (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`)
+- [x] `pulseiras_acessos` — **único por `(bar_id, user_id)`**, `acesso_ate`,
+      `preco_centavos` **congelado no resgate**; acesso expirado **renova** com
+      código novo (`ON CONFLICT … DO UPDATE WHERE acesso_ate <= now()`)
+- [x] `pulseiras_precos` — dia da semana + faixa de horas + `preco_centavos`,
+      sem sobreposição (EXCLUDE, não `if` de TypeScript); `preco_vigente`
+      calcula em `America/Sao_Paulo` (faixa "hoje inteira" `00:00–24:00` vale
+      a qualquer hora); `upsert_preco_pulseira`/`remover_preco_pulseira` host-only
+- [x] `resgatar_pulseira(p_bar_id, p_codigo)` (`security definer`) — recusa
+      anônimo (`auth.jwt() ->> 'is_anonymous'` = `ANONYMOUS`), recusa bar com
+      toggle OFF (`PULSEIRA_INATIVA`), sem sessão (`UNAUTHENTICATED`), acesso
+      vigente (`JA_TEM_ACESSO` com `acesso_ate`), código usado (`CODIGO_USADO`)
+      ou inválido (`CODIGO_INVALIDO`), e devolve o **preço vigente do momento**
+      (o `FOR UPDATE` na linha do código serializa dois resgates do mesmo código)
+- [x] **Gate de cantar:** trigger `queue_items_exige_pulseira` `BEFORE INSERT`
+      em `queue_items` **(`ERRCODE KF002`)** — host da própria sala isento,
+      quem não tem acesso válido bloqueado; `member_entry_state` devolve
+      `pulseira_exigida`/`tem_pulseira`, `get_entry_preview` devolve
+      `pulseiras_ativadas` (a `/entrar` lê o cartaz daqui — o RLS de `bars` só
+      libera SELECT para dono/membro aprovado), e
+      `canRequestSongs` (`src/lib/rooms/spectator.ts`) ganhou o mesmo corte —
+      a UI sugere, o banco manda
+- [x] Tela do host (`/salas/[codigo]/pulseiras`): switch mestre (o todo escurece
+      com OFF), gerar códigos em lote (1–100), lista com status
+      (disponível / usado), folha de QR **imprimível** (`print:*` + `window.print`)
+      reaproveitando o `RoomQr`, e o card de valores por dia/hora com o preço de
+      hoje em destaque; `resgatarPulseiraAction` fala o que o banco devolveu
+- [x] Tela do cliente (`/entrar`): **card público de valores** (leitura) +
+      campo de código; o QR da pulseira aponta para `/entrar?pulseira=CODIGO`,
+      que exige **conta logada** (anônimo vê "Crie uma conta…") e resgata antes
+      de liberar o canto; host sem pulseira ou bar com OFF não mostra o card
+- [x] **Decisão (registrada a pedido do PO):** o scan de QR neste ponto é só
+      para **ativar a pulseira** e liberar o canto à pessoa logada — o fluxo
+      implementado é o QR impresso → URL pré-preenchida + digitação manual do
+      código. **`BarcodeDetector`/`match` não entrou** nesta fase; fica como
+      melhoria futura se o host pedir leitura in-app
+- [x] Smoke SQL `scripts/smoke-pulseiras.sql` com casos **ATAQUE/LEGITIMO**:
+      código já usado, inventado, conta anônima (sem queimar a pulseira), bar
+      com toggle OFF, segundo resgate no mesmo código, sobreposição de faixa,
+      RLS de `pulseiras_codigos` (invisível ao não-dono), renovação de acesso
+      expirado, KF002 (não-host sem acesso barrado / host isento / com acesso
+      liberado) e `member_entry_state` nas três caras — **31/31 no Cloud**, em
+      `begin`/`rollback` (nada persiste)
+- [x] Registrar a contradição: cobrar do cantor tensiona `MANIFEST.md:43-47,68-69`
       ("o custo é da casa", "sem favor por pagamento"). Como **não há cobrança
       agora**, fica anotado como decisão a revisar quando a cobrança entrar — que é
       a Fase 15 / D12 (provedor)
 
+_Duas pendências registradas da leva (não desta fase):_ `vercel deploy --prod`
+(só com confirmação do dono — a árvore desta fase está em preview) e o roteiro
+de aparelho da pulseira (`TESTING.md` §3.19, montado abaixo).
+
 ### Ordem, gates e o que falta decidir
 
-- [ ] **Ordem:** ~~8g → 16 → 17~~ ✅ (8g em 07/10, 16 e 17 em 08/10) **→ 18**. A 18 é
-      domínio novo e a que mais precisa de decisão de negócio — só ela ficou desta
-      leva; o `pulseiras_ativadas` e as telas de distribuição/valor são dela
+- [x] **Ordem:** ~~8g → 16 → 17 → 18~~ ✅ (8g em 07/10; 16 e 17 em 08/10; **18
+      concluída em 08/10** — migration aplicada no Cloud + smoke 31/31 acima).
+      Próxima leva a decidir com o PO: cobrança real (Fase 15 / D12), que é o que
+      o cartaz da pulseira já prepara
 - [ ] **Gates por fase:** migration + smoke SQL, testes, `npm run lint`, `tsc`,
       `npm run build`, `npm run scan:secrets`, docs (README/TESTING/CHANGELOG) e
       commit + push. `vercel deploy --prod` **só com confirmação** do dono — até lá

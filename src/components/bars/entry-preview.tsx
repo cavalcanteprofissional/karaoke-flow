@@ -25,6 +25,7 @@ import {
 import { LocationGate } from "@/components/bars/location-gate";
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { MesaGrid } from "@/components/rooms/mesa-grid";
+import { PulseiraEntryCard } from "@/components/bars/pulseira-entry-card";
 import { joinEntryAction } from "@/lib/bars/actions";
 import {
   isOutsideBar,
@@ -33,7 +34,7 @@ import {
 } from "@/lib/bars/geo";
 import { entryRoute } from "@/lib/bars/qr";
 import type { PresenceDecision } from "@/lib/bars/geo";
-import type { EntryBarPreview } from "@/types/bar";
+import type { EntryBarPreview, PulseiraPreco } from "@/types/bar";
 import type { EntryMembership } from "@/types/room";
 
 type EntryPreviewProps = {
@@ -41,6 +42,11 @@ type EntryPreviewProps = {
   requestedMesa?: number | null;
   membership?: EntryMembership;
   presence?: PresenceDecision;
+  /** Fase 18 — cartaz de valores da pulseira do bar (público). */
+  precos: PulseiraPreco[];
+  /** Código de pulseira que veio no QR (`?pulseira=`). */
+  initialPulseira?: string | null;
+  isAnonymous: boolean;
 };
 
 export function EntryPreview({
@@ -48,6 +54,9 @@ export function EntryPreview({
   requestedMesa = null,
   membership,
   presence,
+  precos,
+  initialPulseira,
+  isAnonymous,
 }: EntryPreviewProps) {
   const router = useRouter();
   const initialMesa = membership?.mesa_numero ?? requestedMesa ?? 1;
@@ -133,6 +142,16 @@ export function EntryPreview({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {geoBlocked && <LocationGate error={geoBlocked.error} />}
+
+        <PulseiraEntryCard
+          barId={preview.bar_id}
+          barName={preview.bar_nome}
+          pulseirasAtivadas={preview.pulseiras_ativadas}
+          precos={precos}
+          initialPulseira={initialPulseira}
+          isAnonymous={isAnonymous}
+          temPulseira={membership?.tem_pulseira === true}
+        />
 
         {outside && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">

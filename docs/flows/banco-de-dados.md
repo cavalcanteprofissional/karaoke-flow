@@ -12,6 +12,9 @@ erDiagram
     bars ||--o{ mesas : "tem (1..N)"
     bars ||--o{ rooms : "karaokê (default 1)"
     youtube_credential_pools ||--o{ bars : "pool da política platform_pool (00043)"
+    bars ||--o{ pulseiras_codigos : "emite ingressos (Fase 18 / 00002)"
+    bars ||--o{ pulseiras_acessos : "tem resgates"
+    bars ||--o{ pulseiras_precos : "precifica"
     auth_users ||--o{ rooms : "host de (via bars)"
     auth_users ||--o{ room_members : "participa"
     auth_users ||--o{ queue_items : "adiciona"
@@ -53,6 +56,7 @@ erDiagram
         integer raio_permitido_metros "default 150 (50..1000)"
         text youtube_credential_policy "own_only (default) | platform_pool — 00043"
         uuid youtube_pool_id "FK youtube_credential_pools (nullable, ON DELETE RESTRICT)"
+        boolean pulseiras_ativadas "Fase 18 (00002): gate de cantar ligado/desligado (default false)"
         timestamptz criado_em
     }
 
@@ -62,6 +66,34 @@ erDiagram
         integer numero "1..10 (único por bar)"
         text rotulo "nullable (etiqueta da mesa)"
         timestamptz criado_em
+    }
+
+    pulseiras_codigos {
+        uuid id PK
+        uuid bar_id FK "bars.id (on delete cascade)"
+        text codigo "6 chars — alfabeto sem I/O/1/0, único por bar"
+        timestamptz criado_em
+        timestamptz expira_em "agora + 24h (nasce na geração)"
+        uuid usado_por FK "auth.users.id (on delete set null)"
+        timestamptz usado_em "desarma o código para sempre (sem reset)"
+    }
+
+    pulseiras_acessos {
+        uuid id PK
+        uuid bar_id FK "bars.id (cascade) — em cobertura do unique (bar_id, user_id)"
+        uuid user_id FK "auth.users.id (cascade)"
+        timestamptz resgatado_em
+        timestamptz acesso_ate "agora + 24h"
+        integer preco_centavos "congelado no resgate; null = sem faixa de valor"
+    }
+
+    pulseiras_precos {
+        uuid id PK
+        uuid bar_id FK "bars.id (cascade)"
+        integer dia_semana "0=domingo … 6=sábado"
+        time hora_inicio "faixas semiabertas [início, fim)"
+        time hora_fim
+        integer preco_centavos ">= 0"
     }
 
     queue_items {
@@ -130,6 +162,8 @@ erDiagram
 > **Fase 8f (migration `20261005000043`, 2026-10-05):** política de credencial do YouTube **por bar** — `bars.youtube_credential_policy` (`own_only`, default, ou `platform_pool`) e `bars.youtube_pool_id` (FK **`ON DELETE RESTRICT`**, porque `SET NULL` anularia a invariante da trigger). A coerência policy↔pool mora na trigger `bars_guard_youtube_credential_policy` (`before insert or update`, mesmo padrão da `20260930000036`). A tabela `youtube_credential_pools` tem **RLS ligado e nenhuma policy** (só service role, como `song_cache` e `youtube_oauth_tokens`); a RPC dev-only `admin_youtube_credential_health(bar_id)` devolve rótulos, booleanos e contagens — **nunca** chave, token ou id de projeto. `daily_search_budget` é teto de **configuração**, não contador; rotação de chave do pool é manual. Detalhe em [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §3.1.1; smoke `scripts/smoke-youtube-credential.sql`.
 >
 > **Fase 8g (migration `20261005000044`, 2026-10-07):** RPC `release_current_item(p_room_code, p_token)` (`security definer`, mesma porta `player_room_id` de `claim_next_song`) — devolve a faixa presa em `playing` para **`approved` na mesma posição** e põe a sala em `idle`. Chamada pelo quiosque no "Trancar TV", **antes** de limpar o arm (que vive só no `localStorage` da TV): sem ela, a regra `KF001` bloqueava o cantor para sempre. Ver §2 e [`fluxos-do-sistema.md`](./fluxos-do-sistema.md) §4.4; smoke `scripts/smoke-release-current-item.sql` (11/11 no Cloud).
+>
+> **Fase 18 (migration `20261008000002`, 2026-10-08):** pulseira. `bars.pulseiras_ativadas` (**default false**; `create_bar` passou a exigir **10 argumentos, todos obrigatórios** — o Postgres recusa parâmetro sem default depois de um com default; o app passa todos por nome). `pulseiras_codigos` (os ingressos impressos): código de **6 chars** (alfabeto sem I/O/1/0) que expira em **24h** e `usado_em` desarma **para sempre** (decisão de produto: sem rota de reuso). `pulseiras_acessos`: **uma linha por `(bar_id, user_id)`** — acesso vigente bloqueia novo resgate (`JA_TEM_ACESSO`), expirado **renova** (`ON CONFLICT … DO UPDATE WHERE acesso_ate <= now()`); o `FOR UPDATE` na linha do código serializa dois resgates do mesmo ingresso. `pulseiras_precos`: faixas por `dia_semana` + hora **sem sobreposição por bar** — `EXCLUDE USING GIST` com `tsrange` ancorado em `1970-01-01` (**não existe `timerange` no PostgreSQL**); começa **vazia** (resgate sem faixa não cobra). RPCs `security definer`: **`gerar_pulseiras`** (host-only, 1–100 por lote num único INSERT) e **`resgatar_pulseira`** (autenticado; recusas `UNAUTHENTICATED`/`ANONYMOUS` — esta sem queimar o código —/`PULSEIRA_INATIVA`/`JA_TEM_ACESSO`/`CODIGO_INVALIDO`/`CODIGO_USADO`) e a leitura `preco_vigente` (calcula a faixa de agora em `America/Sao_Paulo`). O gate de cantar é a trigger `queue_items_exige_pulseira` (**`KF002`**): bar desligado devolve o insert ao normal; host da própria sala e `auth.uid()` nulo (service role/seed) passam direto. `get_entry_preview` e `member_entry_state` ganharam `pulseiras_ativadas`/`pulseira_exigida`/`tem_pulseira` — a `/entrar` monta o cartaz pela **preview**, não por SELECT de `bars`; para recriar a preview a migration precisou de `drop function` de `get_entry_preview` antes do `create or replace` (o PG recusa mudar o retorno — `42P13`). Smoke `scripts/smoke-pulseiras.sql` (31/31 no Cloud); roteiro em `TESTING.md` §3.19.
 
 ---
 
@@ -170,6 +204,9 @@ flowchart LR
 | -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------ |
 | `bars`         | qualquer autenticado **incluindo anônimo** (`auth.uid() is not null`)   | host (`host_id = auth.uid()`)                        | host                                                                                          | host                           |
 | `mesas`        | qualquer autenticado **incluindo anônimo**                              | — (só via RPC `create_bar`)                          | — (só via RPC `update_bar_mesas`, Fase 16)                                                    | —                              |
+| `pulseiras_codigos` | **só o dono do bar** (`is_bar_host` — o código é segredo de balcão) | — (só via RPC `gerar_pulseiras`, host-only) | — | — |
+| `pulseiras_acessos` | o próprio resgate (`user_id = auth.uid()`) **ou** o host do bar (ocupação) | — (só via RPC `resgatar_pulseira`) | — | — |
+| `pulseiras_precos` | qualquer autenticado (a `/entrar` mostra o cartaz) | — (só RPC host) | — (só RPC host) | — (só RPC host) |
 | `rooms`        | host ou membro aprovado da sala                                         | host (`host_id = auth.uid()`)                        | host                                                                                          | host                           |
 | `room_members` | a própria participação **ou** tudo da sala (host precisa ver pendentes) | só self como `pending` (approved só via `join_room`) | host (aprovar/rejeitar)                                                                       | self **ou** host               |
 | `queue_items`  | host ou membro aprovado da sala                                         | membro aprovado/host, adicionando para si            | **host-only** (a troca de música é via RPC `replace_queue_song`; o playback também é via RPC) | host only                      |
@@ -191,6 +228,7 @@ flowchart LR
 - **Host actions nunca relaxam na UI**: aprovar/reordenar/deletar fila e aprovar/rejeitar entrada são host-only no banco.
 - **Status inicial da fila é derivado** (`queue_items_initial_status`): o client não escolhe; remove auto-aprovação por INSERT. Exceção: pedidos do **dono** entram `approved` sempre (não espera a própria aprovação).
 - **Uma música ativa por participante, no banco** (migration `20261004000042`): trigger `before insert` em `queue_items` que apaga as ativas `pending`/`approved` do próprio participante e **recusa com `KF001`** quando há uma `playing` (trocar a que toca cortaria o áudio da TV; a vaga abre quando ela vira `played`). "Ativa" = `pending`+`approved`+`playing`, isto é, o que a fila mostra — **não é um estado novo**. O host é isento **na própria sala** (`is_host(room_id, …)`), então dono de uma e participante de outra recebe a regra. **Sem `security definer`**: o `delete` da substituição passa pela policy `queue_items_delete_own` (`20260927000031`), que já autoriza o autor sobre o próprio item nesses dois status — RLS real em vez de privilégio novo; sobrou ativa depois do `delete`? a trigger levanta `KF001` em vez de fingir que substituiu. Vale para o visitante sem login autenticado (usuário Supabase anônimo, `auth.uid()` estável **por navegador** — limpar os dados do site cria outra identidade).
+- **Cantar exige pulseira, também no banco** (migration `20261008000002`, Fase 18): trigger `queue_items_exige_pulseira` (`before insert` em `queue_items`) consulta `bars.pulseiras_ativadas` e, com o bar ligado, exige `pulseiras_acessos` vigente do **pedinte** — recusa com **`KF002`**. Bar **desligado devolve o insert ao normal** (sem custo na sala sem o recurso). **Isentos:** o host **da própria sala** (`is_host`, mesmo espírito do `KF001`) e `auth.uid()` nulo (service role/seed/Management API). A porta de escrita do acesso é a RPC `resgatar_pulseira` (`security definer`): \(FOR UPDATE\) na linha do código + recusas por código no corpo (`ANONYMOUS` **não queima** o código, `CODIGO_USADO`/`CODIGO_INVALIDO`/`PULSEIRA_INATIVA`; expirado renova via `ON CONFLICT DO UPDATE WHERE acesso_ate <= now()`). Anônimo não é dono e não é host, então em bar ligado **ele não canta** — a UI só avisa ("pulseira exigida"); o adversário de verdade é a trigger.
 - **Encerrar sala = RPC `close_room` (`security definer`)** (migration `20260923000019`): checa `is_host`, marca `rooms.status='closed'`, cancela a fila toda (`cancelled`, status terminal novo) e **expulsa todos** (`DELETE room_members`). Atômico — o client não ajusta essas peças separadamente.
 - **Reordenar a fila = RPC `reorder_queue` (`security definer`)** (migration `20260926000025`): o UPDATE de `position` do host é feito dentro da função, sob advisory lock com a **mesma chave de `next_queue_position`**, e só com a **fila visível inteira** (`playing`+`approved`+`pending`) — sem unique em `(room_id, position)`, uma lista parcial criaria posições repetidas. Rewrite único com `row_number()` 1..N (realtime sem tempestade de eventos).
 - **Trocar a música = RPC `replace_queue_song` (`security definer`)** (migration `20260926000026`): o **autor do item ou o host** reescreve só vídeo/título/thumb/duração; `position` e `status` ficam intactos (D2) e o item precisa estar `pending`/`approved` (D3). Existe porque a policy de UPDATE é host-only — o client não ganha UPDATE direto.

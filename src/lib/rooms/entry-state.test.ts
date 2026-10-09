@@ -48,6 +48,8 @@ describe("getMemberEntryState", () => {
         approved_at: "2026-09-27T10:00:00Z",
         fora_do_raio: false,
         distancia_m: 42.5,
+        pulseira_exigida: false,
+        tem_pulseira: false,
       },
     });
   });
@@ -95,7 +97,36 @@ describe("getMemberEntryState", () => {
         approved_at: null,
         fora_do_raio: false,
         distancia_m: null,
+        pulseira_exigida: false,
+        tem_pulseira: false,
       },
+    });
+  });
+
+  /**
+   * Fase 18: a MESMA função devolve se a casa exige pulseira e se a pessoa tem
+   * a dela ativa. App contra banco antigo cai no `false`/`false` — o default
+   * menos restritivo.
+   */
+  it("carrega a pulseira da casa e se a pessoa tem a dela ativa", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        status: "approved",
+        mesa_numero: 2,
+        pre_approval: false,
+        approved_at: null,
+        fora_do_raio: false,
+        pulseira_exigida: true,
+        tem_pulseira: true,
+      },
+      error: null,
+    });
+
+    const result = await getMemberEntryState(ROOM);
+
+    expect(result).toMatchObject({
+      ok: true,
+      state: { pulseira_exigida: true, tem_pulseira: true },
     });
   });
 

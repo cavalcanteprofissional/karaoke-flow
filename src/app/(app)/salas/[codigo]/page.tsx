@@ -16,7 +16,13 @@ import { getEntryPreviewAction } from "@/lib/bars/actions";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
-import { canPickMesa, canRequestSongs } from "@/lib/rooms/spectator";
+import {
+  canPickMesa,
+  canRequestSongs,
+  pulseiraBarrada,
+  PULSEIRA_ANON_QUEUE_NOTICE,
+  PULSEIRA_QUEUE_NOTICE,
+} from "@/lib/rooms/spectator";
 import type { Bar } from "@/types/bar";
 import type { MemberEntryState } from "@/types/room";
 
@@ -153,6 +159,16 @@ export default async function RoomPage({ params }: RoomPageProps) {
   // pedido de música — a pessoa assiste.
   const podePedir = canRequestSongs({ isHost, membership: myMembership ?? null });
   const podeEscolherMesa = canPickMesa({ isHost, membership: myMembership ?? null });
+  // O mesmo "não pode pedir" tem causas diferentes: o espectador (fora do raio)
+  // lê a mensagem do `QueueList`; quem parou na pulseira da Fase 18 lê a da
+  // casa — e o anônimo, que não consegue resgatar, lê o caminho de criar conta.
+  const semPulseira = pulseiraBarrada({ isHost, membership: myMembership ?? null });
+  const isAnonymous = user.is_anonymous ?? user.app_metadata?.is_anonymous === true;
+  const queueNotice = semPulseira
+    ? isAnonymous
+      ? PULSEIRA_ANON_QUEUE_NOTICE
+      : PULSEIRA_QUEUE_NOTICE
+    : null;
   // Fase 16: bar de mesa única não pergunta. Quem entra já nasce com a mesa 1
   // gravada pelo `join_room` (migration 20261008000001); o `quantidade_mesas > 1`
   // aqui cobre quem entrou antes da regra e membro antigo sem mesa — sem ele o
@@ -282,6 +298,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
           isHost={isHost}
           currentUserId={user.id}
           canRequest={podePedir}
+          canRequestNotice={queueNotice}
         />
       )}
 

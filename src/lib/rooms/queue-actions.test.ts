@@ -36,6 +36,8 @@ const mocks = vi.hoisted(() => ({
   cookies: new Map<string, { value: string }>(),
   /** Quem está logado; o padrão é o host, mas o autor do pedido também entra. */
   user: "00000000-0000-0000-0000-000000000001",
+  /** Sessão anônima? (a recusa da pulseira muda a mensagem para o anônimo). */
+  anonymous: false,
   client: null as unknown,
 }));
 
@@ -53,8 +55,14 @@ function installSupabase() {
   mocks.log.length = 0;
   mocks.ins.length = 0;
   mocks.user = HOST;
+  mocks.anonymous = false;
   mocks.client = {
-    auth: { getUser: async () => ({ data: { user: { id: mocks.user } }, error: null }) },
+    auth: {
+      getUser: async () => ({
+        data: { user: { id: mocks.user, is_anonymous: mocks.anonymous } },
+        error: null,
+      }),
+    },
     from(table: string) {
       let mode: "read" | "write" = "read";
       let selected = "";
@@ -206,6 +214,69 @@ describe("addSongToQueueAction", () => {
     });
     expect(mocks.log.map((entry) => entry.select)).not.toContain("queue_items");
     expect(mocks.revalidate).toEqual([]);
+  });
+
+  it("bar em modo pulseira sem a pulseira ativa é recusado com PULSEIRA_REQUIRED", async () => {
+    mocks.user = GUEST;
+    installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+    dentroDoRaio();
+    entryState({
+      status: "approved",
+      fora_do_raio: false,
+      pulseira_exigida: true,
+      tem_pulseira: false,
+    });
+
+    const result = await addSongToQueueAction(SONG);
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.stringContaining("pulseira"),
+      code: "PULSEIRA_REQUIRED",
+    });
+    // A recusa acontece ANTES do insert — não há linha fantasma na fila.
+    expect(mocks.log.map((entry) => entry.select)).not.toContain("queue_items");
+  });
+
+  it("o anônimo sem pulseira lê o caminho de criar conta", async () => {
+    mocks.user = GUEST;
+    mocks.anonymous = true;
+    installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+    dentroDoRaio();
+    entryState({
+      status: "approved",
+      fora_do_raio: false,
+      pulseira_exigida: true,
+      tem_pulseira: false,
+    });
+
+    const result = await addSongToQueueAction(SONG);
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.stringContaining("Crie uma conta"),
+      code: "PULSEIRA_REQUIRED",
+    });
+  });
+
+  it("bar em modo pulseira com a pulseira ativa canta normalmente", async () => {
+    mocks.user = GUEST;
+    installRoom({ latitude: 0, longitude: 0, raio_permitido_metros: 500 });
+    dentroDoRaio();
+    entryState({
+      status: "approved",
+      fora_do_raio: false,
+      pulseira_exigida: true,
+      tem_pulseira: true,
+    });
+
+    const result = await addSongToQueueAction(SONG);
+
+    expect(result).toEqual({
+      ok: true,
+      item: { status: "pending", position: 1 },
+      replaced: null,
+    });
   });
 
   it("quem nunca entrou recebe a mensagem de membro, não a de espectador", async () => {

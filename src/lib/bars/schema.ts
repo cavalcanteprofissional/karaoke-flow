@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { MESA_MAX, RAIO_MAX_METROS, RAIO_MIN_METROS, RAIO_PADRAO_METROS } from "@/types/bar";
+import {
+  MESA_MAX,
+  PULSEIRA_LOTE_MAX,
+  RAIO_MAX_METROS,
+  RAIO_MIN_METROS,
+  RAIO_PADRAO_METROS,
+} from "@/types/bar";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 
 export const mesaNumeroSchema = z
@@ -84,6 +90,12 @@ export const createBarSchema = z
         .regex(/^[A-Z0-9]+$/, "Use apenas letras e números, sem acentos ou espaços.")
         .optional()
     ),
+    /**
+     * Fase 18: o bar nasce com ou sem pulseira. O switch é obrigatório na tela
+     * (sempre presente no submit), então o default cobre só chamadas
+     * programáticas — `false` é o comportamento de sempre.
+     */
+    pulseiras_ativadas: z.boolean().default(false),
   })
   .refine((v) => (v.latitude === null) === (v.longitude === null), {
     message: "Localização incompleta: informe latitude e longitude juntas.",
@@ -115,3 +127,64 @@ export const createRoomSchema = z.object({
 });
 
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
+
+/**
+ * Fase 18 — pulseira. Os códigos nascem em lote (1–100, a RPC repete a faixa) e
+ * as faixas de valor são dia da semana + janela HH:MM.
+ */
+export const pulseiraToggleSchema = z.object({
+  bar_id: z.string().uuid("Bar inválido."),
+  ativadas: z.boolean(),
+});
+
+export const gerarPulseirasSchema = z.object({
+  bar_id: z.string().uuid("Bar inválido."),
+  qtd: z.coerce
+    .number({ message: "Quantidade inválida." })
+    .int("A quantidade deve ser inteira.")
+    .min(1, "Gere ao menos 1 pulseira.")
+    .max(PULSEIRA_LOTE_MAX, `O lote aceita até ${PULSEIRA_LOTE_MAX} pulseiras.`)
+    .default(10),
+});
+
+const horaSchema = z
+  .string()
+  .trim()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use um horário no formato HH:MM.");
+
+export const precoPulseiraSchema = z
+  .object({
+    bar_id: z.string().uuid("Bar inválido."),
+    dia_semana: z.coerce
+      .number({ message: "Dia inválido." })
+      .int()
+      .min(0, "Dia inválido.")
+      .max(6, "Dia inválido."),
+    inicio: horaSchema,
+    fim: horaSchema,
+    preco_centavos: z.coerce
+      .number({ message: "Informe o valor." })
+      .int("O valor deve ser em centavos inteiros.")
+      .min(0, "O valor não pode ser negativo.")
+      .max(9_999_99, "Valor muito alto."),
+  })
+  .refine((v) => v.inicio < v.fim, {
+    message: "O fim da faixa precisa ser depois do início.",
+    path: ["fim"],
+  });
+
+export const removerPrecoPulseiraSchema = z.object({
+  bar_id: z.string().uuid("Bar inválido."),
+  dia_semana: z.coerce.number().int().min(0).max(6),
+  inicio: horaSchema,
+});
+
+export const resgatarPulseiraSchema = z.object({
+  bar_id: z.string().uuid("Bar inválido."),
+  codigo: z
+    .string()
+    .trim()
+    .min(3, "Digite o código da pulseira.")
+    .max(12, "Código inválido.")
+    .transform((value) => value.toUpperCase()),
+});

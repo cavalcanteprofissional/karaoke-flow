@@ -59,7 +59,8 @@ begin
   perform set_config('request.jwt.claim.sub', v_bru::text, true);
   v_erro := null;
   begin
-    select * into v_rec from public.create_bar('Smoke 16', 'Fortaleza', '', 11);
+    select * into v_rec from public.create_bar('Smoke 16', 'Fortaleza', '', 11,
+      p_pulseiras_ativadas => false);
   exception when others then
     v_erro := sqlerrm;
   end;
@@ -70,7 +71,8 @@ begin
 
   -- 02 create_bar com 10 cria o bar e as 10 mesas.
   select * into v_rec
-    from public.create_bar('Smoke Mesas', 'Fortaleza', '', 10, null, null, null, 500, 'SMKMES1');
+    from public.create_bar('Smoke Mesas', 'Fortaleza', '', 10, null, null, null, 500, 'SMKMES1',
+      p_pulseiras_ativadas => false);
   v_bar := v_rec.bar_id;
   v_room := v_rec.room_id;
   v_room_code := v_rec.room_code;

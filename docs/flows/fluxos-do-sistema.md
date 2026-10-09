@@ -272,7 +272,7 @@ As configurações saíram de `/salas/[codigo]` (que virou a **tela ao vivo**) e
 | `/salas/[codigo]/player` | `PlaybackControls`, `QueueList`, `PendingEntries` (só com `entry_mode = 'approval'`) e, em sala **sem bar**, `YoutubeSettingsCard` | `rooms.host_id === user.id` → senão `redirect("/salas/[codigo]")` |
 | `/salas/[codigo]/sala` | `RoomBehaviorCard`, Cartaz/QR (`BarQr` + `MesaQrDialog`), `MesasBarCard`, `RoomOccupancyCard`, `RoomCodeCard` | idem |
 | `/bar/[codigo]` | `PresenceGateInfo` + um `YoutubeSettingsCard` por sala (`rooms_public` do bar) | `bars.host_id === user.id` → senão `redirect("/dashboard")`; **`/bar` entrou em `PROTECTED_PREFIXES`** no `proxy.ts` (sem sessão nem chega) |
-| `/salas/[codigo]/pulseiras` | placeholder esmaecido (Fase 18) | idem da sala |
+| `/salas/[codigo]/pulseiras` | switch mestre + `PulseiraCodesCard` (lote/QR) + `PulseiraPricesCard` (valores por dia/hora) — Fase 18, ver §2.5 | idem da sala |
 
 Por que o guard é na página e não no RLS: `rooms_public` é legível por qualquer autenticado (é a visão sem segredos da auditoria de Fase 8c) e `bars` também tem `SELECT` amplo — a autorização de **ver a configuração** é decisão de UI e mora no servidor da página. Os **segredos** continuam atrás de RPC host-only (`admin_get_room_player_token`, `admin_get_room_youtube_api_key`), que rejeitam não-dono sozinhas.
 
@@ -290,6 +290,44 @@ flowchart TD
 **Revalidação:** as actions passaram a revalidar as rotas novas junto da sala — `updateRoomSettingsAction` → `/salas/[codigo]/sala`; `closeRoomAction`/`reopenRoomAction` → `/salas/[codigo]/player`; `updateBarMesasAction` → `/salas/[codigo]/sala` (QR e ocupação mudam junto); `updateBarRadiusAction` e as actions de chave/OAuth do YouTube → `/bar/[codigo]`.
 
 **O host também pede música:** `QueueList` parou de esconder o link com `!isHost` — o que decide é a prop `canRequest`, a mesma resposta de `canRequestSongs` que a tela já lê. O banco já isentava o dono **na própria sala** (trigger `20261004000042`), então a mudança é só de UI: nas salas onde ele não é host ele é participante comum, com geolocalização, aprovação e música ativa por vez. O atalho de configuração do `SongSearch` passou a apontar para `/bar/<código>` (com `barCode` lido pela página de busca) e, em sala sem bar, para `/salas/<código>/player`.
+
+### 2.5 Pulseira — o ingresso de uso único (Fase 18 — 2026-10-08, migration `20261008000002`)
+
+A pulseira é **modo do bar** e o gate de cantar mora no **banco** (mesma escola do `KF001`: a UI só avisa). Duas RPCs escrevem (host), uma destrava (participante) e um trigger barra (todos).
+
+**Tabelas novas** (`pulseiras_codigos`, `pulseiras_acessos`, `pulseiras_precos`), todas com `bar_id` (multi-tenancy) e RLS:
+
+- `pulseiras_codigos` — `codigo` (6 chars, alfabeto `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — sem I/O/1/0), `expira_em` (**24h**), `usado_em` (**perpetua**: não há reset), coluna `qtd_codigos` e blob de códigos no pacote (o PGRST devolve ao gerador). **RLS só `SELECT` para o dono do bar** — o código é segredo de balcão; 1ª linha do smoke prova isso.
+- `pulseiras_acessos` — **um por `(bar_id, user_id)`** com `resgatado_em`, `acesso_ate` (**24h**), `preco_centavos` (**congelado no resgate**) e obrigatório `codigo_usado`.
+- `pulseiras_precos` — faixas por **dia da semana (0=domingo…6=sábado)** + `hora_inicio`/`hora_fim` + `preco_centavos`; **sem sobreposição** por bar (`EXCLUDE USING GIST` com `tsrange` — **`timerange` não existe no PostgreSQL**; a migration ancora as horas em `1970-01-01`). Começa **vazia** → sem faixa, não há cartaz e resgatar não cobra.
+
+**RPCs:**
+
+| RPC | Papel | Notas |
+| --- | --- | --- |
+| `gerar_pulseiras(bar_id, qtd, rotulos)` | host-only | gera **1–100** por lote (default 10) como **um INSERT** com unnest; `expira_em = agora + '24 hours'` nasce na geração |
+| `resgatar_pulseira(bar_id, codigo)` | autenticado | `FOR UPDATE` no código (serializa dois resgates), valida → grava acesso com `preco_vigente` congelado; recusas: `UNAUTHENTICATED`, `ANONYMOUS` (**sem queimar o código**), `PULSEIRA_INATIVA`, `JA_TEM_ACESSO` (traz `acesso_ate`), `CODIGO_INVALIDO` (inclui vazio), `CODIGO_USADO`; acesso **expirado renova** (`ON CONFLICT (bar_id, user_id) DO UPDATE WHERE pulseiras_acessos.acesso_ate <= now()`) |
+| `preco_vigente(p_bar_id)` | leitura pública p/ autenticado | calcula a faixa de **agora** em `America/Sao_Paulo` (`hora_local = now() at time zone 'America/Sao_Paulo'`); desempata pela faixa que começa mais tarde; retorna `{ preco_centavos, inicio, fim }` ou `null` |
+
+**O gate** — trigger `queue_items_exige_pulseira` (`BEFORE INSERT` em `queue_items`):
+
+- bar com `pulseiras_ativadas = false` → **devolve o insert ao normal** (nenhum custo de performance na sala sem o recurso);
+- bar ligado → quem **não tem** acesso vigente (`acesso_ate > now()`) recebe `KF002` (exceto `raise notice` KF001-style); **host da própria sala isento** e **`auth.uid()` nulo** (service role/seed) passam direto;
+- `member_entry_state` devolve `pulseira_exigida`/`tem_pulseira` e `get_entry_preview` ganhou `pulseiras_ativadas` — a preview, não o RLS de `bars`, é o que o `/entrar` consulta para montar o cartaz.
+
+**Duas armadilhas do Postgres que a migration precisou contornar** (registradas também no `TODO.md`): `create or replace` não muda o retorno de função existente → `drop function` de `get_entry_preview` antes da recriação (`42P13`); e parâmetro sem default não pode vir depois de um com default → `create_bar` passou a exigir **os 10 argumentos** (sem defaults; o app passa todos por nome).
+
+```mermaid
+flowchart TD
+    A["/salas/&lt;código&gt;/pulseiras (host)"] -->|"switch ON"| B["gerar_pulseiras<br/>1–100 códigos · 24h"]
+    B --> C["folha de QR → /entrar?pulseira=…"]
+    C -->|"escaneia/digita no /entrar"| D["resgatar_pulseira<br/>valida código via FOR UPDATE"]
+    D -->|"preço de hoje (preco_vigente)"| E["pulseiras_acessos<br/>24h · preço congelado"]
+    E --> F["pedir música"]
+    F --> G{trigger KF002<br/>acesso vigente?}
+    G -->|não| H["recusa ♪ queue_items"]
+    G -->|sim / host isento / uid nulo| I["INSERT normal"]
+```
 
 ---
 

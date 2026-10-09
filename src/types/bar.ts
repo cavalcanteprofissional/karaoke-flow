@@ -12,8 +12,60 @@ export type Bar = {
   latitude: number | null;
   longitude: number | null;
   raio_permitido_metros: number;
+  /** Interruptor mestre da pulseira (Fase 18) — herdado pelo `get_entry_preview`. */
+  pulseiras_ativadas: boolean;
   criado_em: string;
 };
+
+/**
+ * Faixa de valor da pulseira (`pulseiras_precos`): dia da semana e janela de
+ * horário em que vale (intervalo semiaberto [início, fim)). O cartaz respeita
+ * o fuso de São Paulo (`America/Sao_Paulo`) na hora de dizer "hoje".
+ */
+export type PulseiraPreco = {
+  id: string;
+  bar_id: string;
+  /** 0=domingo … 6=sábado (mesmo `dow` do `extract`). */
+  dia_semana: number;
+  hora_inicio: string;
+  hora_fim: string;
+  preco_centavos: number;
+};
+
+/** Linha crua de `pulseiras_codigos` — o que a tela do host lista. */
+export type PulseiraCodeRow = {
+  id: string;
+  bar_id: string;
+  codigo: string;
+  criado_em: string;
+  expira_em: string;
+  usado_por: string | null;
+  usado_em: string | null;
+};
+
+/** O código impresso está: disponível para usar, já usado (morto) ou vencido. */
+export type PulseiraStatus = "disponivel" | "usado" | "expirado";
+
+/** Teto do lote por clique (mesmo check da RPC `gerar_pulseiras`). */
+export const PULSEIRA_LOTE_MAX = 100;
+/** Quantidade que o host pede por padrão. */
+export const PULSEIRA_LOTE_PADRAO = 10;
+/** Validade do código E do acesso resgatado (nascem juntos, 24h). */
+export const PULSEIRA_DURACAO_HORAS = 24;
+
+/**
+ * Faixa de valores é um CARTÁVEL (decisão da Fase 18): começando vazia, o
+ * resgate funciona sem cobrança. Referência para a UI marcar "hoje".
+ */
+export const DIAS_SEMANA: readonly string[] = [
+  "Domingo",
+  "Segunda",
+  "Terça",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sábado",
+];
 
 /** Mesa = etiqueta do bar (1..N), sem função além de identificar. */
 export type Mesa = {
@@ -37,6 +89,8 @@ export type EntryBarPreview = {
   bar_latitude: number | null;
   bar_longitude: number | null;
   bar_raio_permitido_metros: number;
+  /** Interruptor mestre da pulseira (Fase 18) — herdado pelo `get_entry_preview`. */
+  pulseiras_ativadas: boolean;
   room_id: string;
   room_code: string;
   host_id: string;

@@ -11,6 +11,7 @@ import { getEntryPreviewAction, getMyEntryRequestsAction } from "@/lib/bars/acti
 import { needsLocationConsent } from "@/lib/bars/geo";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRoomCode } from "@/lib/rooms/utils";
+import type { PulseiraPreco } from "@/types/bar";
 
 type EnterPageProps = {
   searchParams: Promise<Partial<Record<string, string | string[]>>>;
@@ -21,6 +22,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
   const rawBar = firstParam(params.bar);
   const rawCode = firstParam(params.code);
   const rawMesa = firstParam(params.mesa);
+  const rawPulseira = firstParam(params.pulseira);
 
   const code = rawBar ?? rawCode;
   const normalized = code ? normalizeRoomCode(code) : "";
@@ -51,6 +53,15 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
     }
 
     const isAnonymous = user?.is_anonymous ?? user?.app_metadata?.is_anonymous === true;
+
+    // Cartaz de valores (Fase 18): a policy de `pulseiras_precos` é pública
+    // para qualquer `authenticated`; anon/visitante vê uma leitura vazia, e a
+    // tela cobre com "sem faixa" naturalmente.
+    const { data: precos } = await supabase
+      .from("pulseiras_precos")
+      .select("*")
+      .eq("bar_id", result.preview.bar_id);
+    const priceRows = (precos ?? []) as PulseiraPreco[];
 
     // Código de sala puro (`?code=`/digitado): entrada DIRETA na sala, sem
     // mesa — a mesa é escolhida depois, dentro da sala. A mutação (`join_room`)
@@ -114,6 +125,9 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
             requestedMesa={result.mesa ?? null}
             membership={result.membership}
             presence={result.presence}
+            precos={priceRows}
+            initialPulseira={rawPulseira}
+            isAnonymous={isAnonymous}
           />
         )}
         <div className="border-border rounded-xl border border-dashed p-4">

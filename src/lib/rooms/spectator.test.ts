@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   canPickMesa,
   canRequestSongs,
+  pulseiraBarrada,
+  PULSEIRA_ANON_QUEUE_NOTICE,
+  PULSEIRA_QUEUE_NOTICE,
   SPECTATOR_QUEUE_NOTICE,
 } from "@/lib/rooms/spectator";
 import type { MemberEntryState } from "@/types/room";
@@ -15,6 +18,9 @@ function membro(over: Partial<MemberEntryState> = {}): MemberEntryState {
     approved_at: "2026-10-03T12:00:00.000Z",
     fora_do_raio: false,
     distancia_m: 40,
+    // Casa padrão: pulseira desligada — o membro canta.
+    pulseira_exigida: false,
+    tem_pulseira: false,
     ...over,
   };
 }
@@ -80,5 +86,58 @@ describe("regra do espectador", () => {
   it("o aviso do espectador explica a regra, e não a ausência do botão", () => {
     expect(SPECTATOR_QUEUE_NOTICE).toMatch(/fora do raio/i);
     expect(SPECTATOR_QUEUE_NOTICE).toMatch(/não para pedir música/i);
+  });
+});
+
+describe("regra da pulseira (Fase 18)", () => {
+  it("o host é isento mesmo com a casa usando pulseira", () => {
+    const regra = {
+      isHost: true,
+      membership: membro({ pulseira_exigida: true }),
+    };
+    expect(pulseiraBarrada(regra)).toBe(false);
+    expect(canRequestSongs(regra)).toBe(true);
+  });
+
+  it("membro aprovado sem pulseira é barrado só no pedido — mesa continua", () => {
+    const regra = {
+      isHost: false,
+      membership: membro({ pulseira_exigida: true, tem_pulseira: false }),
+    };
+    expect(pulseiraBarrada(regra)).toBe(true);
+    expect(canRequestSongs(regra)).toBe(false);
+    // A pulseira decide o CANTAR, não o assento: quem parou nela escolhe mesa.
+    expect(canPickMesa(regra)).toBe(true);
+  });
+
+  it("membro com a pulseira ativa canta normalmente", () => {
+    const regra = {
+      isHost: false,
+      membership: membro({ pulseira_exigida: true, tem_pulseira: true }),
+    };
+    expect(pulseiraBarrada(regra)).toBe(false);
+    expect(canRequestSongs(regra)).toBe(true);
+  });
+
+  it("o espectador também não canta — e a mensagem dele tem precedência", () => {
+    const regra = {
+      isHost: false,
+      membership: membro({
+        fora_do_raio: true,
+        mesa_numero: null,
+        pulseira_exigida: true,
+      }),
+    };
+    // `pulseiraBarrada` exige estar DENTRO do raio: o espectador tem causa
+    // própria (não canta E não escolhe mesa), e ela não se mistura com a da
+    // pulseira — senão a tela trocaria a mensagem certa pela errada.
+    expect(pulseiraBarrada(regra)).toBe(false);
+    expect(canRequestSongs(regra)).toBe(false);
+  });
+
+  it("mensagens: a da casa orienta o balcão/QR; a do anônimo, criar conta", () => {
+    expect(PULSEIRA_QUEUE_NOTICE).toMatch(/pulseira/i);
+    expect(PULSEIRA_QUEUE_NOTICE).toMatch(/balcão/i);
+    expect(PULSEIRA_ANON_QUEUE_NOTICE).toMatch(/crie uma conta/i);
   });
 });

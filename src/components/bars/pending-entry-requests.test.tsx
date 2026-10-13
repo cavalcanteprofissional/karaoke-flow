@@ -12,7 +12,15 @@ const mocks = vi.hoisted(() => {
     return cancelEntryRequestActionMock();
   };
   const toast = { success: vi.fn(), error: vi.fn() };
-  return { router, state, cancelEntryRequestAction, cancelEntryRequestActionMock, toast };
+  const announceMembersChange = vi.fn();
+  return {
+    router,
+    state,
+    cancelEntryRequestAction,
+    cancelEntryRequestActionMock,
+    announceMembersChange,
+    toast,
+  };
 });
 
 vi.mock("next/navigation", () => ({
@@ -28,6 +36,11 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/lib/rooms/actions", () => ({
   cancelEntryRequestAction: (roomId: string) => mocks.cancelEntryRequestAction(roomId),
+}));
+
+vi.mock("@/lib/rooms/member-channel", () => ({
+  announceMembersChange: (...args: unknown[]) =>
+    mocks.announceMembersChange(...args) as unknown,
 }));
 
 import { PendingEntryRequests } from "./pending-entry-requests";
@@ -59,6 +72,7 @@ describe("PendingEntryRequests", () => {
     mocks.state.lastCancelledRoomId = undefined;
     mocks.cancelEntryRequestActionMock.mockClear();
     mocks.cancelEntryRequestActionMock.mockResolvedValue({ ok: true });
+    mocks.announceMembersChange.mockClear();
     mocks.toast.success.mockClear();
     mocks.toast.error.mockClear();
   });
@@ -101,6 +115,8 @@ describe("PendingEntryRequests", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Cancelar" })[1]);
 
     await waitFor(() => expect(mocks.state.lastCancelledRoomId).toBe("room-2"));
+    // O pedido sai de `room_members`: o host é avisado pelo broadcast.
+    expect(mocks.announceMembersChange).toHaveBeenCalledWith("room-2");
     expect(mocks.router.refresh).toHaveBeenCalled();
     expect(mocks.toast.success).toHaveBeenCalledWith("Pedido cancelado.");
     confirmSpy.mockRestore();
@@ -121,6 +137,7 @@ describe("PendingEntryRequests", () => {
         "Você não tem nenhum pedido aguardando aprovação."
       )
     );
+    expect(mocks.announceMembersChange).not.toHaveBeenCalled();
     expect(mocks.router.refresh).not.toHaveBeenCalled();
     expect(screen.getByText("Bar da Esquina")).toBeInTheDocument();
     confirmSpy.mockRestore();

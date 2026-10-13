@@ -103,6 +103,10 @@ vi.mock("@/lib/rooms/room-channel", () => ({
   ) => {
     const unsubscribe = vi.fn();
     mocks.state.queueSubscribe.push({ roomCode, onChange, onStatus, unsubscribe });
+    // O canal real avisa `SUBSCRIBED` quando sobe — e é esse callback que dispara
+    // a primeira leitura (o `fetchItems` saiu do corpo do efeito para não violar
+    // `react-hooks/set-state-in-effect`; ver o comentário em `queue-list.tsx`).
+    onStatus?.("SUBSCRIBED");
     return unsubscribe;
   },
   announceQueueChange: (roomCode: string) =>
@@ -323,16 +327,15 @@ describe("QueueList — feedback por estado (Bloco E)", () => {
     expect(await screen.findByText(/A fila está vazia/)).toBeInTheDocument();
   });
 
-  it("recarrega quando o realtime avisa mudança na fila", async () => {
+  it("não abre mais canal de postgres_changes na fila (só broadcast + poll)", async () => {
+    // Regressão de 2026-10-13: o `postgres_changes` em `queue_items` custava uma
+    // mensagem de realtime por aparelho a cada mudança de linha. A tela agora
+    // depende só do broadcast de quem mutou e do poll de 10s.
     renderList();
     await screen.findByText("Evidências");
-    expect(mocks.state.realtimeHandler).toBeTypeOf("function");
 
-    mocks.state.items = [item({ status: "approved" })];
-    fireEvent.click(document.body); // qualquer evento após o handler estar registrado
-    mocks.state.realtimeHandler?.();
-
-    await waitFor(() => expect(screen.getByText("na fila")).toBeInTheDocument());
+    expect(mocks.state.realtimeHandler).toBeUndefined();
+    expect(mocks.state.queueSubscribe).toHaveLength(1);
   });
 });
 
@@ -527,7 +530,7 @@ describe("QueueList — trocar música (Bloco D)", () => {
  * realtime), poll de 10s e relê quando a tela volta a ficar visível.
  */
 describe("QueueList — a lista volta a atualizar sozinha (2026-09-27)", () => {
-  it("assina o canal da sala, não só o postgres_changes", async () => {
+  it("assina o canal da sala por broadcast (a camada rápida da fila)", async () => {
     renderList();
     await screen.findByText("Evidências");
 
@@ -640,8 +643,15 @@ describe("QueueList — o espectador que entrou fora do raio", () => {
 
   it("não oferece o pedido de música com a fila vazia (o segundo ponto do vazamento)", async () => {
     mocks.state.items = [];
-    renderList({ isHost: false, currentUserId: "user-9", canRequest: false, initial: [] });
-    await waitFor(() => expect(screen.getByText(/Nada tocando agora/i)).toBeInTheDocument());
+    renderList({
+      isHost: false,
+      currentUserId: "user-9",
+      canRequest: false,
+      initial: [],
+    });
+    await waitFor(() =>
+      expect(screen.getByText(/Nada tocando agora/i)).toBeInTheDocument()
+    );
 
     expect(botaoPedir()).toHaveLength(0);
     expect(screen.queryByText(/peça a primeira música/i)).toBeNull();
@@ -672,7 +682,9 @@ describe("QueueList — o espectador que entrou fora do raio", () => {
   it("quem está dentro do raio continua com o pedido nos dois lugares", async () => {
     mocks.state.items = [];
     renderList({ isHost: false, currentUserId: "user-9", canRequest: true, initial: [] });
-    await waitFor(() => expect(screen.getByText(/peça a primeira música/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/peça a primeira música/i)).toBeInTheDocument()
+    );
 
     // Cabeçalho + estado vazio: era exatamente esse o vazamento do espectador.
     expect(botaoPedir()).toHaveLength(2);
@@ -684,7 +696,9 @@ describe("QueueList — o host também pede música (Fase 17)", () => {
   it("vê o 'Pedir música' no cabeçalho e com a fila vazia", async () => {
     mocks.state.items = [];
     renderList({ isHost: true, canRequest: true, initial: [] });
-    await waitFor(() => expect(screen.getByText(/peça a primeira música/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/peça a primeira música/i)).toBeInTheDocument()
+    );
 
     expect(screen.getAllByRole("link", { name: /Pedir música/i })).toHaveLength(2);
   });

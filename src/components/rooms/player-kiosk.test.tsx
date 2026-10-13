@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   releaseCurrentItemAction: vi.fn(),
   subscribeToPlaybackChanges: vi.fn(),
   announce: vi.fn(),
+  announceQueue: vi.fn(),
 }));
 
 vi.mock("@/lib/rooms/playback-actions", () => ({
@@ -32,6 +33,13 @@ vi.mock("@/lib/rooms/player-channel", () => ({
   subscribeToPlaybackChanges: (...args: unknown[]) =>
     mocks.subscribeToPlaybackChanges(...args) as () => void,
   announcePlaybackChange: (...args: unknown[]) => mocks.announce(...args) as unknown,
+}));
+
+// O quiosque avisa a FILA (não só o playback) depois do claim/release: é o que
+// destrava o pedido de quem espera a música acabar, agora que o
+// `postgres_changes` de `queue_items` saiu do cliente (2026-10-13).
+vi.mock("@/lib/rooms/room-channel", () => ({
+  announceQueueChange: (...args: unknown[]) => mocks.announceQueue(...args) as unknown,
 }));
 
 import { resetPlayerArmInMemory } from "@/lib/rooms/player-arm";
@@ -146,10 +154,8 @@ async function renderKiosk(
 
 /** O toque do dono da TV no botão do gate. */
 function armPlayer() {
-  const button = screen
-    .queryAllByRole("button", { name: /Toque ou pressione OK/ })[0] as
-    | HTMLElement
-    | undefined;
+  const button = screen.queryAllByRole("button", { name: /Toque ou pressione OK/ })[0] as
+    HTMLElement | undefined;
   if (!button) return;
   act(() => {
     fireEvent.click(button);
@@ -277,6 +283,23 @@ describe("PlayerKiosk — tela da TV", () => {
 
     // O id do item que terminou viaja junto: claim repetido é no-op no banco.
     expect(mocks.claimNextSongAction).toHaveBeenCalledWith(ROOM, TOKEN, CURRENT.id);
+  });
+
+  it("avisa a fila (broadcast) ao puxar a próxima — destrava o pedido de quem espera", async () => {
+    // Regressão de 2026-10-13: o `postgres_changes` de `queue_items` saiu do
+    // cliente. Sem este aviso, o celular de quem espera a música acabar só
+    // destravaria no poll de 10s.
+    await renderKiosk();
+
+    fireState(0);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.announceQueue).toHaveBeenCalledWith(ROOM);
   });
 
   it("no boot, sala ociosa com fila aprovada já pede a primeira", async () => {
@@ -826,6 +849,9 @@ describe("PlayerKiosk — toque de partida", () => {
     await waitFor(() =>
       expect(mocks.getPlayerStateAction).toHaveBeenCalledWith(ROOM, TOKEN)
     );
+    // O release devolve o item para `approved`: avisar a fila reabilita o pedido
+    // daquele cantor na tela dos celulares (o `postgres_changes` saiu).
+    await waitFor(() => expect(mocks.announceQueue).toHaveBeenCalledWith(ROOM));
   });
 
   it("'trancar TV' não falha quando a liberação não dá certo", async () => {

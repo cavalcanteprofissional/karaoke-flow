@@ -22,18 +22,15 @@ const USER_ID = "user-1";
 
 const mocks = vi.hoisted(() => {
   const state: {
-    songs: { id: string; title: string; status: string; position: number }[];
     /** Resposta da próxima leitura; `null` simula falha de banco. */
     read: { data: unknown[] | null; error: unknown };
-    postgresHandler?: () => void;
+    /** Handler do broadcast `queue-changed` — hoje o único caminho rápido. */
     broadcastHandler?: () => void;
-    subscribeCalls: number;
-    removeChannel: (...args: unknown[]) => unknown;
+    /** O `unsubscribe` devolvido pela assinatura, para provar o desmonte. */
+    unsubscribe: () => void;
   } = {
-    songs: [],
     read: { data: [], error: null },
-    subscribeCalls: 0,
-    removeChannel: vi.fn(),
+    unsubscribe: () => undefined,
   };
 
   const query: Record<string, unknown> = {
@@ -44,25 +41,10 @@ const mocks = vi.hoisted(() => {
       Promise.resolve(state.read).then(resolve),
   };
 
-  const channel = {
-    on: vi.fn((...args: unknown[]) => {
-      // `["postgres_changes", filtro, handler]`
-      if (args[0] === "postgres_changes") state.postgresHandler = args[2] as () => void;
-      return channel;
-    }),
-    subscribe: vi.fn((callback?: (status: string) => void) => {
-      state.subscribeCalls += 1;
-      // A API real chama o callback de status ao assinar — é assim que a fila faz
-      // a primeira leitura, e é por isso que o botão já abre certo na chegada.
-      callback?.("SUBSCRIBED");
-      return channel;
-    }),
-  };
-
+  // O hook não abre mais canal de `postgres_changes` (saiu em 2026-10-13): só o
+  // `from()` da leitura é exercitado pelo client.
   const supabase = {
     from: () => query,
-    channel: () => channel,
-    removeChannel: (...args: unknown[]) => state.removeChannel(...args),
   };
 
   return {
@@ -82,9 +64,11 @@ vi.mock("@/lib/rooms/room-channel", () => ({
     onChange: () => void,
     onStatus?: (status: string) => void
   ) => {
+    mocks.subscribeToQueueChanges(roomCode);
     mocks.state.broadcastHandler = onChange;
     onStatus?.("SUBSCRIBED");
-    return () => undefined;
+    mocks.state.unsubscribe = vi.fn();
+    return mocks.state.unsubscribe;
   },
 }));
 
@@ -111,9 +95,9 @@ const tocando: Song = { id: "item-1", title: "Evidências", status: "playing", p
 
 beforeEach(() => {
   mocks.state.read = { data: [tocando], error: null };
-  mocks.state.postgresHandler = undefined;
   mocks.state.broadcastHandler = undefined;
-  mocks.state.subscribeCalls = 0;
+  mocks.state.unsubscribe = () => undefined;
+  mocks.subscribeToQueueChanges.mockClear();
 });
 
 afterEach(() => {
@@ -131,15 +115,16 @@ describe("useOwnActiveSong — leitura ao vivo da música ativa", () => {
     expect(view()).toEqual({ playing: true, title: "Evidências" });
   });
 
-  it("destrava quando o postgres_changes traz a música como `played`", async () => {
+  it("destrava quando a TV avisa (por broadcast) que a música virou `played`", async () => {
     const { view } = renderView({ initial: { playing: true, title: "Evidências" } });
     expect(view()).toEqual({ playing: true, title: "Evidências" });
 
-    // A faixa acabou na TV: a trigger/assert mudou o status no banco e o evento
-    // chega antes de qualquer navegação.
+    // A faixa acabou na TV: o `claim_next_song` mexe na fila e o quiosque avisa
+    // por broadcast `queue-changed` (`player-kiosk.tsx`). O `postgres_changes` de
+    // `queue_items` saiu em 2026-10-13, então este é o caminho rápido.
     mocks.state.read = { data: [], error: null };
     await act(async () => {
-      mocks.state.postgresHandler?.();
+      mocks.state.broadcastHandler?.();
       await Promise.resolve();
     });
 
@@ -200,7 +185,7 @@ it("a música que está na fila (não tocando) continua sendo avisada, com o nom
 
     mocks.state.read = { data: null, error: { message: "boom" } };
     await act(async () => {
-      mocks.state.postgresHandler?.();
+      mocks.state.broadcastHandler?.();
       await Promise.resolve();
     });
 
@@ -213,14 +198,15 @@ it("a música que está na fila (não tocando) continua sendo avisada, com o nom
     const { view } = renderView({ isHost: true, initial: { playing: true, title: "X" } });
 
     expect(view()).toEqual({ playing: false, title: null });
-    expect(mocks.state.subscribeCalls).toBe(0);
+    expect(mocks.subscribeToQueueChanges).not.toHaveBeenCalled();
   });
 
-  it("desassina tudo ao desmontar", () => {
+  it("desassina o canal ao desmontar", () => {
     const { unmount } = renderView();
+    const unsubscribe = mocks.state.unsubscribe;
 
     unmount();
 
-    expect(mocks.state.removeChannel).toHaveBeenCalled();
+    expect(unsubscribe).toHaveBeenCalled();
   });
 });

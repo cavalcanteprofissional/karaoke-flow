@@ -24,6 +24,7 @@ import {
 import { EntryApprovalWait } from "@/components/bars/entry-approval-wait";
 import { enterRoomByCodeAction } from "@/lib/bars/actions";
 import { isOutsideBar, PRESENCE_VIEWER_NOTICE } from "@/lib/bars/geo";
+import { announceMembersChange } from "@/lib/rooms/member-channel";
 import type { PresenceDecision } from "@/lib/bars/geo";
 import type { EntryBarPreview } from "@/types/bar";
 import type { EntryMembership } from "@/types/room";
@@ -55,6 +56,8 @@ export function EnterRoomByCode({ code, preview, membership, presence }: EnterRo
     const result = await enterRoomByCodeAction(code);
     if (result.ok) {
       setStatus(result.membership.status);
+      // Entrar por código muda `room_members`: avisa o host (pedidos/ocupação).
+      void announceMembersChange(preview.room_id);
       return;
     }
     if (result.geoRequired) {
@@ -63,7 +66,7 @@ export function EnterRoomByCode({ code, preview, membership, presence }: EnterRo
     }
     setErrorMsg(result.error);
     setStatus("error");
-  }, [code, router]);
+  }, [code, preview.room_id, router]);
 
   useEffect(() => {
     if (membership) return;

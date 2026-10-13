@@ -16,9 +16,9 @@
  *   2. Realtime: rampa de conexões simultâneas (em que passo o canal falha);
  *   3. Realtime: latência de broadcast entre dois clientes (p50/p95/máx) — este é
  *      o termo dominante da latência "controller → TV";
- *   4. Realtime: custo de um `announceQueueChange` real (assinar + enviar +
- *      desassinar, a mesma sequência de `src/lib/rooms/room-channel.ts`), que é o
- *      que a action de fila paga depois de gravar no banco;
+ *   4. Realtime: custo de um `announceQueueChange` real (`channel.httpSend`, um
+ *      POST para o Realtime — a mesma sequência de `src/lib/rooms/room-channel.ts`
+ *      desde 2026-10-13), que é o que a action de fila paga depois de gravar;
  *   5. latência do caminho de escrita do app (UPDATE real pela Data API com sessão
  *      de host) — quantas idas e voltas o celular espera antes do aviso.
  *
@@ -31,19 +31,26 @@
  *
  * QUASE NADA DESTRUTIVO: as seções 1–4 são somente-leitura (SELECT e assinaturas
  * de canal). A seção 5 faz **uma** escrita, e ela é declarada: um `UPDATE` que não
- * muda status, posição nem conteúdo, mas cujo trigger `touch_updated_at` reescreve
- * `updated_at` para `now()` — a linha muda mesmo. É inevitável medir o caminho de
- * escrita pelo mesmo caminho que o app usa (Data API + sessão real de host, porque
- * a policy é host-only); rodar com `--no-write` pula a seção e a rodada vira
- * leitura pura. Nada é criado e nada é apagado em nenhum modo.
+ * muda status, posição nem conteúdo — e que desde 2026-10-13 é cancelado pelo
+ * trigger `touch_updated_at` (`new is not distinct from old`), então a linha não
+ * muda. É o round-trip da Data API que se mede (a policy é host-only); rodar com
+ * `--no-write` pula a seção e a rodada vira leitura pura. Nada é criado e nada é
+ * apagado em nenhum modo.
  * NÃO imprime segredos (nenhuma chave, senha ou token de player).
  *
  * Uso:
  *   npm run measure:limits
  *   npm run measure:limits -- --json          # também despeja os números em JSON
  *   npm run measure:limits -- --no-ramp       # pula a rampa de conexões
- *   npm run measure:limits -- --ramp-max 100  # teto da rampa (padrão 200)
+ *   npm run measure:limits -- --ramp-max 100  # teto da rampa (máx = 200 publicado)
  *   npm run measure:limits -- --no-write      # zero escrita no banco
+ *
+ * ATENÇÃO (a rampa abre conexões de verdade): cada passo mantém as conexões
+ * anteriores abertas, então a rampa chega a N WebSockets simultâneos no MESMO
+ * projeto. No plano free isso conta no relatório "Peak Connections" — foi o que
+ * inflou o pico de 776 em 01/out e estourou o teto de 200. O `--ramp-max` é
+ * limitado ao teto publicado justamente para o script não ser, ele mesmo, a
+ * origem de um novo estouro.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -321,6 +328,10 @@ const RAMP_PASSO_TIMEOUT_MS = 120_000;
 async function measureConnections(rampMax) {
   head(`Realtime — conexões simultâneas (teto ${rampMax})`);
   const topic = `probe-kf-limits-${Date.now()}`;
+  // O teto EFETIVO é o menor entre o pedido e o publicado: a rampa não existe
+  // para estourar o projeto, e sim para achar onde ele falha. Pedir além do teto
+  // publicado não mede nada novo (o canal já caiu antes) e só eleva o pico de
+  // conexões do dia no relatório do Realtime.
   const steps = [1, 10, 25, 50, 100, 200].filter((n) => n <= rampMax);
   const clientes = [];
   const rampa = [];
@@ -482,65 +493,54 @@ async function measureBroadcastLatency(amostras = 60) {
 // 4) Custo de um announceQueueChange (o que a action paga após gravar)
 // ---------------------------------------------------------------------------
 async function measureAnnounce(vezes = 10) {
-  head(`Realtime — custo de um aviso de fila (${vezes}×)`);
+  head(`Realtime — custo de um aviso de fila (${vezes}×, via httpSend/REST)`);
   const topic = `probe-kf-announce-${Date.now()}`;
+  // Mesma sequência de `announceQueueChange` (2026-10-13): criar client → criar
+  // canal → `httpSend` (POST) → remover canal. NÃO abre WebSocket nem espera
+  // `SUBSCRIBED`: era isso que fazia o aviso custar ~2 s antes. O que se mede
+  // aqui é o custo de um POST do celular do host depois de gravar no banco.
+  const supabase = createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const amostras = [];
-  const porEtapa = { criar: [], assinar: [], enviar: [], fechar: [] };
+  const porEtapa = { criarCanal: [], enviar: [], fechar: [] };
   for (let i = 0; i < vezes; i++) {
-    // Mesma sequência de `announceQueueChange`: criar client → assinar → enviar →
-    // desassinar. É o custo por mutação de fila, em todas as actions do host.
     const t0 = Date.now();
-    const supabase = createClient(url, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const channel = supabase.channel(topic);
     const t1 = Date.now();
-    porEtapa.criar.push(t1 - t0);
+    porEtapa.criarCanal.push(t1 - t0);
 
-    const c = await openChannel(supabase, topic);
-    if (!c.ok) {
-      line(`  (falhou na assinatura: ${c.error})`);
+    try {
+      await channel.httpSend("ping", { at: i });
+    } catch (e) {
+      line(`  (falhou no httpSend: ${e.message})`);
       break;
     }
     const t2 = Date.now();
-    porEtapa.assinar.push(t2 - t1);
+    porEtapa.enviar.push(t2 - t1);
 
-    await supabase
-      .channel(topic)
-      .send({ type: "broadcast", event: "ping", payload: { at: i } });
-    const t3 = Date.now();
-    porEtapa.enviar.push(t3 - t2);
-
-    await closeOne(c);
-    porEtapa.fechar.push(Date.now() - t3);
+    void supabase.removeChannel(channel);
+    porEtapa.fechar.push(Date.now() - t2);
     amostras.push(Date.now() - t0);
   }
   const st = stats(amostras);
   if (st) {
     line(
-      `p50 ${st.p50Ms} ms · p95 ${st.p95Ms} ms · máx ${st.maxMs} ms (criar + assinar + enviar + fechar)`
+      `p50 ${st.p50Ms} ms · p95 ${st.p95Ms} ms · máx ${st.maxMs} ms (canal + httpSend + fechar)`
     );
-    for (const etapa of ["criar", "assinar", "enviar", "fechar"]) {
+    for (const etapa of ["criarCanal", "enviar", "fechar"]) {
       const s = stats(porEtapa[etapa]);
       if (s) {
         line(
-          `  ${etapa === "enviar" ? "└" : "├"} ${etapa.padEnd(8)} p50 ${String(s.p50Ms).padStart(5)} ms · p95 ${s.p95Ms} ms`
+          `  ${etapa === "fechar" ? "└" : "├"} ${etapa.padEnd(11)} p50 ${String(s.p50Ms).padStart(5)} ms · p95 ${s.p95Ms} ms`
         );
       }
     }
     line(
       "→ é o que o celular do host paga DEPOIS de gravar no banco, em cada ação de fila."
     );
-    const semCanal = stats(porEtapa.criar);
-    const abertura = stats(porEtapa.assinar);
-    if (semCanal && abertura) {
-      const msAbertura = semCanal.p50Ms + abertura.p50Ms;
-      const parte = Math.round((msAbertura / st.p50Ms) * 100);
-      line(
-        `   ⚠ ${parte}% do custo é abrir a conexão (criar + assinar). O aviso pode sair por um`
-      );
-      line("     canal já vivo — o mesmo que a tela de quem ouve mantém aberto —");
-      line("     e cair para o custo de `enviar` (ordem de milissegundos).");
-    }
+    line("   Sem abrir WebSocket: o emissor não paga conexão, e o teto de conexões do");
+    line("   free tier não é consumido pelos avisos.");
   }
   results.aviso = {
     ...(st ?? { erro: "sem amostra" }),
@@ -587,11 +587,11 @@ async function measureWritePath() {
   }
 
   // A ÚNICA escrita do script, e ela é declarada: um `UPDATE` que não muda
-  // status/posição/nada de conteúdo, mas cujo trigger `touch_updated_at` reescreve
-  // `updated_at` para `now()` — ou seja, a linha muda de fato. Por isso o item
-  // acima é pulado com `--no-write`, e o rodapé não chama o script de
-  // "somente-leitura" sem ressalva. Precisa de sessão de host porque a policy de
-  // UPDATE é host-only — é esse round-trip que o celular espera.
+  // status/posição/nada de conteúdo. Desde 2026-10-13 o trigger `touch_updated_at`
+  // cancela esse no-op (`new is not distinct from old`) — a linha NÃO muda e
+  // nenhum evento de realtime sai. O que se mede é o round-trip da Data API com
+  // sessão de host (a policy de UPDATE é host-only), que é o que o celular espera.
+  // Com `--no-write` a seção é pulada e a rodada vira leitura pura.
   const amostras = [];
   for (let i = 0; i < 5; i++) {
     const t = Date.now();
@@ -626,7 +626,24 @@ async function main() {
   await measurePostgres();
 
   if (!hasFlag("--no-ramp")) {
-    await measureConnections(Number(argValue("--ramp-max", 200)));
+    const pedido = Number(
+      argValue("--ramp-max", LIMITES_PUBLICADOS_FREE.conexoesRealtimeSimultaneas)
+    );
+    const teto = LIMITES_PUBLICADOS_FREE.conexoesRealtimeSimultaneas;
+    const rampMax = Math.max(1, Math.min(pedido, teto));
+    if (Number.isFinite(pedido) && pedido > teto) {
+      line();
+      line(
+        `⚠ --ramp-max ${pedido} acima do teto publicado (${teto}): usando ${rampMax}.`
+      );
+      line("  O plano não entrega conexões acima do teto, e a rampa só serviria");
+      line("  para inflar o pico de conexões do projeto no relatório do Realtime.");
+    }
+    line();
+    line("⚠ A rampa abre WebSockets SIMULTÂNEOS de verdade (acumula os passos).");
+    line("  Em produção elas contam no relatório 'Peak Connections' — foi o que");
+    line("  inflou o pico de 01/out. Rode contra um projeto de teste quando puder.");
+    await measureConnections(rampMax);
   } else {
     line();
     line("(rampa de conexões pulada — --no-ramp)");
@@ -662,7 +679,7 @@ async function main() {
     line("(RODADA SEM ESCRITA — nenhuma seção mediu nada que gravasse no banco)");
   } else {
     line(
-      "(SEM ESCRITA, exceto o item 5: um UPDATE sem mudança de conteúdo, cujo trigger reescreve `updated_at` de 1 item da fila. Use --no-write para zero escrita.)"
+      "(SEM ESCRITA, exceto o item 5: um UPDATE sem mudança de conteúdo sobre 1 item da fila — no-op desde 2026-10-13, o trigger cancela a escrita. Use --no-write para zero escrita.)"
     );
   }
 }

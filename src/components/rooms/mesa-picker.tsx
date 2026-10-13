@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { MesaGrid } from "@/components/rooms/mesa-grid";
 import { pickMesaAction } from "@/lib/rooms/actions";
+import { announceMembersChange } from "@/lib/rooms/member-channel";
 
 type MesaPickerProps = {
   roomId: string;
@@ -40,6 +41,9 @@ export function MesaPicker({ roomId, quantidadeMesas }: MesaPickerProps) {
       toast.error(result.error ?? "Não foi possível salvar a mesa.");
       return;
     }
+    // Escolher mesa grava `mesa_numero` em `room_members`: o host vê a mudança
+    // no card de ocupação já na próxima releitura.
+    void announceMembersChange(roomId);
     router.refresh();
   }
 

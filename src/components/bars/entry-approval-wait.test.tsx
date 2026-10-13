@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => {
   const state: {
     membership: TestMembership | null;
     realtimeHandler?: () => void;
+    memberRoomId?: string;
+    memberUnsubscribed?: boolean;
     lastCancelRoomId?: string;
     lastStateRoomCode?: string;
   } = {
@@ -32,26 +34,28 @@ const mocks = vi.hoisted(() => {
     error: null,
   }));
 
-  const channel = {
-    on: vi.fn(),
-    subscribe: vi.fn(),
+  // O componente assina o broadcast da sala (`room-members:<roomId>`), não mais
+  // `postgres_changes`: o mock entrega o `onChange` e o `SUBSCRIBED` que dispara
+  // a primeira leitura.
+  const memberChannel = {
+    subscribeToMemberChanges: vi.fn(
+      (roomId: string, onChange: () => void, onStatus?: (status: string) => void) => {
+        state.memberRoomId = roomId;
+        state.realtimeHandler = onChange;
+        onStatus?.("SUBSCRIBED");
+        return () => {
+          state.memberUnsubscribed = true;
+        };
+      }
+    ),
+    announceMembersChange: vi.fn(async () => {}),
   };
-  channel.on.mockImplementation((...args: unknown[]) => {
-    state.realtimeHandler = args[2] as () => void;
-    return channel;
-  });
-  channel.subscribe.mockImplementation((callback: (status: string) => void) => {
-    callback("SUBSCRIBED");
-    return channel;
-  });
 
   const supabase = {
     auth: {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } } })),
     },
     from: vi.fn(() => query),
-    channel: vi.fn(() => channel),
-    removeChannel: vi.fn(),
   };
 
   const cancelEntryRequestActionMock = vi.fn(
@@ -76,7 +80,7 @@ const mocks = vi.hoisted(() => {
     router,
     state,
     query,
-    channel,
+    memberChannel,
     supabase,
     cancelEntryRequestAction,
     cancelEntryRequestActionMock,
@@ -99,6 +103,16 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => mocks.supabase,
+}));
+
+vi.mock("@/lib/rooms/member-channel", () => ({
+  subscribeToMemberChanges: (
+    roomId: string,
+    onChange: () => void,
+    onStatus?: (status: string) => void
+  ) => mocks.memberChannel.subscribeToMemberChanges(roomId, onChange, onStatus),
+  announceMembersChange: (roomId: string) =>
+    (mocks.memberChannel.announceMembersChange as (roomId: string) => unknown)(roomId),
 }));
 
 vi.mock("@/lib/rooms/actions", () => ({
@@ -126,6 +140,8 @@ describe("EntryApprovalWait", () => {
     mocks.router.push.mockClear();
     mocks.state.membership = { status: "pending", mesa_numero: 2 };
     mocks.state.realtimeHandler = undefined;
+    mocks.state.memberRoomId = undefined;
+    mocks.state.memberUnsubscribed = undefined;
     mocks.state.lastCancelRoomId = undefined;
     mocks.state.lastStateRoomCode = undefined;
     mocks.getEntryRequestStateActionMock.mockClear();
@@ -134,8 +150,8 @@ describe("EntryApprovalWait", () => {
     mocks.query.select.mockClear();
     mocks.query.eq.mockClear();
     mocks.supabase.from.mockClear();
-    mocks.supabase.channel.mockClear();
-    mocks.supabase.removeChannel.mockClear();
+    mocks.memberChannel.subscribeToMemberChanges.mockClear();
+    mocks.memberChannel.announceMembersChange.mockClear();
     mocks.cancelEntryRequestActionMock.mockClear();
     mocks.cancelEntryRequestActionMock.mockResolvedValue({ ok: true });
     mocks.toast.success.mockClear();
@@ -290,12 +306,18 @@ describe("EntryApprovalWait", () => {
     await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1));
   });
 
-  it("limpa o canal Realtime ao sair da tela", async () => {
+  it("assina o canal broadcast da sala e desliga ao sair da tela", async () => {
     const { unmount } = render(<EntryApprovalWait {...defaultProps} />);
-    await waitFor(() => expect(mocks.supabase.channel).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mocks.memberChannel.subscribeToMemberChanges).toHaveBeenCalledWith(
+        "room-1",
+        expect.any(Function),
+        expect.any(Function)
+      )
+    );
 
     unmount();
-    expect(mocks.supabase.removeChannel).toHaveBeenCalled();
+    expect(mocks.state.memberUnsubscribed).toBe(true);
   });
 
   it("cancela o pedido e volta para a entrada depois de confirmar", async () => {
@@ -309,6 +331,8 @@ describe("EntryApprovalWait", () => {
       expect(mocks.state.lastCancelRoomId).toBe("room-1");
       expect(mocks.router.replace).toHaveBeenCalledWith("/entrar?code=ABC123");
     });
+    // Cancelar tira a linha de `room_members`: o host tem que ser avisado.
+    expect(mocks.memberChannel.announceMembersChange).toHaveBeenCalledWith("room-1");
     // Cancelar não precisa de refresh: a Server Action já rodou e a tela de
     // entrada lê o estado do banco no render. O refresh aqui só brigava com o
     // replace pela navegação.

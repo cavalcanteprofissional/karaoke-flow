@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { decideEntryAction } from "@/lib/rooms/actions";
+import {
+  announceMembersChange,
+  subscribeToMemberChanges,
+} from "@/lib/rooms/member-channel";
 import { createClient } from "@/lib/supabase/client";
 
 export type PendingEntry = {
@@ -62,33 +66,41 @@ export function PendingEntries({ roomId, initial }: PendingEntriesProps) {
   }, [roomId]);
 
   useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`entries:${roomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "room_members",
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => load()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "room_members",
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => load()
-      )
-      .subscribe(() => load());
+    let active = true;
+    const run = () => {
+      if (active) void load();
+    };
+
+    const unsubscribe = subscribeToMemberChanges(roomId, run, (status) => {
+      // Primeira leitura quando o canal sobe — `load()` fora do corpo do efeito
+      // para não violar `react-hooks/set-state-in-effect`.
+      if (status === "SUBSCRIBED") run();
+    });
+
+    const poll = window.setInterval(() => {
+      // Aba oculta não paga poll; ao voltar, o `visibilitychange` relê na hora.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      run();
+    }, 10000);
+
+    const wake = () => run();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", wake);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", wake);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      active = false;
+      window.clearInterval(poll);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", wake);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", wake);
+      }
+      unsubscribe();
     };
   }, [roomId, load]);
 
@@ -101,6 +113,9 @@ export function PendingEntries({ roomId, initial }: PendingEntriesProps) {
       return;
     }
     setEntries((prev) => prev.filter((e) => e.user_id !== userId));
+    // Aprovar/rejeitar muda `room_members`: quem espera aprovação
+    // (`entry-approval-wait`) e o card de ocupação precisam reler agora.
+    void announceMembersChange(roomId);
   }
 
   return (

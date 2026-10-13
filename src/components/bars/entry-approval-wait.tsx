@@ -28,6 +28,10 @@ import {
 } from "@/components/ui/card";
 import { getEntryRequestStateAction } from "@/lib/bars/actions";
 import { cancelEntryRequestAction } from "@/lib/rooms/actions";
+import {
+  announceMembersChange,
+  subscribeToMemberChanges,
+} from "@/lib/rooms/member-channel";
 import { createClient } from "@/lib/supabase/client";
 import type { MemberStatus } from "@/types/room";
 
@@ -158,32 +162,41 @@ export function EntryApprovalWait({
       }
     };
 
-    const channel = supabase
-      .channel(`entry-approval:${roomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "room_members",
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => {
-          void reconcile();
-        }
-      )
-      .subscribe((subscriptionStatus) => {
+    const unsubscribe = subscribeToMemberChanges(
+      roomId,
+      () => void reconcile(),
+      (subscriptionStatus) => {
+        // A primeira leitura vem quando o canal sobe — o mesmo desenho do
+        // `PendingEntries`/`RoomOccupancyCard`: nada de `useEffect` separado.
         if (subscriptionStatus === "SUBSCRIBED") void reconcile();
-      });
+      }
+    );
 
     const poll = window.setInterval(() => {
+      // Aba oculta não paga poll. Ao voltar, o `visibilitychange` reconcilia na
+      // hora, então quem espera aprovação não fica preso ao intervalo de 8s.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void reconcile();
     }, 8000);
+
+    const wake = () => void reconcile();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", wake);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", wake);
+    }
 
     return () => {
       active = false;
       window.clearInterval(poll);
-      void supabase.removeChannel(channel);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", wake);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", wake);
+      }
+      unsubscribe();
     };
   }, [finish, roomCode, roomId, status]);
 
@@ -220,6 +233,9 @@ export function EntryApprovalWait({
       return;
     }
     toast.success("Pedido cancelado.");
+    // O host tem um card de pedidos (`pending-entries`) na tela da sala: sem o
+    // aviso, o pedido cancelado só sumiria de lá no poll ou num refresh.
+    void announceMembersChange(roomId);
     setStatus("cancelled");
     router.replace(backToEntry);
   }

@@ -155,56 +155,45 @@ export function QueueList({
   }, [roomId]);
 
   /**
-   * Por que três camadas (2026-09-27): a lista do participante parava de
-   * atualizar e nada explicava. `postgres_changes` depende da publicação
-   * `supabase_realtime` e da RLS no momento do evento (se qualquer um dos dois
-   * falhar, a assinatura sobe e não chega nada, sem erro); celular travado dorme
-   * o WebSocket; e o aviso de "a fila mudou" ia só para a TV, nunca para quem
-   * está na sala. Então: broadcast de quem mutou + poll de 10s + relê quando a
-   * tela volta a ficar visível. Cada camada é barata e vale a redundância
-   * porque o custo de uma lista parada é o participante achando que deu errado.
+   * Duas camadas — o `postgres_changes` saiu (2026-10-13). A lista do
+   * participante parava de atualizar e nada explicava, então a correção original
+   * tinha três camadas. O `postgres_changes` em `queue_items` saiu porque custava
+   * **uma mensagem Realtime por aparelho da sala a cada mudança de linha** — e a
+   * TV mexe na fila toda vez que puxa a próxima faixa — inflando o consumo do
+   * free tier sem cobrir nada que as outras duas camadas já não cubram. Sobram:
+   * broadcast de quem mutou (não depende de publicação nem de RLS) e poll de 10s
+   * + relê quando a tela volta a ficar visível. Cada camada é barata e vale a
+   * redundância porque o custo de uma lista parada é o participante achando que
+   * deu errado.
    */
   useEffect(() => {
-    // 1. `postgres_changes`: o caminho que já funcionava para o host.
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`queue-${roomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "queue_items",
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => {
-          void fetchItems();
-        }
-      )
-      .subscribe(() => {
-        void fetchItems();
-      });
-
-    // 2. Broadcast: quem mutou a fila avisa, sem depender de RLS/publicação.
+    // Broadcast: quem mutou a fila (o app ou a TV) avisa, sem depender de RLS/publicação.
     const unsubscribeBroadcast = subscribeToQueueChanges(
       roomCode,
       () => void fetchItems(),
       (status) => {
-        if (status !== "SUBSCRIBED") {
-          console.warn(
-            `[fila ${roomCode}] realtime da fila em ${status} — caindo no poll de ${POLL_MS / 1000}s.`
-          );
+        if (status === "SUBSCRIBED") {
+          // Primeira leitura quando o canal sobe — o mesmo gatilho que o antigo
+          // `postgres_changes` dava. Reconcilia o `initial` do servidor sem
+          // esperar o poll de 10s. (Chamada em callback de evento externo, não
+          // no corpo do efeito.)
+          void fetchItems();
+          return;
         }
+        console.warn(
+          `[fila ${roomCode}] realtime da fila em ${status} — caindo no poll de ${POLL_MS / 1000}s.`
+        );
       }
     );
 
-    // 3. Poll de segurança, só com a tela visível: TV e celular dormem.
+    // Poll de segurança, só com a tela visível: TV e celular dormem.
     const poll = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
       void fetchItems();
     }, POLL_MS);
 
-    // 4. O caso real do bar: a tela estava travada e o WS nunca acordou.
+    // O caso real do bar: a tela estava travada e o WS nunca acordou.
     const wake = () => {
       void fetchItems();
     };
@@ -226,7 +215,6 @@ export function QueueList({
         window.removeEventListener("focus", wake);
         window.removeEventListener("online", wake);
       }
-      void supabase.removeChannel(channel);
     };
   }, [roomId, roomCode, fetchItems]);
 
@@ -255,7 +243,8 @@ export function QueueList({
     // puxar a próxima) e os aparelhos da sala (a lista de quem está com o
     // celular na mão). Em paralelo, para não somar latência.
     await Promise.all([announcePlaybackChange(roomCode), announceQueueChange(roomCode)]);
-    // Reconcilia posição/status (o trigger `touch_updated_at` também dispara o realtime).
+    // Reconcilia posição/status localmente. O aviso para a sala (e para a TV) já
+    // saiu por broadcast acima; a lista não depende mais do `postgres_changes`.
     void fetchItems();
   }
 
@@ -332,7 +321,9 @@ export function QueueList({
     // O espectador não tem o botão: trocar aponta para a tela de solicitação, que
     // ele não acessa. Tirar a própria música continua liberado — retirar não é
     // pedir, e o item dele precisa poder sair da fila.
-    return canRequest && (mine || isHost) && ["pending", "approved"].includes(item.status);
+    return (
+      canRequest && (mine || isHost) && ["pending", "approved"].includes(item.status)
+    );
   }
 
   function replaceButton(item: QueueItem) {

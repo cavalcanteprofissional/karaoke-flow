@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { getPlayerStateAction, claimNextSongAction, releaseCurrentItemAction } from "@/lib/rooms/playback-actions";
 import { setPlayerArmed, usePlayerArmed } from "@/lib/rooms/player-arm";
 import { announcePlaybackChange, subscribeToPlaybackChanges } from "@/lib/rooms/player-channel";
+import { announceQueueChange } from "@/lib/rooms/room-channel";
 import {
   playerHeadline,
   playerPanel,
@@ -189,8 +190,14 @@ export function PlayerKiosk({
          * nada. Broadcast para o card reler já (caminho rápido) e `refresh`
          * para a TV não depender do broadcast voltar (caminho garantido). Os
          * dois são baratos: a TV já relê o banco a cada 5s.
+         *
+         * O claim também MEXE NA FILA (playing→played, pending→playing). Como o
+         * `postgres_changes` de `queue_items` saiu do cliente (2026-10-13), é
+         * este aviso que destrava a tela de pedido de quem está esperando a
+         * música acabar — sem ele, o celular só descobriria no poll de 10s.
          */
         void announcePlaybackChange(roomCode);
+        void announceQueueChange(roomCode);
         await refresh();
       } finally {
         claimingRef.current = false;
@@ -202,6 +209,10 @@ export function PlayerKiosk({
   // Poll: mantém a TV coerente mesmo sem realtime (reconexão, troca de rede).
   useEffect(() => {
     const timer = setInterval(() => {
+      // Aba oculta não paga poll: a TV fica sempre visível, e se a aba está
+      // atrás, ninguém está lendo a tela. O broadcast segue como caminho rápido
+      // e o próximo poll (5s) alcança assim que a aba volta.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void refresh();
     }, POLL_MS);
     return () => clearInterval(timer);
@@ -401,8 +412,11 @@ export function PlayerKiosk({
           // O card do host também vive (Fase 8g·C) e estaria dizendo "tocando"
           // para uma sala que acaba de ficar ociosa. Só quando houve música
           // para devolver, porque um "não tinha nada no ar" não muda estado.
+          // O release devolve o item para `approved`: avisar a fila também é o
+          // que reabilita o pedido daquele cantor na tela dos celulares.
           if (result?.ok && result.released) {
             void announcePlaybackChange(roomCode);
+            void announceQueueChange(roomCode);
           }
         })
         .finally(() => void refresh());

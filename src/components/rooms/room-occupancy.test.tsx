@@ -1,45 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => {
   const state: {
     payload: unknown;
     error: { message: string } | null;
     realtime?: () => void;
-    subscribed: string[];
+    memberRoomId?: string;
+    unsubscribed?: boolean;
   } = {
     payload: {},
     error: null,
     realtime: undefined,
-    subscribed: [],
+    memberRoomId: undefined,
+    unsubscribed: undefined,
   };
 
   const rpc = vi.fn(async () => ({ data: state.payload, error: state.error }));
-  const channel = {
-    on: vi.fn((...args: unknown[]) => {
-      state.realtime = args[2] as () => void;
-      return channel;
-    }),
-    subscribe: vi.fn((onSubscribed?: (status: string) => void) => {
-      state.subscribed.push("SUBSCRIBED");
-      // No supabase-js o primeiro argumento do `subscribe` É o callback de
-      // "canal pronto" — é aí que o component faz a primeira leitura.
-      onSubscribed?.("SUBSCRIBED");
-      return channel;
-    }),
-  };
 
-  const supabase = {
-    rpc,
-    channel: vi.fn(() => channel),
-    removeChannel: vi.fn(),
-  };
+  // O card não abre mais canal de `postgres_changes`: assina o broadcast da
+  // sala (`room-members:<roomId>`) e relê pela RPC. Aqui só o `rpc` importa.
+  const supabase = { rpc };
 
-  return { state, rpc, supabase, channel };
+  const subscribeToMemberChanges = vi.fn(
+    (roomId: string, onChange: () => void, onStatus?: (status: string) => void) => {
+      state.memberRoomId = roomId;
+      state.realtime = onChange;
+      // O canal real avisa `SUBSCRIBED` quando sobe — e é esse callback que
+      // dispara a primeira leitura (o `carregar()` saiu do corpo do efeito para
+      // não violar `react-hooks/set-state-in-effect`).
+      onStatus?.("SUBSCRIBED");
+      return () => {
+        state.unsubscribed = true;
+      };
+    }
+  );
+
+  return { state, rpc, supabase, subscribeToMemberChanges };
 });
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => mocks.supabase,
+}));
+
+vi.mock("@/lib/rooms/member-channel", () => ({
+  subscribeToMemberChanges: (
+    roomId: string,
+    onChange: () => void,
+    onStatus?: (status: string) => void
+  ) => mocks.subscribeToMemberChanges(roomId, onChange, onStatus),
+  announceMembersChange: vi.fn(async () => {}),
 }));
 
 import { RoomOccupancyCard } from "./room-occupancy";
@@ -70,10 +80,10 @@ describe("RoomOccupancyCard", () => {
     mocks.state.payload = {};
     mocks.state.error = null;
     mocks.state.realtime = undefined;
-    mocks.state.subscribed = [];
+    mocks.state.memberRoomId = undefined;
+    mocks.state.unsubscribed = undefined;
     mocks.rpc.mockClear();
-    mocks.supabase.channel.mockClear();
-    mocks.supabase.removeChannel.mockClear();
+    mocks.subscribeToMemberChanges.mockClear();
   });
 
   afterEach(() => {
@@ -146,12 +156,38 @@ describe("RoomOccupancyCard", () => {
     await waitFor(() => expect(textOf(container)).toMatch(/5 pessoas na sala/));
   });
 
-  it("assina o canal filtrado pela sala e desliga ao sair", async () => {
-    render(<RoomOccupancyCard {...base} />);
-    await waitFor(() => expect(mocks.supabase.channel).toHaveBeenCalledWith("room-occupancy:room-1"));
+  it("assina o canal broadcast da sala e desliga ao sair", async () => {
+    const { unmount } = render(<RoomOccupancyCard {...base} />);
+    await waitFor(() =>
+      expect(mocks.subscribeToMemberChanges).toHaveBeenCalledWith(
+        "room-1",
+        expect.any(Function),
+        expect.any(Function)
+      )
+    );
 
-    const filter = mocks.channel.on.mock.calls[0]?.[1] as { filter: string };
-    expect(filter.filter).toBe("room_id=eq.room-1");
+    unmount();
+    expect(mocks.state.unsubscribed).toBe(true);
+  });
+
+  it("reconsulta pelo poll de 10s quando o realtime não avisa", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<RoomOccupancyCard {...base} />);
+      // A primeira leitura vem no `SUBSCRIBED`; com fake timers ela resolve no
+      // próximo flush de microtasks.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const inicial = mocks.rpc.mock.calls.length;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      expect(mocks.rpc.mock.calls.length).toBeGreaterThan(inicial);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("mostra zero em vez de quebrar quando a RPC volta vazia", async () => {

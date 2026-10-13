@@ -2,6 +2,7 @@
 
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import { createClient } from "@/lib/supabase/client";
+import { subscribeWhileVisible } from "@/lib/supabase/visibility-channel";
 
 /**
  * Canal da FILA (2026-09-27, correção do "a lista do participante não atualiza").
@@ -43,6 +44,15 @@ export type QueueChannelStatus = "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | 
  * Avisa os aparelhos da sala depois de qualquer mutação da fila. Nunca lança:
  * quem mutou já gravou no banco, e falhar o aviso só custaria a atualização —
  * o poll de quem está ouvindo conserta.
+ *
+ * Entrega por **REST** (`httpSend`), não por WebSocket. Antes, cada aviso abria
+ * um canal, esperava `SUBSCRIBED` e o fechava — três mensagens de controle
+ * (join/leave + broadcast) e um canal a mais por mutação, e ainda uma janela em
+ * que o WebSocket ficava vivo depois (o realtime-js só derruba o socket ~2×
+ * heartbeat depois do último canal). O `httpSend` é um `POST` para
+ * `/realtime/v1/api/broadcast/...`: o servidor entrega aos assinantes do tópico
+ * sem que o emissor precise de socket nenhum. Mesmo custo de mensagem, zero
+ * conexão/canal de emissão. Requer Realtime server v2.97.0+ (Cloud está em dia).
  */
 export async function announceQueueChange(roomCode: string): Promise<void> {
   try {
@@ -52,17 +62,10 @@ export async function announceQueueChange(roomCode: string): Promise<void> {
     const supabase = createClient();
     const channel = supabase.channel(roomQueueChannelName(roomCode));
     try {
-      await new Promise<void>((resolve) => {
-        channel.subscribe((status) => {
-          if (status === "SUBSCRIBED") resolve();
-        });
-      });
-      await channel.send({
-        type: "broadcast",
-        event: EVENT,
-        payload: { at: Date.now() },
-      });
+      await channel.httpSend(EVENT, { at: Date.now() });
     } finally {
+      // Nunca assinamos: o canal só existe para dar contexto (URL/tópico) ao
+      // POST. O cleanup evita acumular objetos de canal na memória do client.
       void supabase.removeChannel(channel);
     }
   } catch {
@@ -80,19 +83,24 @@ export function subscribeToQueueChanges(
   onChange: () => void,
   onStatus?: (status: QueueChannelStatus) => void
 ): () => void {
-  const supabase = createClient();
-  const channel = supabase
-    .channel(roomQueueChannelName(roomCode))
-    .on("broadcast", { event: EVENT }, () => onChange())
-    .subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        onStatus?.(status);
-        return;
-      }
-      // CHANNEL_ERROR/TIMED_OUT são falhas de verdade; CLOSED é o teardown.
-      if (status !== "CLOSED") onStatus?.(status as QueueChannelStatus);
-    });
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  // O canal só existe com a aba visível (`visibility-channel.ts`, §8.4 item 2):
+  // oculta, o socket é liberado; ao voltar, a assinatura sobe de novo e o
+  // `SUBSCRIBED` dispara a primeira leitura do componente.
+  return subscribeWhileVisible(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(roomQueueChannelName(roomCode))
+      .on("broadcast", { event: EVENT }, () => onChange())
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          onStatus?.(status);
+          return;
+        }
+        // CHANNEL_ERROR/TIMED_OUT são falhas de verdade; CLOSED é o teardown.
+        if (status !== "CLOSED") onStatus?.(status as QueueChannelStatus);
+      });
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  });
 }

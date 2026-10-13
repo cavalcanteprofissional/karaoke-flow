@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { closeRoomAction, reopenRoomAction } from "@/lib/rooms/actions";
+import { announceMembersChange } from "@/lib/rooms/member-channel";
 
 type CloseRoomButtonProps = {
   roomId: string;
@@ -32,6 +33,9 @@ export function CloseRoomButton({ roomId, closed }: CloseRoomButtonProps) {
       return;
     }
     toast.success("Karaokê encerrado.");
+    // `close_room` apaga todos os `room_members` da sala: sem o aviso, quem
+    // espera aprovação e o card de ocupação só descobririam no poll.
+    void announceMembersChange(roomId);
     router.refresh();
   }
 

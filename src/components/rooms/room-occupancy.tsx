@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { subscribeToMemberChanges } from "@/lib/rooms/member-channel";
 import { createClient } from "@/lib/supabase/client";
 
 /** Retorno da RPC `admin_room_occupancy` (migration 20261003000040). */
@@ -63,9 +64,11 @@ function formatar(quantidade: number): string {
  *      confere `is_host` dentro do banco — o mesmo desenho das `admin_*` da
  *      auditoria de RLS.
  *
- * Ao vivo por `postgres_changes` em `room_members`, filtrado pela sala. A
- * migração põe `replica identity full` na tabela porque sem a PK no payload o
- * evento de `DELETE` (quem sai) não chega.
+ * Ao vivo por **broadcast** (`room-members:<roomId>`, ver `member-channel`),
+ * disparado por quem muta `room_members` — o `postgres_changes` saiu daqui na
+ * migração de 2026-10-13 porque custava uma mensagem por aparelho a cada linha
+ * tocada, além de depender da publicação e da RLS. O poll de 10s e a relê no
+ * foco cobrem queda de realtime e aba adormecida.
  */
 export function RoomOccupancyCard({ roomId, quantidadeMesas }: RoomOccupancyCardProps) {
   const [data, setData] = useState<RoomOccupancy | null>(null);
@@ -85,30 +88,42 @@ export function RoomOccupancyCard({ roomId, quantidadeMesas }: RoomOccupancyCard
   }, [roomId]);
 
   useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`room-occupancy:${roomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "room_members",
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => {
-          void carregar();
-        }
-      )
-      // A primeira leitura vem no `subscribe` (mesmo desenho do `PendingEntries`),
-      // e não num effect separado: um `useEffect(() => carregar(), [])` separado
-      // dispara dois renders e a regra `react-hooks/set-state-in-effect` barra.
-      .subscribe(() => {
-        void carregar();
-      });
+    let active = true;
+    const run = () => {
+      if (active) void carregar();
+    };
+
+    // A primeira leitura vem no `SUBSCRIBED` (mesmo desenho do `PendingEntries`),
+    // e não num effect separado: um `useEffect(() => carregar(), [])` separado
+    // dispara dois renders e a regra `react-hooks/set-state-in-effect` barra.
+    const unsubscribe = subscribeToMemberChanges(roomId, run, (status) => {
+      if (status === "SUBSCRIBED") run();
+    });
+
+    const poll = window.setInterval(() => {
+      // Aba oculta não paga poll; ao voltar, o `visibilitychange` relê na hora.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      run();
+    }, 10000);
+
+    const wake = () => run();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", wake);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", wake);
+    }
 
     return () => {
-      void supabase.removeChannel(channel);
+      active = false;
+      window.clearInterval(poll);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", wake);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", wake);
+      }
+      unsubscribe();
     };
   }, [carregar, roomId]);
 

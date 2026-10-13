@@ -2,6 +2,7 @@
 
 import { normalizeRoomCode } from "@/lib/rooms/utils";
 import { createClient } from "@/lib/supabase/client";
+import { subscribeWhileVisible } from "@/lib/supabase/visibility-channel";
 
 /**
  * Canal do player (Fase 6/7).
@@ -22,7 +23,14 @@ export function playerChannelName(roomCode: string): string {
 
 const EVENT = "playback-changed";
 
-/** Avisa a TV depois de um ajuste de playback (ou de trocar o link). */
+/**
+ * Avisa a TV depois de um ajuste de playback (ou de trocar o link).
+ *
+ * Entrega por **REST** (`httpSend`), não por WebSocket — mesma troca da
+ * `announceQueueChange` (`room-channel.ts`): o emissor não abre canal, não
+ * espera `SUBSCRIBED` e não segura socket; é um `POST` que o servidor entrega
+ * aos assinantes do tópico. Requer Realtime server v2.97.0+ (Cloud está em dia).
+ */
 export async function announcePlaybackChange(roomCode: string): Promise<void> {
   try {
     // O client no try: o playback já está gravado no banco, e um aviso
@@ -30,17 +38,10 @@ export async function announcePlaybackChange(roomCode: string): Promise<void> {
     const supabase = createClient();
     const channel = supabase.channel(playerChannelName(roomCode));
     try {
-      await new Promise<void>((resolve) => {
-        channel.subscribe((status) => {
-          if (status === "SUBSCRIBED") resolve();
-        });
-      });
-      await channel.send({
-        type: "broadcast",
-        event: EVENT,
-        payload: { at: Date.now() },
-      });
+      await channel.httpSend(EVENT, { at: Date.now() });
     } finally {
+      // Nunca assinamos: o canal só existe para dar contexto (URL/tópico) ao
+      // POST. O cleanup evita acumular objetos de canal na memória do client.
       void supabase.removeChannel(channel);
     }
   } catch {
@@ -53,12 +54,16 @@ export function subscribeToPlaybackChanges(
   roomCode: string,
   onChange: () => void
 ): () => void {
-  const supabase = createClient();
-  const channel = supabase
-    .channel(playerChannelName(roomCode))
-    .on("broadcast", { event: EVENT }, () => onChange())
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  // Aba oculta não segura socket (`visibility-channel.ts`, §8.4 item 2); a TV
+  // fica sempre visível, e ao voltar o `SUBSCRIBED`/poll reconcilia o estado.
+  return subscribeWhileVisible(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(playerChannelName(roomCode))
+      .on("broadcast", { event: EVENT }, () => onChange())
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  });
 }

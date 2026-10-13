@@ -23,6 +23,85 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-10-13)
+
+> ### Pico de 776 conexões no Realtime: seis correções de footprint
+>
+> O relatório do Supabase (Reports → Realtime → **Peak Connections**) mostrou
+> **776 conexões simultâneas em 01/out** num plano gratuito de **200**. Nenhum
+> código do app abre mais de **1 WebSocket por aba** (`createBrowserClient`
+> memoizado em `src/lib/supabase/client.ts`); o emissor massivo daquele dia foi
+> `scripts/measure-limits.mjs` (`npm run measure:limits`, rampa que acumula
+> conexões e trava no teto de 200). O 776 não se explica só pela rampa (hipóteses
+> em aberto — ver `docs/engenharia/limites-free-tier.md` §8), mas o footprint do
+> app foi cortado em seis frentes:
+>
+> 1. **Avisos por REST, não WebSocket.** `announceQueueChange`
+>    (`room-channel.ts`) e `announcePlaybackChange` (`player-channel.ts`) agora
+>    usam `channel.httpSend` (um `POST`) — quem avisa não abre conexão nem espera
+>    `SUBSCRIBED`. O aviso caiu de ~1,3 s (criar + assinar + enviar + fechar) para
+>    o custo de um POST.
+> 2. **`postgres_changes` de `queue_items` saiu do cliente.** `queue-list.tsx` e
+>    `use-own-active-song.ts` perderam o canal pgr; a camada rápida virou
+>    **broadcast** (a TV passou a emitir `announceQueueChange` no claim/release, em
+>    `player-kiosk.tsx`) + **poll** + relê no foco/visibilidade. Cada aparelho da
+>    sala parou de receber **uma mensagem por mudança de linha** da fila.
+> 3. _(moot)_ o pgr do próprio cantor já era filtrado por `added_by_user_id`, e
+>    saiu junto com o item 2.
+> 4. **Fan-out do banco —** migration `20261013000001_realtime_fanout.sql`:
+>    `reorder_queue` só atualiza quem **muda** de posição (`is distinct from`);
+>    `touch_updated_at` **cancela** o UPDATE quando a linha não mudou (`new is not
+>    distinct from old`) — escrita idêntica não gera evento de realtime nem
+>    reescreve `updated_at` (vale para `queue_items` e `consents`).
+> 5. **Poll só com a tela visível.** O poll de 5 s (`player-kiosk.tsx`) e o de 8 s
+>    (`entry-approval-wait.tsx`) pulam quando `document.visibilityState ===
+>    "hidden"`; o `entry-approval-wait` ganhou wake em `visibilitychange`/`focus`.
+> 6. **A rampa do `measure:limits` foi limitada** ao teto publicado (200) e o
+>    script agora avisa que rodá-lo em produção **infla o pico** do relatório.
+>
+> **Suíte: 789 → 790 testes / 61 arquivos** (mocks de `room-channel` /
+> `player-channel` atualizados; regressão nova em `player-kiosk` e em `queue-list`
+> para o pgr não voltar). Gates `lint`, `typecheck`, `test`, `build` verdes.
+> Migration `20261013000001` aplicada no Cloud (`OK (201)`, funções verificadas).
+>
+> **Falta (ordem):**
+>
+> - [ ] Revalidar no aparelho que a fila e a TV **ainda atualizam ao vivo** sem o
+>       pgr (o aviso agora é broadcast + poll) — `TESTING.md` §3.9·ter
+> - [x] ~~Investigar o **776**~~ (**fechado em 2026-10-13** — auto-infligido, não
+>       reconstruível: métrica é conexões concorrentes somadas por projeto, só um
+>       projeto na conta, logs de conexão desligados por padrão e retenção de ~1
+>       dia no Free, e a rampa capa em 200. Sem evidência de tráfego externo. Ver
+>       `docs/engenharia/limites-free-tier.md` §8.1)
+> - [x] ~~**Próximas fases do plano Realtime: migrar os pgr restantes de
+>       `room_members`**~~ (**feito em 2026-10-13** — canal único
+>       `room-members:<roomId>` em `src/lib/rooms/member-channel.ts`; as três
+>       telas assinam broadcast + poll de 10 s; entrar/aprovar/rejeitar/escolher
+>       mesa/sair/cancelar/encerrar avisam por `httpSend`; migration
+>       `20261013000002` tira a tabela da publicação e volta o `replica identity`
+>       para `default` — **aplicada no Cloud em 2026-10-13, depois do deploy do
+>       client** (`vercel deploy --prod` aliased em `karaoke-flow.vercel.app`,
+>       HTTP 200; `room_members` fora da publicação e `replica identity=default`
+>       verificados). Ver `docs/engenharia/limites-free-tier.md` §8.1 e §8.
+> - [x] ~~**Fechar o socket quando a aba está oculta (§8.4 item 2)**~~ (**feito
+>       em 2026-10-13** — `src/lib/supabase/visibility-channel.ts`
+>       (`subscribeWhileVisible`): os canais desassinam no `visibilitychange:
+>       hidden` e reassinam ao voltar; sem canal, o realtime-js agenda o
+>       `disconnect()` em ~50 s, e reassinar antes cancela. É o item que mexe no
+>       **pico de conexões**. Suíte **799 → 808** / 64 arquivos. Ver §8.4/§8.5).
+> - [ ] Conferir o **Max concurrent clients** nas settings do Realtime e
+>       acompanhar **Connected Clients** em uso real (Reports → Realtime) — o teto
+>       de 200 é por projeto e compartilhado por todas as salas. Ver §8.5.
+> - [ ] **Fase 2 (registrada, não implementada):** unificar fila + playback +
+>       membros num **canal único por sala** (`room-<roomId>`), chaveado por
+>       `roomId` em vez do código. Plano detalhado em
+>       `docs/engenharia/limites-free-tier.md` §8.6. Bloqueador: a TV não conhece
+>       `room.id` (migration `20261013000003`). _Não_ resolve o 776 — é higiene de
+>       cota e consistência de chave. O item 2 do §8.4 e a investigação do pico já
+>       foram fechados; priorizar como fase própria.
+
+---
+
 ## Retomada — contexto da próxima sessão (2026-10-08, noite)
 
 > ### Fase 18 — pulseiras: código/QR de uso único, gate de cantar no banco
@@ -385,6 +464,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 >   confirmação de que a chave da Vercel é aceita pelo Google depende de rodar
 >   `?probe=1` no ambiente real. **Pendência para a próxima sessão** — precisa de
 >   acesso ao projeto.
+
 - **O `smoke-youtube-credential.sql` foi escrito, não executado.** Ele precisa de
 >   `node scripts/apply-sql.mjs scripts/smoke-youtube-credential.sql 8000` contra o
 >   Cloud. Sem ele, o invariante do trigger e o `RESTRICT` do FK são código

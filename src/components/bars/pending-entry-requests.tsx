@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cancelEntryRequestAction } from "@/lib/rooms/actions";
+import { announceMembersChange } from "@/lib/rooms/member-channel";
 import type { PendingEntryRequest } from "@/lib/bars/actions";
 
 type PendingEntryRequestsProps = {
@@ -53,6 +54,8 @@ export function PendingEntryRequests({
       return;
     }
     toast.success("Pedido cancelado.");
+    // O pedido sai de `room_members`: avisa o host, que tem o card de pedidos.
+    void announceMembersChange(roomId);
     router.refresh();
   }
 

@@ -33,6 +33,7 @@ import {
   PRESENCE_VIEWER_NOTICE,
 } from "@/lib/bars/geo";
 import { entryRoute } from "@/lib/bars/qr";
+import { announceMembersChange } from "@/lib/rooms/member-channel";
 import type { PresenceDecision } from "@/lib/bars/geo";
 import type { EntryBarPreview, PulseiraPreco } from "@/types/bar";
 import type { EntryMembership } from "@/types/room";
@@ -100,6 +101,9 @@ export function EntryPreview({
     }
     setCurrentMembership(result.membership);
     setState(result.membership.status);
+    // Pedido novo (ou entrada livre) muda `room_members`: o host tem cards de
+    // pedidos e de ocupação na sala, e eles releem ao receber o aviso.
+    void announceMembersChange(preview.room_id);
   }
 
   if (state === "pending" || state === "rejected" || state === "approved") {

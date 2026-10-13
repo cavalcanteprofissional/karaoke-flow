@@ -19,19 +19,18 @@ import { ownActiveSongView, type OwnActiveSongView } from "@/lib/rooms/queue";
  * Quem espera a música terminar para pedir a seguinte ficava olhando um botão
  * morto sem nenhum sinal de que a música já tinha acabado.
  *
- * ── As três camadas, e por que não uma ────────────────────────────────────────
- * Mesma estratégia da `queue-list` (`room-channel.ts` §3.8 do pós-mortem), e
- * pelos mesmos motivos: `postgres_changes` sozinho depende da publicação
- * `supabase_realtime` **e** da RLS no instante do evento (se qualquer um dos
- * dois falhar, sobe a assinatura e não chega nada, sem erro); celular travado
- * dorme o WebSocket; e o `UPDATE` de `playing → played` é feito pela RPC da TV,
- * que não passa por nenhum caminho de quem mutou. Então:
+ * ── Duas camadas: o `postgres_changes` saiu (2026-10-13) ──────────────────────
+ * A versão original tinha três: `postgres_changes` em `queue_items`, broadcast
+ * `queue-changed` e poll de 10s. O `postgres_changes` saiu: ele custava **uma
+ * mensagem Realtime por aparelho da sala a cada mudança de linha** — e a TV mexe
+ * na fila toda vez que puxa a próxima faixa — inflando o consumo do free tier sem
+ * entregar nada que as outras duas camadas já não entreguem. Quem cobre a lacuna
+ * que ele fechava é a TV: `claim_next_song` e o release agora emitem
+ * `announceQueueChange` (`player-kiosk.tsx`), então a virada para `played` chega
+ * por broadcast, que não depende de publicação nem de RLS. Sobram:
  *
- *  1. `postgres_changes` em `queue_items` — pega justamente a virada para
- *     `played`, que é o evento que destrava o botão;
- *  2. broadcast `queue-changed` — quem mutou a fila pelo app avisa, sem
- *     depender de publicação nem de RLS;
- *  3. poll de 10s + relê no foco/visibilidade — TV e celular dormem, e a rede
+ *  1. broadcast `queue-changed` — quem mutou a fila (o app ou a TV) avisa;
+ *  2. poll de 10s + relê no foco/visibilidade — TV e celular dormem, e a rede
  *     volta sozinha.
  *
  * ── A regra não mora aqui ─────────────────────────────────────────────────────
@@ -66,7 +65,9 @@ export type UseOwnActiveSongInput = {
   initial?: OwnActiveSongView;
 };
 
-export function useOwnActiveSong(input: UseOwnActiveSongInput): OwnActiveSongView | undefined {
+export function useOwnActiveSong(
+  input: UseOwnActiveSongInput
+): OwnActiveSongView | undefined {
   const { roomId, roomCode, userId, isHost, initial } = input;
   const [view, setView] = useState<OwnActiveSongView | undefined>(initial);
 
@@ -96,31 +97,22 @@ export function useOwnActiveSong(input: UseOwnActiveSongInput): OwnActiveSongVie
     // um caso que não depende de efeito nenhum.
     if (isHost) return;
 
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`own-active-song-${roomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "queue_items",
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => {
-          void fetchOwn();
-        }
-      )
-      .subscribe(() => {
+    const unsubscribeBroadcast = subscribeToQueueChanges(
+      roomCode,
+      () => {
         void fetchOwn();
-      });
-
-    const unsubscribeBroadcast = subscribeToQueueChanges(roomCode, () => {
-      void fetchOwn();
-    });
+      },
+      (status) => {
+        // Primeira leitura quando o canal sobe — o gatilho que o antigo canal de
+        // `postgres_changes` dava. Roda em callback de evento externo (não no
+        // corpo do efeito), e reconcilia o `initial` sem esperar o poll de 10s.
+        if (status === "SUBSCRIBED") void fetchOwn();
+      }
+    );
 
     const poll = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
       void fetchOwn();
     }, POLL_MS);
 
@@ -145,7 +137,6 @@ export function useOwnActiveSong(input: UseOwnActiveSongInput): OwnActiveSongVie
         window.removeEventListener("focus", wake);
         window.removeEventListener("online", wake);
       }
-      void supabase.removeChannel(channel);
     };
   }, [roomId, roomCode, fetchOwn, isHost]);
 

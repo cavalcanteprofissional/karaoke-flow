@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { leaveRoomAction } from "@/lib/rooms/actions";
+import { announceMembersChange } from "@/lib/rooms/member-channel";
 
 type LeaveRoomButtonProps = {
   roomId: string;
@@ -17,7 +18,9 @@ export function LeaveRoomButton({ roomId }: LeaveRoomButtonProps) {
   const [busy, setBusy] = useState(false);
 
   async function handleLeave() {
-    const confirmed = window.confirm("Sair desta sala? Você para de ver a fila.");
+    const confirmed = window.confirm(
+      "Sair desta sala? Você sai da fila e, para voltar, precisa entrar de novo — pedindo aprovação se a sala exigir."
+    );
     if (!confirmed) return;
 
     setBusy(true);
@@ -28,6 +31,8 @@ export function LeaveRoomButton({ roomId }: LeaveRoomButtonProps) {
       return;
     }
     toast.success("Você saiu da sala.");
+    // Sair apaga a linha de `room_members`: o host precisa ver a ocupação cair.
+    void announceMembersChange(roomId);
     router.push("/dashboard");
     router.refresh();
   }

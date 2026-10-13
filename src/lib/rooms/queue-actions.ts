@@ -51,8 +51,7 @@ type ModerationTarget = {
 };
 
 type ModerationTargetResult =
-  | { ok: true; target: ModerationTarget }
-  | { ok: false; error: string; code: string };
+  { ok: true; target: ModerationTarget } | { ok: false; error: string; code: string };
 
 /**
  * Pré-leitura compartilhada por aprovar/rejeitar, remover e trocar (Fase 8a).
@@ -117,7 +116,7 @@ async function readModerationTarget(
   }
 
   const embedded = data?.rooms;
-  const room = (Array.isArray(embedded) ? embedded[0] : embedded ?? null) as {
+  const room = (Array.isArray(embedded) ? embedded[0] : (embedded ?? null)) as {
     host_id: string;
     code: string;
   } | null;
@@ -139,11 +138,13 @@ async function readModerationTarget(
   };
 }
 
-export async function addSongToQueueAction(
-  input: QueueSongInput
-): Promise<
+export async function addSongToQueueAction(input: QueueSongInput): Promise<
   /** `replaced` é a música anterior que saiu da fila, quando este pedido a substituiu. */
-  | { ok: true; item: { status: string; position: number }; replaced: { id: string; title: string } | null }
+  | {
+      ok: true;
+      item: { status: string; position: number };
+      replaced: { id: string; title: string } | null;
+    }
   | { ok: false; error: string; geoRequired?: boolean; code?: string }
 > {
   const supabase = await createClient();
@@ -216,13 +217,10 @@ export async function addSongToQueueAction(
     // mensagem chega ANTES do insert, com o motivo certo — e o anônimo, que
     // nem consegue resgatar, lê o caminho de criar a conta.
     if (pulseiraBarrada({ isHost, membership: entryState })) {
-      const anonymous =
-        user.is_anonymous ?? user.app_metadata?.is_anonymous === true;
+      const anonymous = user.is_anonymous ?? user.app_metadata?.is_anonymous === true;
       return {
         ok: false,
-        error: anonymous
-          ? PULSEIRA_ANON_QUEUE_NOTICE
-          : PULSEIRA_QUEUE_NOTICE,
+        error: anonymous ? PULSEIRA_ANON_QUEUE_NOTICE : PULSEIRA_QUEUE_NOTICE,
         code: "PULSEIRA_REQUIRED",
       };
     }
@@ -230,7 +228,8 @@ export async function addSongToQueueAction(
     if (!canRequestSongs({ isHost, membership: entryState })) {
       return {
         ok: false,
-        error: "Você entrou de fora do raio do bar: acompanha a fila, mas não pode pedir música.",
+        error:
+          "Você entrou de fora do raio do bar: acompanha a fila, mas não pode pedir música.",
         code: "OUTSIDE_BAR",
       };
     }
@@ -446,9 +445,10 @@ export async function removeQueueItemAction(
  * Reordena a fila do host (Fase 5, Bloco C) em UMA chamada atômica: a RPC
  * `reorder_queue` reescreve `position` de 1..N na ordem recebida, sob advisory
  * lock (mesma chave de `next_queue_position`) e exigindo a fila visível inteira.
- * Sem isso, o client teria que fazer N updates — cada um disparando
- * `touch_updated_at` → N refetches do realtime — e abriria janela para
- * posições repetidas (não há unique em `(room_id, position)`).
+ * Sem isso, o client teria que fazer N updates e abriria janela para posições
+ * repetidas (não há unique em `(room_id, position)`). Desde 2026-10-13 a própria
+ * RPC só toca em quem MUDA de posição (`is distinct from`), então reordenar não
+ * dispara mais `touch_updated_at` — nem o fan-out de realtime — para a fila toda.
  */
 export async function reorderQueueAction(
   roomId: string,

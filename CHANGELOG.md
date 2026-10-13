@@ -8,6 +8,88 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### Realtime só com a aba visível (2026-10-13)
+
+- **Socket liberado quando a aba fica oculta.** O `@supabase/phoenix` só **pausa
+  a reconexão** com a aba oculta: o WebSocket aberto continuava contando para o
+  teto de conexões simultâneas do Free. Novo `subscribeWhileVisible`
+  (`src/lib/supabase/visibility-channel.ts`) desassina os canais no
+  `visibilitychange: hidden` e reassina ao voltar — `room-channel`,
+  `player-channel` e `member-channel` passam por ele. Sem o último canal, o
+  realtime-js agenda o `disconnect()` em ~50 s (2 × heartbeat de 25 s);
+  reassinar antes cancela, então ir e voltar rápido não derruba nada. Montar já
+  com a aba oculta não abre socket.
+- **O que muda e o que não muda.** Só o **pico de conexões** é afetado. Quem
+  ouve continua coberto pelo poll (que pula a aba oculta) + relê no foco, e o
+  kiosque da TV fica sempre visível — ao voltar, o `SUBSCRIBED` do canal dispara
+  a primeira leitura. Custo: reconexão do WebSocket + rejoin do canal.
+- **Testes:** `visibility-channel.test.ts` (ciclo subscribe/unsubscribe, aba
+  oculta no mount, SSR) e `room-channel.test.ts` (fiação do canal da fila).
+  Suíte: **799 → 808** (64 arquivos). Gate de visibilidade descrito em
+  `docs/engenharia/limites-free-tier.md` §8.4 item 2.
+
+### `room_members` sai do realtime de linha (2026-10-13)
+
+- **Um canal só para os membros.** `entry-approval-wait.tsx`, `pending-entries.tsx`
+  e `room-occupancy.tsx` largaram os canais `entry-approval:<roomId>`,
+  `entries:<roomId>` e `room-occupancy:<roomId>` (`postgres_changes`) e passaram a
+  assinar o canal **único** `room-members:<roomId>`
+  (`src/lib/rooms/member-channel.ts`) — broadcast (quem muta avisa por `httpSend`)
+  + poll de 10 s + relê no foco. `pending-entries` e `room-occupancy` **não tinham
+  poll**; ganharam, e a primeira leitura vem no `SUBSCRIBED` do canal.
+- **Quem muta `room_members` avisa:** entrar (`entry-preview`,
+  `enter-room-by-code`), aprovar/rejeitar (`pending-entries`), escolher mesa
+  (`mesa-picker`), sair (`leave-room-button`), cancelar pedido
+  (`entry-approval-wait`, `pending-entry-requests`) e **encerrar sala**
+  (`close-room-button` — `close_room` apaga todos os membros da sala).
+- **Migration `20261013000002_room_members_broadcast.sql`:** tira `room_members`
+  da publicação `supabase_realtime` e volta o `replica identity` para `default`
+  (só existia para o DELETE chegar inteiro ao card de ocupação do host).
+  **Aplicada no Cloud em 2026-10-13, depois do deploy do client** — o cliente
+  antigo dependia do pgr de `room_members`.
+- **Testes:** novo `pending-entries.test.tsx` (lista, broadcast, aprovar, rejeitar,
+  erro, assinatura, poll); `entry-approval-wait` e `room-occupancy` migrados para o
+  mock de `member-channel`; `leave-room-button`/`pending-entry-requests` passam a
+  assertar o aviso. Suíte: **790 → 799 testes** (62 arquivos).
+
+### Realtime: reduzir o footprint após o pico de 776 conexões (2026-10-13)
+
+- **Announces deixam de abrir WebSocket.** `announceQueueChange`
+  (`src/lib/rooms/room-channel.ts`) e `announcePlaybackChange`
+  (`src/lib/rooms/player-channel.ts`) passaram a usar **`channel.httpSend`** — um
+  `POST` para o Realtime, sem assinar canal nem esperar `SUBSCRIBED`. Antes, cada
+  mutação de fila criava e fechava uma conexão (p50 ~1,3 s, 99% gasto em
+  abrir/fechar); agora o emissor **não consome o teto de conexões** do free tier e
+  o aviso custa o de um POST.
+- **O `postgres_changes` de `queue_items` saiu do cliente.** `queue-list.tsx` e
+  `use-own-active-song.ts` perderam o canal pgr — que custava **uma mensagem
+  Realtime por aparelho da sala a cada mudança de linha** (e a TV mexe na fila
+  toda vez que puxa a próxima faixa). A camada rápida agora é **broadcast**: a TV
+  passou a emitir `announceQueueChange` logo após o `claim_next_song` e o release
+  (`player-kiosk.tsx`), então a virada para `playing`/`played` chega sem depender
+  de publicação nem de RLS. Sobraram broadcast + poll (10 s) + relê no
+  foco/visibilidade, agora com a primeira leitura disparada pelo `SUBSCRIBED` do
+  canal (mesmo padrão de `PendingEntries`, e sem violar
+  `react-hooks/set-state-in-effect`).
+- **Fan-out do banco — migration `20261013000001_realtime_fanout.sql`** (aplicada
+  no Cloud): (1) `reorder_queue` só atualiza quem **muda** de posição
+  (`q.position is distinct from o.new_position`) — reordenar não dispara mais o
+  trigger para a fila inteira; (2) `touch_updated_at` **cancela** o UPDATE quando
+  a linha não mudou de conteúdo (`new is not distinct from old`), em vez de
+  reescrever `updated_at` a cada escrita idêntica — vale para toda tabela que usa
+  o trigger (`queue_items`, `consents`).
+- **Poll só com a tela visível.** O poll de 5 s do `player-kiosk.tsx` e o de 8 s
+  do `entry-approval-wait.tsx` pulam quando `document.visibilityState ===
+"hidden"`; o `entry-approval-wait` ganhou wake em `visibilitychange`/`focus`.
+- **`measure:limits` blindado.** A rampa de conexões é limitada ao teto publicado
+  (200) e o script avisa que rodá-lo contra produção **infla o pico** do relatório
+  do Realtime — foi ele o emissor do pico de 01/out. A seção 4 agora mede o caminho
+  novo (`httpSend`), e o texto sobre a seção 5 reflete o novo no-op do trigger.
+- **Testes:** `player-kiosk` (+1: avisa a fila ao puxar a próxima; o release também
+  asserts o aviso), `queue-list` (regressão do pgr) e mocks de
+  `room-channel`/`player-channel` atualizados. Suíte: **789 → 790 testes**, 61
+  arquivos. Gates `lint`, `typecheck`, `test`, `build` verdes.
+
 ### Fase 18 — pulseira: o ingresso de uso único do bar (2026-10-08)
 
 - **Pulseira é modo do bar, não da sala.** `bars.pulseiras_ativadas` nasce
@@ -253,6 +335,7 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 - **`security_manual_linking_enabled` DESLIGADO no projeto Cloud (2026-10-01):** o motivo que ligou a flag era o GitHub do dono com _Keep my email addresses private_ ON, o que fazia o e-mail do OAuth não bater com o da conta. Com o e-mail primário do GitHub passado para `cavalcanteprofessional@outlook.com` (verificado, e igual ao `auth.users.email`), a razão sumiu — e a flag era justamente a rota de account takeover (um OAuth cujo e-mail bate com conta existente assume a conta). `npm run enable:manual-linking -- --off`; botão "Vincular GitHub" agora atrás de `NEXT_PUBLIC_ENABLE_MANUAL_LINKING` (default OFF, fail-closed), lida no server e passada por prop. Vale notar que `external_github_email_optional=true`: o GitHub **pode** autenticar sem devolver e-mail — é o que produziu o `identity_data` defasado antes.
 
 ### Corrigido
+
 - **Nenhum participante conseguia entrar numa sala — o gate inteiro estava quebrado (P0, 2026-10-04):** a distância do haversine ia **fracionária** para o `join_room`, e tanto `p_distancia_m` quanto `room_members.distancia_m` são **inteiros** (`20261003000040`): o Postgres recusava a chamada com `invalid input syntax for type integer: "42.4732269333666"` e a tela mostrava "Não foi possível entrar". Como 42,47 m é o caso **comum** (só a coordenada idêntica à do bar dá 0 exato), **ninguém entrava — nem dentro do raio, nem fora**: o defeito não era da regra de "quem está fora só assiste", era dela nenhuma pessoa ser aceita.
   - **Por que o portão estava verde:** (a) o **host é isento** — `checkPresence` devolve `{ ok: true }` sem distância, então `p_distancia_m` ia `null` e o dono nunca passou por ali; (b) os smokes da 00040 gravam **literal inteiro** ("30 m", "2400 m") porque chamam o SQL direto e não passam pelo app, que é quem produz o float; (c) `scripts/seed.mjs` não escreve `distancia_m`; (d) **a suíte afirmava o contrato errado** — `geo.test.ts` esperava `closeTo(22.24, 1)`, ou seja, *exigia* a distância fracionária. É o **terceiro** defeito da sessão em que suíte e smokes passavam e só o aparelho achou (403 dos chunks na LAN, clipboard sem secure context, agora a fronteira app→banco). O buraco de cobertura fica nomeado: **nada testava a fronteira app→banco de `distancia_m`**.
   - **Correção:** o arredondamento é na **origem** (`checkPresence`, `src/lib/bars/geo.ts`), não nos dois call sites (`bars/actions.ts`) — a decisão vira `Math.round(...)` uma única vez, porque o destino é inteiro e fração de metro não diz nada a uma trava de atrito com raio de 50 a 1000 m. `haversineDistanceMeters` continua fracionária: é a medida crua, e `withinRadius` compara com ela. Arredondar nos chamadores resolveria o erro de hoje e deixaria a próxima porta aberta. O tipo `distanceMeters` agora documenta o contrato (metros inteiros) nos dois ramos.

@@ -105,6 +105,40 @@ sugestões, tom da casa, IA generativa e rodízio por mesa.
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-10-14, fundação de produção)
+
+> ### Profissionalização: CI, error boundaries, governança e análise de melhorias
+>
+> Passada de **engenharia** (não de produto), pedida pelo dono: "tornar o projeto
+> mais profissional com docs como CONTRIBUTING e análise de melhorias".
+>
+> **Entregue nesta rodada:**
+>
+> - **CI** (`.github/workflows/ci.yml`): `scan:secrets`, `lint`, `typecheck`,
+>   `test` e `build` em push/PR; cobertura e `format:check` como checagens não
+>   bloqueantes.
+> - **Error boundaries** do App Router: `src/app/error.tsx`,
+>   `global-error.tsx` e `not-found.tsx` (com `retry()` e `digest`).
+> - **`scan:secrets` verde de novo** — allowlist por marcador de valor falso
+>   (`scripts/scan-secrets.mjs`); o portão volta a ser gate.
+> - **Governança**: `CONTRIBUTING.md`, `SECURITY.md`, template de PR,
+>   `dependabot.yml`.
+> - **Análise**: `docs/engenharia/arquitetura.md` (mapa real das camadas) e
+>   `docs/engenharia/melhorias.md` (débitos + backlog da *Fase 20 — Fundação de
+>   produção*).
+> - **README** atualizado para a Fase 19 + portões/docs novos.
+>
+> **Gates:** `scan:secrets` OK (318 arquivos), `lint`, `typecheck`,
+> **816 testes / 64 arquivos** e `build` verdes.
+>
+> **Próxima fase (recomendada):** terminar a **Fase 20 — Fundação de produção**
+> — pre-commit (`husky` + `lint-staged`), error tracking com `digest`,
+> `prettier --write` em código + gate bloqueante, threshold de cobertura e
+> automação de release. Depois, **UX/UI e estilização** (foco declarado), e na
+> sequência o roadmap de produto (Fases 9–15).
+
+---
+
 ## Retomada — contexto da próxima sessão (2026-10-13)
 
 > ### Pico de 776 conexões no Realtime: seis correções de footprint

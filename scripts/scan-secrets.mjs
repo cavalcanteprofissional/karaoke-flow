@@ -78,6 +78,12 @@ const RULES = [
     id: "chave-conhecida",
     re: /\bsbp_[A-Za-z0-9]{16,}|\bAIza[A-Za-z0-9_-]{20,}|\bGOCSPX-[A-Za-z0-9_-]{10,}|-----BEGIN[A-Z ]*PRIVATE KEY-----/,
     skipFixtures: false,
+    // Valores **obviamente falsos** usados em fixtures/smokes (ex.:
+    // `AIzaSy-CHAVE-DE-DEV-NAO-LOGAR`). A allowlist é por marcador de valor, não
+    // por arquivo: uma chave REAL colada num smoke continua sendo pega, porque um
+    // segredo de verdade é aleatório e não contém estes marcadores.
+    ignoreMatch:
+      /nao[-_ ]?logar|not[-_ ]?logar|nao[-_ ]?e[-_ ]?chave|chave[-_ ]?(de|do)[-_ ]?(dev|pool)|invasor|fake|exemplo|placeholder|nao[-_ ]?real/i,
     why: "formato de chave/certificado",
   },
   {
@@ -141,15 +147,17 @@ for (const rel of trackedFiles()) {
         continue;
       // docs descrevem o padrão do link de propósito: só o valor colado incomoda
       const pattern = new RegExp(rule.re.source, rule.re.flags.replace("g", ""));
-      if (pattern.test(line)) {
-        findings.push({
-          rule: rule.id,
-          why: rule.why,
-          file: rel,
-          line: i + 1,
-          text: line.trim().slice(0, 110),
-        });
-      }
+      const match = line.match(pattern);
+      if (!match) continue;
+      // Marcador de valor falso (fixture) — não é credencial.
+      if (rule.ignoreMatch && rule.ignoreMatch.test(match[0])) continue;
+      findings.push({
+        rule: rule.id,
+        why: rule.why,
+        file: rel,
+        line: i + 1,
+        text: line.trim().slice(0, 110),
+      });
     }
   });
 }

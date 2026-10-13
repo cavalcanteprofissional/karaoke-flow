@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Menor privilégio: o CI só precisa ler o repositório.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Qualidade
+    runs-on: ubuntu-latest
+    env:
+      # Valores de mentira só para o build não falhar por env ausente. Nenhum
+      # teste/busca real acontece no CI (MSW cobre a rede).
+      NEXT_PUBLIC_SUPABASE_URL: https://ci.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-placeholder
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Guarda de segredo
+        run: npm run scan:secrets
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Testes (unit)
+        run: npm test
+
+      - name: Cobertura (src/lib/rooms, src/stores)
+        run: npm run test:coverage
+        continue-on-error: true
+
+      - name: Build de produção
+        run: npm run build
+
+      # Não bloqueante até o repositório ser formatado por completo (ver
+      # docs/engenharia/melhorias.md, achado M1). Reporta, mas não derruba o PR.
+      - name: Formatação (não bloqueante)
+        run: npm run format:check
+        continue-on-error: true

@@ -8,6 +8,25 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### Fundação de produção: CI, error boundaries e governança (2026-10-14)
+
+- **CI no GitHub Actions** ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)):
+  roda `scan:secrets`, `lint`, `typecheck`, `test` e `build` em cada push/PR, com
+  `continue-on-error` para cobertura e `format:check` (não bloqueantes até o
+  repositório ser formatado por completo).
+- **Error boundaries do App Router**: `src/app/error.tsx`,
+  `src/app/global-error.tsx` e `src/app/not-found.tsx` — uma exceção deixa de ser
+  tela em branco; há "tentar de novo" (`retry()`) e o `digest` do erro à vista
+  para correlação com o log.
+- **`scan:secrets` voltou a ser gate.** O portão estava vermelho desde rodadas
+  anteriores por **7 falsos positivos** (chaves de fixture óbvias em testes/smoke);
+  agora há allowlist por **marcador de valor falso** (`NAO-LOGAR`, `CHAVE-DE-DEV`,
+  `SMOKE`, `invasor`…) — uma chave real colada num smoke continua sendo pega.
+- **Governança**: `CONTRIBUTING.md`, `SECURITY.md`, template de PR e
+  `dependabot.yml`. A análise de arquitetura/débitos entrou em
+  `docs/engenharia/arquitetura.md` e `docs/engenharia/melhorias.md`.
+- **README** atualizado para a Fase 19 e com os novos portões/links de documento.
+
 ### Modo no-stop: rodízio por rodadas (2026-10-14)
 
 - **Nova configuração da sala.** `rooms.no_stop` (default off) e

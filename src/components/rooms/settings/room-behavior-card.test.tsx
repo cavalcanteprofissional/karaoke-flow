@@ -26,6 +26,8 @@ const INITIAL = {
   queue_approval_mode: "manual" as const,
   require_song_confirmation: false,
   pre_approval_24h: true,
+  no_stop: false,
+  max_active_songs: 3,
 };
 
 function renderCard() {
@@ -71,6 +73,8 @@ describe("RoomBehaviorCard — pré-aprovação de 24h", () => {
       queue_approval_mode: "manual",
       require_song_confirmation: false,
       pre_approval_24h: true,
+      no_stop: false,
+      max_active_songs: 3,
     });
   });
 

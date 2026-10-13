@@ -58,6 +58,12 @@ export type UseOwnActiveSongInput = {
   userId: string;
   isHost: boolean;
   /**
+   * Modo no-stop (Fase 19): várias ativas até `maxActive`, sem substituição.
+   * Off (default) = a regra clássica de uma ativa por participante.
+   */
+  noStop?: boolean;
+  maxActive?: number;
+  /**
    * O que o servidor já respondeu no primeiro render. Serve de valor inicial
    * (a tela não pisca "pode pedir" antes de hidratar) e de retorno se a
    * assinatura não conseguir nada.
@@ -68,7 +74,7 @@ export type UseOwnActiveSongInput = {
 export function useOwnActiveSong(
   input: UseOwnActiveSongInput
 ): OwnActiveSongView | undefined {
-  const { roomId, roomCode, userId, isHost, initial } = input;
+  const { roomId, roomCode, userId, isHost, noStop, maxActive, initial } = input;
   const [view, setView] = useState<OwnActiveSongView | undefined>(initial);
 
   const fetchOwn = useCallback(async () => {
@@ -83,12 +89,12 @@ export function useOwnActiveSong(
         .eq("added_by_user_id", userId)
         .in("status", ["pending", "approved", "playing"]);
       if (error || !data) return; // "não sei" — não trava, não destrava.
-      setView(ownActiveSongView(data, false));
+      setView(ownActiveSongView(data, false, { noStop, maxActive }));
     } catch {
       // Cliente sem ambiente, rede caiu, storage bloqueado: a tela segue com o
       // valor que tinha.
     }
-  }, [roomId, userId, isHost]);
+  }, [roomId, userId, isHost, noStop, maxActive]);
 
   useEffect(() => {
     // O host não tem o limite: nada a ler e nada a assinar (o teste de

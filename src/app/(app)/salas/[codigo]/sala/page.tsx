@@ -89,6 +89,8 @@ export default async function SalaScreenPage({ params }: SalaScreenProps) {
           queue_approval_mode: room.queue_approval_mode,
           require_song_confirmation: room.require_song_confirmation,
           pre_approval_24h: room.pre_approval_24h,
+          no_stop: room.no_stop,
+          max_active_songs: room.max_active_songs,
         }}
       />
 

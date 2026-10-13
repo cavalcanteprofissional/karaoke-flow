@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { LoaderCircle, Lock } from "lucide-react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -21,6 +22,8 @@ export type RoomBehaviorInitial = {
   queue_approval_mode: RoomQueueApprovalMode;
   require_song_confirmation: boolean;
   pre_approval_24h: boolean;
+  no_stop: boolean;
+  max_active_songs: number;
 };
 
 type RoomBehaviorCardProps = {
@@ -47,6 +50,8 @@ export function RoomBehaviorCard({ roomId, initial }: RoomBehaviorCardProps) {
       queue_approval_mode: next.queue_approval_mode,
       require_song_confirmation: next.require_song_confirmation,
       pre_approval_24h: next.pre_approval_24h,
+      no_stop: next.no_stop,
+      max_active_songs: next.max_active_songs,
     });
     if (!result.ok) {
       optimistic.current = initial;
@@ -91,16 +96,22 @@ export function RoomBehaviorCard({ roomId, initial }: RoomBehaviorCardProps) {
 
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-0.5">
-            <Label htmlFor="toggle-queue">Música com aprovação</Label>
+            <Label htmlFor="toggle-queue" className="flex items-center gap-1.5">
+              {settings.no_stop && <Lock className="size-3.5" />}
+              Música com aprovação
+            </Label>
             <p className="text-muted-foreground text-xs">
-              {settings.queue_approval_mode === "manual"
-                ? "Cada música fica pendente até você aprovar."
-                : "A música já entra direto na fila."}
+              {settings.no_stop
+                ? "O modo no-stop dispensa aprovação: toda música já entra na fila."
+                : settings.queue_approval_mode === "manual"
+                  ? "Cada música fica pendente até você aprovar."
+                  : "A música já entra direto na fila."}
             </p>
           </div>
           <Switch
             id="toggle-queue"
-            checked={settings.queue_approval_mode === "manual"}
+            checked={!settings.no_stop && settings.queue_approval_mode === "manual"}
+            disabled={settings.no_stop}
             onCheckedChange={(checked) =>
               commit({
                 ...optimistic.current,
@@ -108,6 +119,77 @@ export function RoomBehaviorCard({ roomId, initial }: RoomBehaviorCardProps) {
               })
             }
           />
+        </div>
+
+        {/* Modo no-stop (Fase 19): rodízio por rodadas, várias músicas por
+            pessoa e nada de aprovação. Ligado, a fila reordena na hora. */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="toggle-no-stop">Modo no-stop (rodízio)</Label>
+              <p className="text-muted-foreground text-xs">
+                {settings.no_stop
+                  ? "Todos podem pedir sem esperar a vez acabar. A fila roda por rodadas: a 1ª de cada um, depois a 2ª…"
+                  : "Pedido só entra quando a sua música anterior termina, e cada pedido passa pela aprovação."}
+              </p>
+            </div>
+            <Switch
+              id="toggle-no-stop"
+              checked={settings.no_stop}
+              onCheckedChange={(checked) =>
+                commit({ ...optimistic.current, no_stop: checked })
+              }
+            />
+          </div>
+
+          {settings.no_stop && (
+            <div className="flex items-center justify-between gap-3 pl-1">
+              <Label htmlFor="max-active-songs" className="text-xs">
+                Músicas por pessoa
+              </Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="size-7"
+                  aria-label="Diminuir o limite de músicas por pessoa"
+                  disabled={busy || settings.max_active_songs <= 1}
+                  onClick={() =>
+                    commit({
+                      ...optimistic.current,
+                      max_active_songs: Math.max(1, settings.max_active_songs - 1),
+                    })
+                  }
+                >
+                  <span aria-hidden>−</span>
+                </Button>
+                <span
+                  id="max-active-songs"
+                  className="w-5 text-center text-sm font-medium"
+                  aria-live="polite"
+                >
+                  {settings.max_active_songs}
+                </span>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="size-7"
+                  aria-label="Aumentar o limite de músicas por pessoa"
+                  disabled={busy || settings.max_active_songs >= 10}
+                  onClick={() =>
+                    commit({
+                      ...optimistic.current,
+                      max_active_songs: Math.min(10, settings.max_active_songs + 1),
+                    })
+                  }
+                >
+                  <span aria-hidden>+</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-start justify-between gap-3">

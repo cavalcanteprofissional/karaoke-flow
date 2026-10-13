@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { SongConfirmDialog } from "@/components/rooms/song-confirm-dialog";
 import { captureGeolocation, writeGeoCookie } from "@/lib/consent/geo";
 import { addSongToQueueAction, replaceQueueSongAction } from "@/lib/rooms/queue-actions";
+import { ownQueueFullMessage } from "@/lib/rooms/queue";
 import { announceQueueChange } from "@/lib/rooms/room-channel";
 import { useOwnActiveSong } from "@/lib/rooms/use-own-active-song";
 import type { YouTubeVideo } from "@/lib/youtube/types";
@@ -73,6 +74,13 @@ type SongSearchProps = {
    * antes de hidratar.
    */
   ownActiveSong?: { playing: boolean; replacedTitle: string | null };
+  /**
+   * Modo no-stop (Fase 19): várias músicas ativas por pessoa até `maxActive`,
+   * sem substituição. Com ele, o aviso "tocando" e o de substituição dão lugar
+   * ao contador e à mensagem de teto.
+   */
+  noStop?: boolean;
+  maxActive?: number;
   /** `rooms.id` — a assinatura do realtime é filtrada por sala. */
   roomId: string;
   /** O autor dos pedidos: a leitura ao vivo é só das músicas dele. */
@@ -149,6 +157,8 @@ export function SongSearch({
   replaceItemId,
   replaceItemTitle,
   ownActiveSong,
+  noStop = false,
+  maxActive = 1,
   isHost = false,
   barCode = null,
 }: SongSearchProps) {
@@ -164,6 +174,8 @@ export function SongSearch({
     roomCode,
     userId,
     isHost,
+    noStop,
+    maxActive,
     initial: ownActiveSong
       ? { playing: ownActiveSong.playing, title: ownActiveSong.replacedTitle }
       : undefined,
@@ -176,6 +188,9 @@ export function SongSearch({
   const ownSong = {
     playing: liveOwn?.playing ?? ownActiveSong?.playing ?? false,
     replacedTitle: liveOwn?.title ?? ownActiveSong?.replacedTitle ?? null,
+    noStop: liveOwn?.noStop ?? noStop,
+    activeCount: liveOwn?.activeCount ?? 0,
+    maxActive: liveOwn?.maxActive ?? maxActive,
   };
   /**
    * A trava do player não vale para a troca autorizada (Bloco D): ali quem troca é
@@ -272,7 +287,9 @@ export function SongSearch({
     // mostraria uma busca que aceita pedidos que o servidor vai recusar.
     if (ownSongPlaying) {
       toast.error(
-        "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar."
+        ownSong.noStop
+          ? ownQueueFullMessage(ownSong.maxActive)
+          : "Você já tem uma música tocando nesta sala. Dá para pedir outra quando ela terminar."
       );
       return;
     }
@@ -413,7 +430,9 @@ export function SongSearch({
                       }
                       title={
                         ownSongPlaying
-                          ? "Você já tem uma música tocando nesta sala"
+                          ? ownSong.noStop
+                            ? `Você já tem ${ownSong.maxActive} músicas na fila nesta sala`
+                            : "Você já tem uma música tocando nesta sala"
                           : isReplace
                             ? "Trocar por esta música"
                             : "Adicionar à fila"
@@ -507,12 +526,42 @@ export function SongSearch({
       )}
 
       {/**
+       * Aviso do no-stop (Fase 19): contador enquanto há vaga e a mensagem de
+       * teto quando ela acaba. Substitui os dois avisos clássicos, que falam de
+       * uma música só.
+       */}
+      {!isReplace && ownSong.noStop && (
+        <div
+          className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
+          data-testid="aviso-no-stop"
+        >
+          {ownSong.playing ? (
+            <>
+              <X className="mt-0.5 size-4 shrink-0 text-amber-400" />
+              <p>{ownQueueFullMessage(ownSong.maxActive)}</p>
+            </>
+          ) : (
+            <>
+              <Plus className="mt-0.5 size-4 shrink-0 text-amber-400" />
+              <p>
+                Modo no-stop: você já tem{" "}
+                <span className="text-foreground font-medium">
+                  {ownSong.activeCount} de {ownSong.maxActive}
+                </span>{" "}
+                músicas na fila nesta sala. Ainda dá para pedir mais.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/**
        * Aviso ANTES da ação (a escolha do usuário foi avisar nos dois momentos):
        * quando existe uma ativa, o próximo pedido sai da fila. Sem esta frase a
        * substituição só apareceria no toast depois do clique, e a pessoa já teria
        * clicado achando que as duas iam tocar.
        */}
-      {!isReplace && !ownSong.playing && ownSong.replacedTitle && (
+      {!isReplace && !ownSong.noStop && !ownSong.playing && ownSong.replacedTitle && (
         <div
           className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
           data-testid="aviso-substituicao"
@@ -527,7 +576,7 @@ export function SongSearch({
         </div>
       )}
 
-      {ownSongPlaying && (
+      {ownSongPlaying && !ownSong.noStop && (
         <div
           className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
           data-testid="aviso-tocando"

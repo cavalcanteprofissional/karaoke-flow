@@ -40,6 +40,14 @@ export type Room = {
    * levá-lo até lá.
    */
   pre_approval_24h: boolean;
+  /**
+   * Modo no-stop (Fase 19, migration `20261014000001`): pedir música sem
+   * esperar a anterior acabar e sem aprovação, com rodízio por rodadas na fila.
+   * Coluna de `rooms` exposta por `rooms_public`.
+   */
+  no_stop: boolean;
+  /** Teto de músicas ativas por participante no no-stop (1–10). */
+  max_active_songs: number;
   status: RoomStatus;
   created_at: string;
   /** Estado de reprodução (lê o quiosque; null em salas paradas). */

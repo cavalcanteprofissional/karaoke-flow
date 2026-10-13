@@ -280,7 +280,27 @@ export type OwnActiveSongContext = {
   isHost: boolean;
   /** Itens do próprio usuário nesta sala, em qualquer estado da fila. */
   ownSongs: { id: string; title: string; status: string; position: number }[];
+  /**
+   * Modo no-stop (Fase 19): o participante pode ter várias músicas ativas, até o
+   * teto `maxActive`, e pedir de novo enquanto a dele toca. Off (default) = a
+   * regra clássica de uma ativa por participante.
+   */
+  noStop?: boolean;
+  /** Teto de músicas ativas no no-stop (default 1, o clássico). */
+  maxActive?: number;
 };
+
+/** Default do teto de músicas ativas no no-stop (espelha `rooms.max_active_songs`). */
+export const DEFAULT_MAX_ACTIVE_SONGS = 3;
+
+/**
+ * A frase da recusa por teto no no-stop. Precisa ser a MESMA que a trigger
+ * `queue_items_one_active_per_participant` levanta (`KF001`), para o usuário não
+ * distinguir "o banco recusou" de "a aplicação recusou".
+ */
+export function ownQueueFullMessage(maxActive: number): string {
+  return `Você já tem ${maxActive} músicas na fila nesta sala. Cancele uma para pedir outra.`;
+}
 
 export type OwnActiveSongResult =
   /** `replaced` é a música que sai da fila: o aviso "a anterior foi substituída" depende dela. */
@@ -299,6 +319,21 @@ export function resolveOwnActiveSong(ctx: OwnActiveSongContext): OwnActiveSongRe
   const mine = ctx.ownSongs
     .filter((song) => isActiveSong(song.status))
     .sort((a, b) => a.position - b.position);
+
+  // No-stop (Fase 19): várias ativas até o teto, e pedir com a sua tocando é
+  // permitido. No teto a resposta é RECUSAR (não substituir): cancelar é o que
+  // libera vaga.
+  if (ctx.noStop) {
+    const maxActive = ctx.maxActive ?? DEFAULT_MAX_ACTIVE_SONGS;
+    if (mine.length >= maxActive) {
+      return {
+        ok: false,
+        error: ownQueueFullMessage(maxActive),
+        code: "QUEUE_FULL",
+      };
+    }
+    return { ok: true, replaced: null };
+  }
 
   const tocando = mine.find((song) => song.status === "playing");
   if (tocando) {
@@ -321,10 +356,21 @@ export function resolveOwnActiveSong(ctx: OwnActiveSongContext): OwnActiveSongRe
 
 /** O que a tela de busca mostra: o botão travado e o nome da música em disputa. */
 export type OwnActiveSongView = {
-  /** `true` = não dá para pedir agora (a anterior está tocando). */
+  /** `true` = não dá para pedir agora (a música está tocando ou a fila encheu). */
   playing: boolean;
   /** A música que está tocando, ou a que sai da fila quando a próxima for pedida. */
   title: string | null;
+  /** Só no no-stop: quantas músicas ativas o participante tem agora. */
+  activeCount?: number;
+  /** Só no no-stop: o teto de músicas ativas configurado na sala. */
+  maxActive?: number;
+  /** Só no no-stop: a tela troca os avisos clássicos pelo contador/teto. */
+  noStop?: boolean;
+};
+
+export type OwnActiveSongOptions = {
+  noStop?: boolean;
+  maxActive?: number;
 };
 
 /**
@@ -342,15 +388,32 @@ export type OwnActiveSongView = {
  * é o nome da música. `undefined` (sem valor) é o caso "não sei" — e é
  * proposital: uma leitura falhaída **não trava** ninguém, porque quem decide é a
  * trigger `queue_items_one_active_per_participant`, no banco.
+ *
+ * No no-stop (Fase 19) o mesmo `playing` passa a significar "a fila encheu": o
+ * aviso clássico de substituição não existe (nada é substituído) e o teto é o
+ * novo motivo de trava. Os campos `activeCount`/`maxActive` só aparecem ali.
  */
 export function ownActiveSongView(
   ownSongs: OwnActiveSongContext["ownSongs"],
-  isHost: boolean
+  isHost: boolean,
+  options: OwnActiveSongOptions = {}
 ): OwnActiveSongView {
   // O host não tem o limite — e também não tem por que receber aviso de
   // "substituição": a regra abaixo acharia a música tocando dele e o título
   // vazaria para a tela. O retorno tem de vir antes de olhar `playing`.
   if (isHost) return { playing: false, title: null };
+
+  if (options.noStop) {
+    const maxActive = options.maxActive ?? DEFAULT_MAX_ACTIVE_SONGS;
+    const activeCount = ownSongs.filter((song) => isActiveSong(song.status)).length;
+    return {
+      playing: activeCount >= maxActive,
+      title: null,
+      noStop: true,
+      activeCount,
+      maxActive,
+    };
+  }
 
   const resolved = resolveOwnActiveSong({ isHost, ownSongs });
   const tocando = ownSongs.find((song) => song.status === "playing");

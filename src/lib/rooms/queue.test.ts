@@ -9,6 +9,7 @@ import {
   composeQueueOrder,
   moveQueueItem,
   ownActiveSongView,
+  ownQueueFullMessage,
   reorderSchema,
   resolveOwnActiveSong,
   QUEUE_ITEM_STATUSES,
@@ -612,5 +613,88 @@ describe("ownActiveSongView (o que a tela mostra)", () => {
 
   it("sem nada: nem trava nem avisa", () => {
     expect(ownActiveSongView([], false)).toEqual({ playing: false, title: null });
+  });
+});
+
+/**
+ * Fase 19 — modo no-stop. A regra clássica continua idêntica sem `noStop` (os
+ * testes acima provam); o que muda aqui: várias ativas, sem substituição, e a
+ * recusa por teto com a MESMA frase que a trigger levanta (`KF001`).
+ */
+describe("resolveOwnActiveSong no modo no-stop", () => {
+  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+  const ctx = (over: Partial<Parameters<typeof resolveOwnActiveSong>[0]> = {}) => ({
+    isHost: false,
+    ownSongs: [] as { id: string; title: string; status: string; position: number }[],
+    noStop: true,
+    maxActive: 3,
+    ...over,
+  });
+
+  it("pedir com a sua tocando é permitido (a TV não é cortada)", () => {
+    expect(resolveOwnActiveSong(ctx({ ownSongs: [song("tocando", "playing")] }))).toEqual({
+      ok: true,
+      replaced: null,
+    });
+  });
+
+  it("abaixo do teto: permite e NÃO substitui", () => {
+    expect(
+      resolveOwnActiveSong(ctx({ ownSongs: [song("a", "approved"), song("b", "playing")] }))
+    ).toEqual({ ok: true, replaced: null });
+  });
+
+  it("no teto: recusa com a frase do banco (KF001) e código QUEUE_FULL", () => {
+    const result = resolveOwnActiveSong(
+      ctx({ maxActive: 2, ownSongs: [song("a", "approved"), song("b", "playing")] })
+    );
+    expect(result).toMatchObject({ ok: false, code: "QUEUE_FULL" });
+    if (!result.ok) {
+      expect(result.error).toBe(ownQueueFullMessage(2));
+      expect(result.error).toContain("Cancele uma para pedir outra");
+    }
+  });
+
+  it("terminais não ocupam vaga no no-stop", () => {
+    expect(
+      resolveOwnActiveSong(ctx({ maxActive: 1, ownSongs: [song("ja ouvi", "played")] }))
+    ).toEqual({ ok: true, replaced: null });
+  });
+
+  it("o host continua isento mesmo no no-stop", () => {
+    expect(
+      resolveOwnActiveSong(
+        ctx({
+          isHost: true,
+          maxActive: 1,
+          ownSongs: [song("a", "playing"), song("b", "playing")],
+        })
+      )
+    ).toEqual({ ok: true, replaced: null });
+  });
+});
+
+describe("ownActiveSongView no modo no-stop", () => {
+  const song = (id: string, status: string) => ({ id, title: id, status, position: 1 });
+
+  it("mostra o contador e não trava enquanto há vaga", () => {
+    expect(
+      ownActiveSongView([song("a", "approved")], false, { noStop: true, maxActive: 3 })
+    ).toEqual({ playing: false, title: null, noStop: true, activeCount: 1, maxActive: 3 });
+  });
+
+  it("no teto: trava o botão mantendo o contador", () => {
+    expect(
+      ownActiveSongView([song("a", "approved"), song("b", "playing")], false, {
+        noStop: true,
+        maxActive: 2,
+      })
+    ).toEqual({ playing: true, title: null, noStop: true, activeCount: 2, maxActive: 2 });
+  });
+
+  it("o host nunca vê trava nem contador", () => {
+    expect(
+      ownActiveSongView([song("a", "playing")], true, { noStop: true, maxActive: 1 })
+    ).toEqual({ playing: false, title: null });
   });
 });

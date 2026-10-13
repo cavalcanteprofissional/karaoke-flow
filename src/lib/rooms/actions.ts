@@ -37,12 +37,27 @@ export type RoomSettingsInput = {
    * travado em ON, então o host ainda não chega até ele.
    */
   pre_approval_24h: boolean;
+  /**
+   * Modo no-stop (Fase 19, migration `20261014000001`): pedir música sem
+   * aprovação, várias ativas por pessoa até `max_active_songs`.
+   */
+  no_stop: boolean;
+  /** Teto de músicas ativas por participante no no-stop (1–10). */
+  max_active_songs: number;
 };
 
 export async function updateRoomSettingsAction(
   roomId: string,
   settings: RoomSettingsInput
 ): Promise<{ ok: boolean; error?: string }> {
+  if (
+    !Number.isInteger(settings.max_active_songs) ||
+    settings.max_active_songs < 1 ||
+    settings.max_active_songs > 10
+  ) {
+    return { ok: false, error: "O limite de músicas por pessoa deve ser de 1 a 10." };
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase

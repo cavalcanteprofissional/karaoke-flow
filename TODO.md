@@ -23,6 +23,88 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Plano registrado em 2026-10-13 — Fase 19: Modo no-stop (rodízio por rodadas)
+
+> **Origem:** markdown conceitual do dono ("Modo no-stop — regra de ordem (rodízio
+> por rodadas)", Fase 19), incorporado a este TODO e removido da árvore (o arquivo
+> **não** é versionado). **D16 (decidida):** "sem parar" = pedir música **sem
+> esperar a anterior acabar** e **sem aprovação**; o máximo é de **3 músicas ativas
+> por usuário** por padrão, ajustável pelo host; a fila prioriza a 1ª música de cada
+> usuário, depois a 2ª, e assim por diante.
+
+**Regra de ordem (rodízio por rodadas):**
+
+- **Rodada** de uma música = a posição dela entre as `approved` do **próprio**
+  usuário, na ordem de pedido. A `playing` **não conta** — por isso, quando a
+  música de alguém começa a tocar, a próxima dele volta a ser rodada 1.
+- A fila toca toda a rodada 1, depois a 2, depois a 3. Músicas da casa
+  (`source='house'`) sempre **depois** de todas.
+- "Ativa" = `pending`+`approved`+`playing` (o que a fila mostra); cancelar a
+  própria música libera vaga do teto.
+- Recálculo ao vivo (mesmo advisory lock `karaoke_queue:<room>`): a TV e os
+  celulares continuam lendo um `position` simples.
+
+**Decisões fechadas com o dono (2026-10-13):**
+
+- [x] No-stop **força aprovação automática** (o toggle "Música com aprovação" fica
+      travado/ignorado quando ligado).
+- [x] No teto, **recusa** (mensagem nova) — não substitui; cancelar é que libera.
+- [x] Desempate por **quem cantou há mais tempo** (nunca-cantou primeiro), depois
+      ordem de chegada — via `queue_items.started_at`, carimbado ao virar `playing`.
+- [x] Reorder manual **fixa o item movido** (`pinned`); o rodízio não o desloca.
+- [x] `queue_items.source` `'user'|'house'` já entra agora (sem produtor/UI nesta
+      fase; a fase do DJ preenche depois).
+- [x] Ligar o no-stop numa fila existente reordena por **trigger em `rooms`**.
+
+**Implementação (checklist):**
+
+- [x] Migration `20261014000001_no_stop_modo.sql` (**aplicada no Cloud em 2026-10-14**):
+  - colunas `rooms.no_stop` (false), `rooms.max_active_songs` (3, check 1–10);
+    `queue_items.started_at`, `queue_items.pinned` (false), `queue_items.source`
+    (`'user'`/`'house'`, default `'user'`); grants de coluna + recriar `rooms_public`
+  - `queue_items_initial_status`: com `no_stop`, força `approved`
+  - `queue_items_one_active_per_participant` (KF001): com `no_stop`, não apaga e
+    recusa só no teto; sem `no_stop`, comportamento atual intacto
+  - `claim_next_queue_item`/`set_playback` carimbam `started_at` ao virar `playing`
+  - `recompute_queue_positions(p_room_id)` (definer, sob o lock): posição 1 =
+    `playing`; `approved` ordenados por `(source='house')`, rodada, desempate por
+    `started_at` (nulls first), e ordem de chegada via `position` (pre_rank) —
+    **não** `added_at`, que empata dentro da transação; itens `pinned` reancorados no
+    slot atual; grava só quem muda
+  - triggers `after insert/delete/update of status on queue_items` e
+    `after update of no_stop on rooms` → recompute (ao ligar, aprova os `pending`
+    antigos); `recompute` só muda `position` (não re-dispara)
+  - `reorder_queue(p_room_id, p_item_ids, p_pinned_id)` (3 args, **sem `default`** —
+    com default o Postgres acha duas candidatas para uma chamada de 2 args e recusa
+    "is not unique") + a assinatura antiga de 2 args mantida como **invólucro** que
+    delega para a de 3 (não quebra o app em prod na janela até o deploy) + `notify`
+- [x] Tipos/regras puras: `types/room.ts` (`no_stop`, `max_active_songs`);
+  `queue.ts` (helpers de rodada/desempate + `resolveOwnActiveSong`/`ownActiveSongView`
+  cientes de no-stop/teto) + testes
+- [x] Actions/hooks: `queue-actions.ts` (ler no-stop, mensagem de teto, reorder com
+  `movedId`), `actions.ts` (settings), `use-own-active-song.ts`
+- [x] UI: `room-behavior-card.tsx` (switch no-stop + stepper 1–10; trava aprovação);
+  `song-search.tsx` (destrava com no-stop, contador "N/3", aviso de teto);
+  `buscar/page.tsx` (repassar config)
+- [x] Testes de componente (suíte **808 → 816**, 64 arquivos) + smoke DB
+  `scripts/smoke-no-stop.sql` (**7/7 no Cloud, 2026-10-14**) + docs (`CHANGELOG`,
+  `README`)
+- [x] Gates: `lint`, `typecheck`, `test`, `build` verdes; migration aplicada via
+  `node scripts/apply-sql.mjs`
+
+**Resultado (2026-10-14):** migração no ar em `kskoipyzqcacccepcqpc`, smoke 7/7
+(rodízio `A1,B1,A2,B2,A3`; teto `KF001` sem substituir; host isento; desempate
+`H1,A1,B1,…`; `pinned` não desloca; overload de 2 args `true`; no-stop off volta a
+1 ativa). Contra o risco do deploy: como a 2-arg ficou viva, **não há janela de
+quebra** — o app em prod continua reordenando pela 2-arg e o novo passa a usar a
+3-arg. Exceção: durante o smoke o `added_at` empatou (mesma transação) e o desempate
+caiu no `id`; trocado por `position` (pre_rank) antes de fechar.
+
+**Fora do escopo (D17–D22):** cold start do DJ, janela de histórico, veto de
+sugestões, tom da casa, IA generativa e rodízio por mesa.
+
+---
+
 ## Retomada — contexto da próxima sessão (2026-10-13)
 
 > ### Pico de 776 conexões no Realtime: seis correções de footprint

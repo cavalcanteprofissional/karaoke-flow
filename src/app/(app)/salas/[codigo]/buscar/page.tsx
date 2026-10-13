@@ -188,7 +188,14 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
    */
   const ownActiveSong = replaceItem
     ? undefined
-    : await readOwnActiveSong({ supabase, roomId: room.id, userId: user.id, isHost });
+    : await readOwnActiveSong({
+        supabase,
+        roomId: room.id,
+        userId: user.id,
+        isHost,
+        noStop: room.no_stop,
+        maxActive: room.max_active_songs,
+      });
 
   return (
     <div className="flex flex-col gap-4">
@@ -200,7 +207,11 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
             <Music2 className="text-muted-foreground size-4" />
             {replaceItem ? "Trocar música" : "Pedir música"} — sala {code}
             <Badge variant="secondary">
-              {room.queue_approval_mode === "auto" ? "fila automática" : "host aprova"}
+              {room.no_stop
+                ? "no-stop"
+                : room.queue_approval_mode === "auto"
+                  ? "fila automática"
+                  : "host aprova"}
             </Badge>
           </CardTitle>
           {/**
@@ -232,6 +243,8 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
                 replacedTitle: ownActiveSong.title,
               }
             }
+            noStop={room.no_stop}
+            maxActive={room.max_active_songs}
             isHost={room.host_id === user.id}
             barCode={barCode}
           />

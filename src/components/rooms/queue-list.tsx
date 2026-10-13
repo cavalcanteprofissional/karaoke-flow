@@ -252,8 +252,10 @@ export function QueueList({
    * Grava a nova ordem na fila. O `reorder_queue` exige a fila visível INTEIRA,
    * então compomos [tocando, aprovadas na ordem escolhida, pendentes] — as
    * pendentes ficam sempre no fim porque ainda não entraram na ordem do host.
+   * `movedId` é a música que o host moveu à mão: no no-stop ela vira "fixada" e o
+   * rodízio não a desloca; fora do no-stop o banco ignora.
    */
-  async function commitOrder(approvedIds: string[]) {
+  async function commitOrder(approvedIds: string[], movedId: string) {
     const nextApproved = approvedIds.filter((id) =>
       items.some((item) => item.id === id && item.status === "approved")
     );
@@ -268,7 +270,7 @@ export function QueueList({
       pending: pending.map((item) => item.id),
       approved: nextApproved,
     });
-    const result = await reorderQueueAction(roomId, payload);
+    const result = await reorderQueueAction(roomId, payload, movedId);
     setBusy(null);
     if (!result.ok) {
       toast.error(result.error ?? "Não foi possível reordenar a fila.");
@@ -288,7 +290,7 @@ export function QueueList({
     const from = current.indexOf(String(active.id));
     const to = current.indexOf(String(over.id));
     if (from === -1 || to === -1) return;
-    void commitOrder(arrayMove(current, from, to));
+    void commitOrder(arrayMove(current, from, to), String(active.id));
   }
 
   const pending = items.filter((item) => item.status === "pending");
@@ -507,7 +509,10 @@ export function QueueList({
                         meta={metaLine(item)}
                         reorderable={busy !== "order"}
                         reorder={(direction) =>
-                          void commitOrder(moveQueueItem(approvedIds, item.id, direction))
+                          void commitOrder(
+                            moveQueueItem(approvedIds, item.id, direction),
+                            item.id
+                          )
                         }
                         trailing={
                           <>

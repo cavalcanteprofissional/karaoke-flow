@@ -12,10 +12,11 @@ import {
   buildQueueSongItem,
   buildQueueSongReplacement,
   ownActiveSongView,
+  ownQueueFullMessage,
   reorderSchema,
   resolveOwnActiveSong,
 } from "./queue";
-import type { MembershipStatus, QueueSongInput, QueueSongVideo } from "./queue";
+import type { MembershipStatus, OwnActiveSongView, QueueSongInput, QueueSongVideo } from "./queue";
 import { getMemberEntryState } from "@/lib/rooms/entry-state";
 import {
   canRequestSongs,
@@ -82,7 +83,10 @@ export async function readOwnActiveSong(input: {
   roomId: string;
   userId: string;
   isHost: boolean;
-}): Promise<{ playing: boolean; title: string | null } | undefined> {
+  /** Modo no-stop: várias ativas até `maxActive`; nada de substituição. */
+  noStop?: boolean;
+  maxActive?: number;
+}): Promise<OwnActiveSongView | undefined> {
   const { isHost } = input;
   if (isHost) return { playing: false, title: null };
 
@@ -94,7 +98,10 @@ export async function readOwnActiveSong(input: {
     .in("status", ["pending", "approved", "playing"]);
   if (!data) return undefined;
 
-  return ownActiveSongView(data, isHost);
+  return ownActiveSongView(data, isHost, {
+    noStop: input.noStop,
+    maxActive: input.maxActive,
+  });
 }
 
 async function readModerationTarget(
@@ -161,7 +168,7 @@ export async function addSongToQueueAction(input: QueueSongInput): Promise<
 
   const { data: room } = await supabase
     .from("rooms")
-    .select("id, host_id, bar_id")
+    .select("id, host_id, bar_id, no_stop, max_active_songs")
     .eq("code", input.roomCode)
     .maybeSingle();
   if (!room) {
@@ -268,7 +275,12 @@ export async function addSongToQueueAction(input: QueueSongInput): Promise<
       .eq("added_by_user_id", user.id)
       .in("status", ["pending", "approved", "playing"]);
 
-    const ownActive = resolveOwnActiveSong({ isHost, ownSongs: ownSongs ?? [] });
+    const ownActive = resolveOwnActiveSong({
+      isHost,
+      ownSongs: ownSongs ?? [],
+      noStop: room.no_stop,
+      maxActive: room.max_active_songs,
+    });
     if (!ownActive.ok) {
       return { ok: false, error: ownActive.error, code: ownActive.code };
     }
@@ -293,13 +305,17 @@ export async function addSongToQueueAction(input: QueueSongInput): Promise<
      * recusa é exatamente a mesma frase da regra pura — o usuário não deve
      * distinguir "o banco recusou" de "a aplicação recusou".
      */
-    const race = /KF001|tocando nesta sala/i.test(error.message);
+    const race = /KF001|tocando nesta sala|músicas na fila nesta sala/i.test(
+      error.message
+    );
     return {
       ok: false,
       error: race
-        ? OWN_SONG_PLAYING_MESSAGE
+        ? room.no_stop
+          ? ownQueueFullMessage(room.max_active_songs)
+          : OWN_SONG_PLAYING_MESSAGE
         : friendlyError(error.message, "Você não pode adicionar músicas nesta sala."),
-      code: race ? "SONG_PLAYING" : "INSERT_FAILED",
+      code: race ? (room.no_stop ? "QUEUE_FULL" : "SONG_PLAYING") : "INSERT_FAILED",
     };
   }
   if (!data || data.length === 0) {
@@ -452,7 +468,12 @@ export async function removeQueueItemAction(
  */
 export async function reorderQueueAction(
   roomId: string,
-  itemIds: string[]
+  itemIds: string[],
+  /**
+   * No-stop: o item que o host acabou de mover à mão vira "fixado" e o rodízio
+   * não o desloca. Fora do no-stop a RPC ignora.
+   */
+  pinnedId?: string
 ): Promise<{ ok: true; itemIds: string[] } | { ok: false; error: string; code: string }> {
   const supabase = await createClient();
   const {
@@ -487,6 +508,7 @@ export async function reorderQueueAction(
   const { data, error } = await supabase.rpc("reorder_queue", {
     p_room_id: roomId,
     p_item_ids: parsed.data,
+    p_pinned_id: pinnedId ?? null,
   });
   if (error) {
     const message = error.message;

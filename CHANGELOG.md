@@ -8,6 +8,31 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### Modo no-stop: rodízio por rodadas (2026-10-14)
+
+- **Nova configuração da sala.** `rooms.no_stop` (default off) e
+  `rooms.max_active_songs` (default 3, faixa 1–10). Com o no-stop ligado, o pedido
+  não espera a música anterior e não passa por aprovação: cada pessoa pode ter até
+  o teto de músicas ativas e a fila passa a **rodar por rodadas** (a 1ª de cada
+  um, depois a 2ª…). Músicas da casa (`source='house'`) ficam por último e quem
+  cantou há mais tempo desempata (quem nunca cantou vem antes), com base em
+  `queue_items.started_at`, carimbado ao virar `playing` em `claim_next_queue_item`
+  e `set_playback`.
+- **Sem substituição.** No teto, o pedido é **recusado** (KF001 em
+  `queue_items_one_active_per_participant`): cancelar é o que libera vaga. A frase
+  é a mesma na regra pura (`ownQueueFullMessage`) e no banco.
+- **Fixar à mão.** `reorder_queue` ganhou `p_pinned_id` (agora 3 argumentos): a
+  música que o host move vira `pinned` e o rodízio não a desloca. A fila reordena
+  na hora ao ligar o no-stop (`rooms_no_stop_resequence`) e a cada
+  pedido/cancelamento/virada de faixa (`queue_items_no_stop_resequence`).
+- **UI.** O card "Como a sala funciona" ganhou o switch *Modo no-stop (rodízio)*,
+  o stepper de músicas por pessoa (1–10) e travou "Música com aprovação" enquanto
+  o no-stop está ligado; a tela de busca mostra o contador "N de M" e o teto.
+- **Migration `20261014000001_no_stop_modo.sql`** (`rooms_public` recriada com as
+  duas colunas). A assinatura de 2 args de `reorder_queue` continua viva como
+  invólucro da nova (3 args), então pode ser aplicada sem quebrar o app em prod.
+- **Testes:** +8 em `queue.test.ts`; suíte **808 → 816** (64 arquivos).
+
 ### Realtime só com a aba visível (2026-10-13)
 
 - **Socket liberado quando a aba fica oculta.** O `@supabase/phoenix` só **pausa

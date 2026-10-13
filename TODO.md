@@ -131,11 +131,17 @@ sugestões, tom da casa, IA generativa e rodízio por mesa.
 > **Gates:** `scan:secrets` OK (318 arquivos), `lint`, `typecheck`,
 > **816 testes / 64 arquivos** e `build` verdes.
 >
-> **Próxima fase (recomendada):** terminar a **Fase 20 — Fundação de produção**
-> — pre-commit (`husky` + `lint-staged`), error tracking com `digest`,
-> `prettier --write` em código + gate bloqueante, threshold de cobertura e
-> automação de release. Depois, **UX/UI e estilização** (foco declarado), e na
-> sequência o roadmap de produto (Fases 9–15).
+> **Fase 20 concluída (mesma data).** Além do acima: **pre-commit** (`husky` +
+> `lint-staged`), **formatação** no gate (`prettier --write` em 136 arquivos,
+> `*.md`/lockfile fora), **cobertura com ratchet** no `test:coverage`, **seam de
+> observabilidade** (`src/lib/observability.ts`, usado pelos boundaries) e
+> **release por tag** (`release.yml`). Suíte **818 / 65 arquivos**; `scan:secrets`,
+> `lint`, `typecheck`, `test:coverage`, `build` e `format:check` verdes.
+> _Único item em aberto:_ plugar um provedor de error tracking (Sentry/OTel) —
+> o seam está pronto, falta a conta/DSN (decisão do dono).
+>
+> **Próximo:** **UX/UI e estilização** (foco declarado pelo dono) e, na sequência,
+> o roadmap de produto (Fases 9–15).
 
 ---
 

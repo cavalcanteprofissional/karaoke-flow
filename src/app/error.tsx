@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
+import { captureError } from "@/lib/observability";
 
 export default function Error({
   error,
@@ -12,7 +13,7 @@ export default function Error({
   retry: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    captureError(error, { boundary: "route" });
   }, [error]);
 
   return (

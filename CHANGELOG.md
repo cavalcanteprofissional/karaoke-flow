@@ -8,6 +8,26 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### Fase 20 — Fundação de produção: gates locais, cobertura, formatação, release (2026-10-14)
+
+- **Pre-commit** (`husky` + `lint-staged`): `scan:secrets --staged` + ESLint/
+  Prettier só nos arquivos alterados. Commit que tentar gravar segredo é barrado
+  antes de sair da máquina.
+- **Formatação virou gate.** O código passou pelo Prettier (136 arquivos) e
+  `format:check` é bloqueante no CI; `*.md` e o lockfile ficam de fora
+  (`.prettierignore`) porque o Prettier reflowa blockquotes/tabelas de doc de
+  forma destrutiva.
+- **Cobertura com ratchet** (`vitest.config.mts`): thresholds de regressão em
+  `src/lib/rooms`/`src/stores` e `test:coverage` bloqueante no CI.
+- **Observabilidade (seam):** `src/lib/observability.ts` (`captureError`) é o
+  ponto único de captura, já usado pelos error boundaries com o `digest`;
+  plugar um provedor (Sentry/OTel) depois é trocar o corpo da função.
+- **Release:** tag `v*` dispara `.github/workflows/release.yml`, que cria o
+  GitHub Release com notas automáticas.
+- **Higiene:** `.editorconfig`, `.nvmrc` e `engines.node >= 24`; `coverage/`
+  fora do ESLint.
+- **Testes:** `observability.test.ts` (2). Suíte **816 → 818** (65 arquivos).
+
 ### Fundação de produção: CI, error boundaries e governança (2026-10-14)
 
 - **CI no GitHub Actions** ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)):

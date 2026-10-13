@@ -1,0 +1,2 @@
+npm run scan:secrets -- --staged
+npx lint-staged

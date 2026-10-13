@@ -199,3 +199,15 @@ Mudança relevante deve deixar rastro:
   compatível (ex.: manter a assinatura antiga de uma RPC viva como invólucro —
   ver a migration `20261014000001`). Rollback de banco não existe; a saída é uma
   migration nova.
+
+## Versionamento e release
+
+- Seguimos [SemVer](https://semver.org/lang/pt-BR/) (`MAJOR.MINOR.PATCH`).
+- Para publicar uma versão: atualize `version` no `package.json`, adicione a
+  entrada no `CHANGELOG.md` e crie a tag:
+  ```bash
+  git tag v0.2.0 && git push origin v0.2.0
+  ```
+- A tag dispara [`.github/workflows/release.yml`](./.github/workflows/release.yml),
+  que cria o **GitHub Release** com as notas geradas automaticamente. Não é
+  preciso rodar nada à mão.

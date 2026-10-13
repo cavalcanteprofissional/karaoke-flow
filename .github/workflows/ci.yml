@@ -49,15 +49,11 @@ jobs:
       - name: Testes (unit)
         run: npm test
 
-      - name: Cobertura (src/lib/rooms, src/stores)
+      - name: Cobertura (com ratchet de regressão)
         run: npm run test:coverage
-        continue-on-error: true
 
       - name: Build de produção
         run: npm run build
 
-      # Não bloqueante até o repositório ser formatado por completo (ver
-      # docs/engenharia/melhorias.md, achado M1). Reporta, mas não derruba o PR.
-      - name: Formatação (não bloqueante)
+      - name: Formatação
         run: npm run format:check
-        continue-on-error: true

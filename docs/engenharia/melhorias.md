@@ -90,20 +90,25 @@ Os buracos mais caros, em ordem:
 Fase **não funcional**, antes de retomar o roadmap de produto, para que as fases
 de UX/UI e produto tenham uma base observável e protegida.
 
-- [ ] **H1 · CI** — workflow com `scan:secrets`, `lint`, `typecheck`, `test`,
-      `build` (`format:check` não bloqueante até M1).
-- [ ] **H2 · Error boundaries** — `error.tsx`, `global-error.tsx`,
+- [x] **H1 · CI** — `scan:secrets`, `lint`, `typecheck`, `test`, `test:coverage`
+      e `build` bloqueantes em push/PR.
+- [x] **H2 · Error boundaries** — `error.tsx`, `global-error.tsx`,
       `not-found.tsx`, com botão "tentar de novo" (`retry()`).
-- [ ] **M2 · `scan:secrets` verde** — allowlist por marcador; vira gate.
-- [ ] **H4 · pre-commit** — `husky` + `lint-staged` (`scan:secrets --staged`,
+- [x] **M2 · `scan:secrets` verde** — allowlist por marcador de valor falso.
+- [x] **H4 · pre-commit** — `husky` + `lint-staged` (`scan:secrets --staged`,
       ESLint/Prettier nos arquivos alterados).
-- [ ] **H3 · Observabilidade** — error tracking com correlação por `digest`.
-- [ ] **M1 · Formatação** — `prettier --write` em código, depois gate bloqueante.
-- [ ] **M5 · Cobertura** — threshold e `--coverage` no CI.
-- [ ] **M6 · Governança** — `CONTRIBUTING`, `SECURITY`, PR template, dependabot,
-      branch protection em `main`.
-- [ ] **M4 · Release** — automação de versão/tag ligada ao `CHANGELOG`.
-- [ ] **X · Higiene** — B1/B2 (`.editorconfig`, Node fixado).
+- [x] **M1 · Formatação** — `prettier --write` em código (docs excluídos) e
+      `format:check` bloqueante.
+- [x] **M5 · Cobertura** — ratchet no `vitest.config.mts` e `--coverage` no CI.
+- [x] **M6 · Governança** — `CONTRIBUTING`, `SECURITY`, PR template, dependabot.
+      _Falta_: habilitação de **branch protection** em `main` (ação no GitHub,
+      fora do repositório).
+- [x] **M4 · Release** — tag `v*` dispara `.github/workflows/release.yml`
+      (GitHub Release com notas automáticas).
+- [x] **X · Higiene** — `.editorconfig`, `.nvmrc` e `engines.node >= 24`.
+- [ ] **H3 · Observabilidade** — o **seam** está pronto (`src/lib/observability.ts`,
+      usado pelos boundaries, com `digest`); falta plugar o provedor
+      (Sentry/OTel), que exige criar o projeto e a DSN — decisão do dono.
 
 > Depois da Fase 20: **UX/UI e estilização** (foco declarado pelo dono) e, na
 > sequência, a próxima fase de produto (Fases 9–15 do roadmap).

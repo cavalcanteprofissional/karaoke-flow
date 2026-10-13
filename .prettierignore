@@ -6,3 +6,11 @@ dist
 .env
 .env.local
 *.log
+coverage
+
+# Markdown: o Prettier reflowa blockquotes/tabelas de doc de forma destrutiva.
+# Formate docs pelo editor; o gate cobre só código/config.
+*.md
+
+# Lockfile: gerado pelo npm, não formatar.
+package-lock.json

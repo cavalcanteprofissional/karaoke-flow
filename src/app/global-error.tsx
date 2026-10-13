@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { captureError } from "@/lib/observability";
+
 import "./globals.css";
 
 export default function GlobalError({
@@ -12,7 +14,7 @@ export default function GlobalError({
   retry: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    captureError(error, { boundary: "global" });
   }, [error]);
 
   return (

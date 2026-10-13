@@ -87,7 +87,8 @@ const REASON_CODES: Array<{
   {
     test: /dailylimitexceeded|quotaexceeded|quota/i,
     code: "QUOTA_EXHAUSTED",
-    friendly: "A cota de buscas no YouTube deste bar acabou por hoje. Tente de novo amanhã.",
+    friendly:
+      "A cota de buscas no YouTube deste bar acabou por hoje. Tente de novo amanhã.",
     hint: "A cota é do projeto da chave configurada. Uma chave nova, ou o pool da plataforma, resolve.",
     status: 502,
   },
@@ -103,7 +104,8 @@ const REASON_CODES: Array<{
     // origem, e o IP de saída da Vercel não é o da máquina do dono.
     test: /iprefererblocked|refererrestriction/i,
     code: "KEY_RESTRICTED",
-    friendly: "A chave do YouTube deste bar tem restrição de origem e a busca não consegue usar.",
+    friendly:
+      "A chave do YouTube deste bar tem restrição de origem e a busca não consegue usar.",
     hint: "No Google Cloud, edite a chave e deixe as restrições de aplicação e de endereço IP sem restrição: a busca roda no servidor e não manda Referer.",
     status: 502,
   },
@@ -160,7 +162,10 @@ export function classifyYouTubeError(input: {
 
   // Falha de rede: `search.ts` já traduz o erro de fetch para esta mensagem
   // (`YouTubeApiError` com payload vazio), então o `reason` é null aqui.
-  if (input.reason === null && /falha de rede|fail(ed)? to fetch|econnrefused|enotfound|etimedout/i.test(haystack)) {
+  if (
+    input.reason === null &&
+    /falha de rede|fail(ed)? to fetch|econnrefused|enotfound|etimedout/i.test(haystack)
+  ) {
     return classificationFor(
       "YOUTUBE_UNREACHABLE",
       "O servidor não conseguiu falar com o YouTube agora.",
@@ -177,7 +182,15 @@ export function classifyYouTubeError(input: {
 
   const retryAfter = parseRetryAfter(input.retryAfterHeader);
   if (input.httpStatus === 429 || retryAfter !== null) {
-    return { ...classificationFor("RATE_LIMITED_BY_YOUTUBE", "O YouTube pediu para a busca esperar um instante.", null, 429), retryAfterSeconds: retryAfter };
+    return {
+      ...classificationFor(
+        "RATE_LIMITED_BY_YOUTUBE",
+        "O YouTube pediu para a busca esperar um instante.",
+        null,
+        429
+      ),
+      retryAfterSeconds: retryAfter,
+    };
   }
 
   /**

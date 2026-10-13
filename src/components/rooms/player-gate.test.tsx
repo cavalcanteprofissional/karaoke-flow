@@ -55,10 +55,12 @@ describe("playerGateTitle", () => {
 
 describe("playerGateHint", () => {
   it("fase 1 diz quantas músicas estão esperando (e o texto no singular)", () => {
-    expect(playerGateHint(makeState({ queue: [ITEM] }), 1)).toContain("1 música aprovada");
-    expect(playerGateHint(makeState({ queue: [ITEM, { ...ITEM, id: "2" }] }), 1)).toContain(
-      "2 músicas aprovadas"
+    expect(playerGateHint(makeState({ queue: [ITEM] }), 1)).toContain(
+      "1 música aprovada"
     );
+    expect(
+      playerGateHint(makeState({ queue: [ITEM, { ...ITEM, id: "2" }] }), 1)
+    ).toContain("2 músicas aprovadas");
   });
 
   it("fase 1 sem fila não promete música nenhuma", () => {

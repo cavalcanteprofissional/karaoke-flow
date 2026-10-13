@@ -66,9 +66,7 @@ describe("QrScanner", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Escanear QR/i }));
 
-    expect(
-      await screen.findByText(/não dá acesso à câmera/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/não dá acesso à câmera/i)).toBeInTheDocument();
     expect(mocks.decodeFromVideoDevice).not.toHaveBeenCalled();
   });
 

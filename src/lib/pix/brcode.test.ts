@@ -43,7 +43,11 @@ describe("buildPixPayload", () => {
   });
 
   it("mantém o payload só em ASCII (o manual exige)", () => {
-    const payload = buildPixPayload({ ...base, nome: "José Conceição", cidade: "São Paulo" });
+    const payload = buildPixPayload({
+      ...base,
+      nome: "José Conceição",
+      cidade: "São Paulo",
+    });
     const lido = readPixPayload(payload);
 
     expect(payload).toMatch(/^[\x20-\x7E]+$/);
@@ -74,40 +78,45 @@ describe("buildPixPayload", () => {
     // Caso real: "LUCAS CAVALCANTE DOS SANTOS" tem 27 e o manual limita a 25.
     // O corte ingênuo deixaria "LUCAS CAVALCANTE DOS" — nome que o app do banco
     // mostra ao doador e que não é o do titular.
-    const lido = readPixPayload(buildPixPayload({ ...base, nome: "LUCAS CAVALCANTE DOS SANTOS" }));
+    const lido = readPixPayload(
+      buildPixPayload({ ...base, nome: "LUCAS CAVALCANTE DOS SANTOS" })
+    );
     expect(lido.nome).toBe("LUCAS CAVALCANTE");
     expect(lido.nome.length).toBeLessThanOrEqual(25);
   });
 
   it("mantém um nome que já cabe, mesmo terminando em conectivo", () => {
-    expect(readPixPayload(buildPixPayload({ ...base, nome: "MARIA DA SILVA" })).nome).toBe(
-      "MARIA DA SILVA"
-    );
+    expect(
+      readPixPayload(buildPixPayload({ ...base, nome: "MARIA DA SILVA" })).nome
+    ).toBe("MARIA DA SILVA");
   });
 
   it("tira a máscara de CPF/CNPJ, porque o app compara a chave com a conta", () => {
     // CPF/CNPJ mascarado é o caso real: o dono copia da receita e cola com ponto e hífen.
     // CPF sintético (DV válido, mas não é de ninguém) — a chave real do PO fica na env.
-    expect(readPixPayload(buildPixPayload({ ...base, chave: "111.444.777-35" })).chave).toBe(
-      "11144477735"
-    );
-    expect(readPixPayload(buildPixPayload({ ...base, chave: " 111.444.777-35 " })).chave).toBe(
-      "11144477735"
-    );
-    expect(readPixPayload(buildPixPayload({ ...base, chave: "11.222.333/0001-81" })).chave).toBe(
-      "11222333000181"
-    );
+    expect(
+      readPixPayload(buildPixPayload({ ...base, chave: "111.444.777-35" })).chave
+    ).toBe("11144477735");
+    expect(
+      readPixPayload(buildPixPayload({ ...base, chave: " 111.444.777-35 " })).chave
+    ).toBe("11144477735");
+    expect(
+      readPixPayload(buildPixPayload({ ...base, chave: "11.222.333/0001-81" })).chave
+    ).toBe("11222333000181");
   });
 
   it("não mexe em chave de e-mail nem de telefone (lá o ponto e o + valem)", () => {
-    expect(readPixPayload(buildPixPayload({ ...base, chave: "lucas.cavalcante@outlook.com" })).chave).toBe(
-      "lucas.cavalcante@outlook.com"
-    );
-    expect(readPixPayload(buildPixPayload({ ...base, chave: "+5511987654321" })).chave).toBe(
-      "+5511987654321"
-    );
+    expect(
+      readPixPayload(buildPixPayload({ ...base, chave: "lucas.cavalcante@outlook.com" }))
+        .chave
+    ).toBe("lucas.cavalcante@outlook.com");
+    expect(
+      readPixPayload(buildPixPayload({ ...base, chave: "+5511987654321" })).chave
+    ).toBe("+5511987654321");
     // 10 dígitos não é CPF nem CNPJ: fica como está, em vez de virar outra coisa.
-    expect(readPixPayload(buildPixPayload({ ...base, chave: "1234567890" })).chave).toBe("1234567890");
+    expect(readPixPayload(buildPixPayload({ ...base, chave: "1234567890" })).chave).toBe(
+      "1234567890"
+    );
   });
 
   it("recusa chave vazia em vez de gerar QR que ninguém paga", () => {
@@ -115,7 +124,9 @@ describe("buildPixPayload", () => {
   });
 
   it("recusa chave maior que 77 caracteres", () => {
-    expect(() => buildPixPayload({ ...base, chave: "a".repeat(78) })).toThrow(/77 caracteres/);
+    expect(() => buildPixPayload({ ...base, chave: "a".repeat(78) })).toThrow(
+      /77 caracteres/
+    );
   });
 
   it("trunca txid longo e nunca deixa o campo 05 vazio", () => {
@@ -184,9 +195,9 @@ describe("readPixPayload", () => {
     // Regressão: `payload.lastIndexOf("63")` acha o "63" **dentro do próprio CRC**
     // (`...630463F0`), recorta o corpo no lugar errado e dá um payload válido
     // como inválido. Procuramos um caso real em vez de cravar um CRC na mão.
-    const com63 = Array.from({ length: 400 }, (_, i) => buildPixPayload({ ...base, txid: `t${i}` })).find(
-      (p) => p.slice(-4).includes("63")
-    );
+    const com63 = Array.from({ length: 400 }, (_, i) =>
+      buildPixPayload({ ...base, txid: `t${i}` })
+    ).find((p) => p.slice(-4).includes("63"));
 
     expect(com63).toBeDefined();
     expect(readPixPayload(com63!).crcValido).toBe(true);

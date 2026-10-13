@@ -66,7 +66,9 @@ export function RoomBehaviorCard({ roomId, initial }: RoomBehaviorCardProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           Como a sala funciona
-          {busy && <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />}
+          {busy && (
+            <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
+          )}
         </CardTitle>
         <CardDescription>
           As mudanças valem na hora e ficam salvas para a próxima reentrada.
@@ -220,8 +222,8 @@ export function RoomBehaviorCard({ roomId, initial }: RoomBehaviorCardProps) {
               Aprovação vale por 24h
             </Label>
             <p className="text-muted-foreground text-xs">
-              Quem tem login e foi aprovado nas últimas 24h entra direto ao voltar para
-              a sala. Usuário sem login nunca é pré-aprovado.
+              Quem tem login e foi aprovado nas últimas 24h entra direto ao voltar para a
+              sala. Usuário sem login nunca é pré-aprovado.
             </p>
           </div>
           <Switch

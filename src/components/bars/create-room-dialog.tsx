@@ -83,8 +83,8 @@ export function CreateRoomDialog({
             Nova sala em {barName}
           </DialogTitle>
           <DialogDescription>
-            A sala nova nasce com o mesmo dono, as mesmas mesas e o mesmo raio de
-            presença do bar — só a fila e o player são dela.
+            A sala nova nasce com o mesmo dono, as mesmas mesas e o mesmo raio de presença
+            do bar — só a fila e o player são dela.
           </DialogDescription>
         </DialogHeader>
 
@@ -105,8 +105,7 @@ export function CreateRoomDialog({
               className="font-mono tracking-[0.2em] uppercase"
             />
             <p className="text-muted-foreground text-xs">
-              3–12 letras ou números. Se deixar vazio, o banco escolhe um código
-              livre.
+              3–12 letras ou números. Se deixar vazio, o banco escolhe um código livre.
             </p>
           </div>
 

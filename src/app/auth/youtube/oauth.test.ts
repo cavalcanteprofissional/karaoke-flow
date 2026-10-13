@@ -51,7 +51,9 @@ describe("oauthBaseUrl", () => {
 
   it("sem env, usa o host da requisição (dev local)", () => {
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
-    expect(oauthBaseUrl(requestTo("http://localhost:3000"))).toBe("http://localhost:3000");
+    expect(oauthBaseUrl(requestTo("http://localhost:3000"))).toBe(
+      "http://localhost:3000"
+    );
   });
 
   it("sem env na Vercel, avisa uma vez no log", () => {
@@ -119,7 +121,9 @@ describe("buildOauthUrlFrom", () => {
     expect(url.searchParams.get("scope")).toBe(
       "https://www.googleapis.com/auth/youtube.readonly"
     );
-    expect(url.searchParams.get("scope")).not.toBe("https://www.googleapis.com/auth/youtube");
+    expect(url.searchParams.get("scope")).not.toBe(
+      "https://www.googleapis.com/auth/youtube"
+    );
   });
 
   // `access_type=offline` sem isso: o Google devolve access token e nenhum

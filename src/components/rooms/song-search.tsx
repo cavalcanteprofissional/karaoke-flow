@@ -141,7 +141,9 @@ const OWNER_ACTION_CODES = new Set([
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   try {
     const parsed = await response.json();
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
   } catch {
     return {};
   }
@@ -570,8 +572,8 @@ export function SongSearch({
           <p>
             Você já tem{" "}
             <span className="text-foreground font-medium">{ownSong.replacedTitle}</span>{" "}
-            na fila. Pedir outra música substitui esse pedido — cada participante
-            tem uma música ativa por vez.
+            na fila. Pedir outra música substitui esse pedido — cada participante tem uma
+            música ativa por vez.
           </p>
         </div>
       )}
@@ -585,7 +587,9 @@ export function SongSearch({
           <p>
             {ownSong.replacedTitle ? (
               <>
-                <span className="text-foreground font-medium">{ownSong.replacedTitle}</span>{" "}
+                <span className="text-foreground font-medium">
+                  {ownSong.replacedTitle}
+                </span>{" "}
                 está tocando agora.
               </>
             ) : (

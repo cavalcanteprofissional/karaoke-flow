@@ -81,7 +81,9 @@ async function getRoomContext(
     // bloco seguinte, por service role.
     const { data: barRow } = await supabase
       .from("bars")
-      .select("latitude, longitude, raio_permitido_metros, youtube_credential_policy, youtube_pool_id")
+      .select(
+        "latitude, longitude, raio_permitido_metros, youtube_credential_policy, youtube_pool_id"
+      )
       .eq("id", room.bar_id)
       .maybeSingle();
     if (barRow) {
@@ -137,10 +139,12 @@ function adminSongCache(admin: SupabaseClient): SongCacheStore {
       return (data.results ?? []) as unknown as YouTubeVideo[];
     },
     async put(queryNormalized, results) {
-      await admin.from("song_cache").upsert(
-        { query_normalized: queryNormalized, results },
-        { onConflict: "query_normalized" }
-      );
+      await admin
+        .from("song_cache")
+        .upsert(
+          { query_normalized: queryNormalized, results },
+          { onConflict: "query_normalized" }
+        );
     },
   };
 }
@@ -184,7 +188,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const rawQuery = request.nextUrl.searchParams.get("q") ?? "";
   const cookieStore = await cookies();
   const userCoords = readUserGeoFromCookies(cookieStore);
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
   // Uma única instância por requisição. Antes, `createAdmin()` era chamado duas
   // vezes (linhas 58 e 158) e cada chamada constrói um cliente Supabase novo,
@@ -292,7 +297,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
     return NextResponse.json(
-      { error: "A busca está temporariamente indisponível.", code: "SERVER_MISCONFIGURED" },
+      {
+        error: "A busca está temporariamente indisponível.",
+        code: "SERVER_MISCONFIGURED",
+      },
       { status: 503, headers: { "Cache-Control": "no-store" } }
     );
   }
@@ -320,7 +328,8 @@ function logSearchFailure(params: {
   thrown?: unknown;
 }): void {
   const { roomCode, userId, failure, reason, thrown } = params;
-  const thrownMessage = thrown instanceof Error ? thrown.message : thrown ? String(thrown) : null;
+  const thrownMessage =
+    thrown instanceof Error ? thrown.message : thrown ? String(thrown) : null;
 
   console.error(
     JSON.stringify({

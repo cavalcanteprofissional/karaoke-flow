@@ -21,7 +21,11 @@ vi.mock("@/lib/bars/pulseira-actions", () => ({
 
 function renderSwitch(initialAtivadas = true) {
   return render(
-    <PulseiraMasterSwitch barId="bar-1" barNome="Karaokê do Zé" initialAtivadas={initialAtivadas} />
+    <PulseiraMasterSwitch
+      barId="bar-1"
+      barNome="Karaokê do Zé"
+      initialAtivadas={initialAtivadas}
+    />
   );
 }
 

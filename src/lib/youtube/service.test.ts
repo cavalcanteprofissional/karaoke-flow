@@ -15,11 +15,11 @@ const BAR_AT_BAR: BarLocation = {
 const ROOM: RoomSearchContext = {
   roomId: "room-1",
   hostId: "host-1",
-youtubeApiKey: null,
-    bar: BAR_AT_BAR,
-    policy: "own_only",
-    poolKey: null,
-    safeSearch: "strict",
+  youtubeApiKey: null,
+  bar: BAR_AT_BAR,
+  policy: "own_only",
+  poolKey: null,
+  safeSearch: "strict",
 };
 
 const USER_COORDS = { latitude: -23.5613, longitude: -46.6565 };
@@ -41,7 +41,11 @@ function basePorts(overrides: Partial<SearchPorts> = {}): SearchPorts {
     userCoords: USER_COORDS,
     getRoom: async () => ROOM,
     getMembership: async () => "approved",
-    consumeRateLimit: () => ({ allowed: true, remaining: 59, resetAt: Date.now() + 60_000 }),
+    consumeRateLimit: () => ({
+      allowed: true,
+      remaining: 59,
+      resetAt: Date.now() + 60_000,
+    }),
     cache: { get: async () => null, put: async () => {} },
     resolveCredential: async () => ({ key: "AIzaSy-X", source: "app" }),
     runSearch: async () => [RESULT],
@@ -54,7 +58,13 @@ describe("searchYouTubeForRoom", () => {
     const put = { called: 0, query: "" };
     const outcome = await searchYouTubeForRoom(
       basePorts({
-        cache: { get: async () => null, put: async (q) => { put.called += 1; put.query = q; } },
+        cache: {
+          get: async () => null,
+          put: async (q) => {
+            put.called += 1;
+            put.query = q;
+          },
+        },
       })
     );
 
@@ -72,7 +82,14 @@ describe("searchYouTubeForRoom", () => {
     await searchYouTubeForRoom(
       basePorts({
         searchQuery: "  ANA   CASTELA!! ",
-        cache: { get: async (q) => { get.called = true; expect(q).toBe("S:ana castela"); return null; }, put: async () => {} },
+        cache: {
+          get: async (q) => {
+            get.called = true;
+            expect(q).toBe("S:ana castela");
+            return null;
+          },
+          put: async () => {},
+        },
       })
     );
     expect(get.called).toBe(true);
@@ -84,8 +101,18 @@ describe("searchYouTubeForRoom", () => {
     await searchYouTubeForRoom(
       basePorts({
         getRoom: async () => ({ ...ROOM, safeSearch: "none" }),
-        cache: { get: async (q) => { get.called = true; expect(q).toBe("N:ana castela"); return null; }, put: async () => {} },
-        runSearch: async ({ safeSearch }) => { received = safeSearch; return [RESULT]; },
+        cache: {
+          get: async (q) => {
+            get.called = true;
+            expect(q).toBe("N:ana castela");
+            return null;
+          },
+          put: async () => {},
+        },
+        runSearch: async ({ safeSearch }) => {
+          received = safeSearch;
+          return [RESULT];
+        },
       })
     );
     expect(get.called).toBe(true);
@@ -98,8 +125,14 @@ describe("searchYouTubeForRoom", () => {
     const outcome = await searchYouTubeForRoom(
       basePorts({
         cache: { get: async () => [RESULT], put: async () => {} },
-        resolveCredential: async () => { credentials += 1; return { key: "X", source: "dev" }; },
-        runSearch: async () => { searches += 1; return [RESULT]; },
+        resolveCredential: async () => {
+          credentials += 1;
+          return { key: "X", source: "dev" };
+        },
+        runSearch: async () => {
+          searches += 1;
+          return [RESULT];
+        },
       })
     );
     expect(outcome.ok).toBe(true);
@@ -112,7 +145,10 @@ describe("searchYouTubeForRoom", () => {
 
   it("query vazia → 400", async () => {
     const outcome = await searchYouTubeForRoom(basePorts({ searchQuery: "   " }));
-    expect(outcome).toEqual({ ok: false, failure: { status: 400, error: "Digite algo para buscar.", code: "EMPTY_QUERY" } });
+    expect(outcome).toEqual({
+      ok: false,
+      failure: { status: 400, error: "Digite algo para buscar.", code: "EMPTY_QUERY" },
+    });
   });
 
   it("rate limit excedido → 429 com retry-after", async () => {
@@ -209,7 +245,11 @@ describe("searchYouTubeForRoom", () => {
   // nomeado — ver "recusa do Google" abaixo.
   it("erro cru de runSearch → 502 SEARCH_FAILED", async () => {
     const outcome = await searchYouTubeForRoom(
-      basePorts({ runSearch: async () => { throw new Error("A cota de buscas no YouTube deste bar acabou por hoje."); } })
+      basePorts({
+        runSearch: async () => {
+          throw new Error("A cota de buscas no YouTube deste bar acabou por hoje.");
+        },
+      })
     );
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
@@ -223,7 +263,14 @@ describe("searchYouTubeForRoom", () => {
         runSearch: async () => {
           throw new YouTubeApiError(
             "youtube(v3) search: dailyLimitExceeded",
-            { error: { code: 403, errors: [{ reason: "dailyLimitExceeded", message: "Daily Limit Exceeded" }] } },
+            {
+              error: {
+                code: 403,
+                errors: [
+                  { reason: "dailyLimitExceeded", message: "Daily Limit Exceeded" },
+                ],
+              },
+            },
             403
           );
         },
@@ -243,7 +290,17 @@ describe("searchYouTubeForRoom", () => {
         runSearch: async () => {
           throw new YouTubeApiError(
             "unauthorized",
-            { error: { code: 400, errors: [{ reason: "ipRefererBlocked", message: "Requests from referer <empty> are blocked." }] } },
+            {
+              error: {
+                code: 400,
+                errors: [
+                  {
+                    reason: "ipRefererBlocked",
+                    message: "Requests from referer <empty> are blocked.",
+                  },
+                ],
+              },
+            },
             400
           );
         },
@@ -264,7 +321,10 @@ describe("searchYouTubeForRoom", () => {
     const outcome = await searchYouTubeForRoom(
       basePorts({
         resolveCredential: async () => null,
-        runSearch: async () => { searches += 1; return [RESULT]; },
+        runSearch: async () => {
+          searches += 1;
+          return [RESULT];
+        },
       })
     );
     expect(outcome.ok).toBe(false);
@@ -279,7 +339,9 @@ describe("searchYouTubeForRoom", () => {
   it("exceção ao resolver a credencial → 503 SERVER_MISCONFIGURED, sem stack na resposta", async () => {
     const outcome = await searchYouTubeForRoom(
       basePorts({
-        resolveCredential: async () => { throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY"); },
+        resolveCredential: async () => {
+          throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+        },
       })
     );
     expect(outcome.ok).toBe(false);
@@ -294,8 +356,15 @@ describe("searchYouTubeForRoom", () => {
     const put = { called: 0 };
     const outcome = await searchYouTubeForRoom(
       basePorts({
-        runSearch: async () => { throw new Error("boom"); },
-        cache: { get: async () => null, put: async () => { put.called += 1; } },
+        runSearch: async () => {
+          throw new Error("boom");
+        },
+        cache: {
+          get: async () => null,
+          put: async () => {
+            put.called += 1;
+          },
+        },
       })
     );
     expect(outcome.ok).toBe(false);
@@ -304,7 +373,9 @@ describe("searchYouTubeForRoom", () => {
 
   it("chave do bar é usada e propagada como fonte room", async () => {
     const outcome = await searchYouTubeForRoom(
-      basePorts({ resolveCredential: async () => ({ key: "AIzaSy-BAR", source: "room" }) })
+      basePorts({
+        resolveCredential: async () => ({ key: "AIzaSy-BAR", source: "room" }),
+      })
     );
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;

@@ -88,6 +88,8 @@ export function pulseiraBarrada({ isHost, membership }: RoomAudienceRule): boole
  * de tipo é o que deixa `membership.fora_do_raio` acessível na linha seguinte,
  * sem `!` e sem repetir a checagem de nulo nos dois chamadores.
  */
-function isActiveParticipant(membership: MemberEntryState | null): membership is MemberEntryState {
+function isActiveParticipant(
+  membership: MemberEntryState | null
+): membership is MemberEntryState {
   return membership !== null && membership.status === "approved";
 }

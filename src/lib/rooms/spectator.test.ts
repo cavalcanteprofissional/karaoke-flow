@@ -39,7 +39,10 @@ describe("regra do espectador", () => {
   });
 
   it("quem entrou fora do raio não pede música nem escolhe mesa", () => {
-    const regra = { isHost: false, membership: membro({ fora_do_raio: true, mesa_numero: null }) };
+    const regra = {
+      isHost: false,
+      membership: membro({ fora_do_raio: true, mesa_numero: null }),
+    };
     expect(canRequestSongs(regra)).toBe(false);
     expect(canPickMesa(regra)).toBe(false);
   });

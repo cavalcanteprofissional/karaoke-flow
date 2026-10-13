@@ -41,7 +41,12 @@ export default async function PulseirasScreenPage({ params }: PulseirasScreenPro
   if (!room) redirect(`/salas/${code}`);
   if (room.host_id !== user.id) redirect(`/salas/${code}`);
 
-  let bar: { id: string; code: string; nome: string; pulseiras_ativadas: boolean } | null = null;
+  let bar: {
+    id: string;
+    code: string;
+    nome: string;
+    pulseiras_ativadas: boolean;
+  } | null = null;
   if (room.bar_id) {
     const { data } = await supabase
       .from("bars")

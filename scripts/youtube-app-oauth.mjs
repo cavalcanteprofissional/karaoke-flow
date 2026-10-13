@@ -25,7 +25,9 @@ const g = (k) => {
 const clientId = g("YOUTUBE_OAUTH_CLIENT_ID");
 const clientSecret = g("YOUTUBE_OAUTH_CLIENT_SECRET");
 if (!clientId || !clientSecret) {
-  console.error("Faltam YOUTUBE_OAUTH_CLIENT_ID / YOUTUBE_OAUTH_CLIENT_SECRET no .env.local");
+  console.error(
+    "Faltam YOUTUBE_OAUTH_CLIENT_ID / YOUTUBE_OAUTH_CLIENT_SECRET no .env.local"
+  );
   process.exit(1);
 }
 
@@ -84,10 +86,8 @@ const server = http.createServer((req, res) => {
         console.log("\n=== YOUTUBE_APP_REFRESH_TOKEN ===");
         console.log(result.refreshToken);
         console.log("==================================\n");
-        console.log(
-          "Cole o valor acima em .env.local como YOUTUBE_APP_REFRESH_TOKEN="
-        );
-        console.log("(o app continua sem usar o token até você adicioná-lo)")
+        console.log("Cole o valor acima em .env.local como YOUTUBE_APP_REFRESH_TOKEN=");
+        console.log("(o app continua sem usar o token até você adicioná-lo)");
       }
     })
     .finally(() => server.close());
@@ -108,12 +108,16 @@ async function exchange(code) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return { ok: false, error: data?.error_description ?? data?.error ?? `HTTP ${response.status}` };
+    return {
+      ok: false,
+      error: data?.error_description ?? data?.error ?? `HTTP ${response.status}`,
+    };
   }
   if (!data.refresh_token) {
     return {
       ok: false,
-      error: "Sem refresh_token na resposta. Use uma conta que nunca autorizou ou acesso_type=offline.",
+      error:
+        "Sem refresh_token na resposta. Use uma conta que nunca autorizou ou acesso_type=offline.",
     };
   }
   return { ok: true, refreshToken: data.refresh_token };

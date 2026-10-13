@@ -85,7 +85,10 @@ describe("updateYoutubeKeyAction", () => {
 
     expect(result).toEqual({ ok: true });
     expect(mocks.calls).toEqual([
-      { name: "admin_set_room_youtube_api_key", args: { p_room_id: ROOM, p_api_key: KEY } },
+      {
+        name: "admin_set_room_youtube_api_key",
+        args: { p_room_id: ROOM, p_api_key: KEY },
+      },
     ]);
     expect(mocks.fromCalls).toEqual([]);
     expect(mocks.adminCalls).toEqual([]);

@@ -19,7 +19,9 @@ function searchPayload(ids: string[]): unknown {
       snippet: {
         title: `Música ${videoId}`,
         channelTitle: "Canal Padrão",
-        thumbnails: { medium: { url: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` } },
+        thumbnails: {
+          medium: { url: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` },
+        },
       },
     })),
   };
@@ -53,7 +55,8 @@ describe("searchYouTube", () => {
     const urls: string[] = [];
     const fetchFn = (input: string | URL | Request) => {
       urls.push(String(input));
-      if (String(input).includes("/search")) return Promise.resolve(jsonResponse(searchPayload(["AAA", "BBB"])));
+      if (String(input).includes("/search"))
+        return Promise.resolve(jsonResponse(searchPayload(["AAA", "BBB"])));
       return Promise.resolve(
         jsonResponse({
           items: [
@@ -105,12 +108,16 @@ describe("searchYouTube", () => {
     const fetchFn = () => {
       throw new Error("não deveria chamar a rede");
     };
-    await expect(searchYouTube({ query: "   ", apiKey: API_KEY, fetchFn })).resolves.toEqual([]);
+    await expect(
+      searchYouTube({ query: "   ", apiKey: API_KEY, fetchFn })
+    ).resolves.toEqual([]);
   });
 
   it("sem resultados retorna []", async () => {
     const fetchFn = () => Promise.resolve(jsonResponse({ items: [] }));
-    await expect(searchYouTube({ query: "zzz", apiKey: API_KEY, fetchFn })).resolves.toEqual([]);
+    await expect(
+      searchYouTube({ query: "zzz", apiKey: API_KEY, fetchFn })
+    ).resolves.toEqual([]);
   });
 
   it("lança YouTubeApiError com reason de cota quando o YouTube responde 403", async () => {
@@ -128,7 +135,9 @@ describe("searchYouTube", () => {
         )
       );
 
-    await expect(searchYouTube({ query: "qualquer", apiKey: API_KEY, fetchFn })).rejects.toMatchObject({
+    await expect(
+      searchYouTube({ query: "qualquer", apiKey: API_KEY, fetchFn })
+    ).rejects.toMatchObject({
       name: "YouTubeApiError",
       reason: "quotaExceeded",
       code: 403,
@@ -137,7 +146,11 @@ describe("searchYouTube", () => {
 
   it("falha de rede vira YouTubeApiError", async () => {
     const fetchFn = () => Promise.reject(new Error("network down"));
-    const error = await searchYouTube({ query: "qualquer", apiKey: API_KEY, fetchFn }).catch((e: unknown) => e);
+    const error = await searchYouTube({
+      query: "qualquer",
+      apiKey: API_KEY,
+      fetchFn,
+    }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(YouTubeApiError);
   });
 
@@ -146,7 +159,8 @@ describe("searchYouTube", () => {
     let videoCalls = 0;
     const fetchFn = (input: string | URL | Request) => {
       const url = String(input);
-      if (url.includes("/search")) return Promise.resolve(jsonResponse(searchPayload(ids)));
+      if (url.includes("/search"))
+        return Promise.resolve(jsonResponse(searchPayload(ids)));
       videoCalls += 1;
       const idsInCall = new URL(url).searchParams.get("id")?.split(",") ?? [];
       return Promise.resolve(

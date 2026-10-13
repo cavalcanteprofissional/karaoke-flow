@@ -102,7 +102,8 @@ export function RoomOccupancyCard({ roomId, quantidadeMesas }: RoomOccupancyCard
 
     const poll = window.setInterval(() => {
       // Aba oculta não paga poll; ao voltar, o `visibilitychange` relê na hora.
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
       run();
     }, 10000);
 
@@ -233,7 +234,11 @@ export function RoomOccupancyCard({ roomId, quantidadeMesas }: RoomOccupancyCard
   );
 }
 
-function Numero({ valor, rotulo, destaque = false }: {
+function Numero({
+  valor,
+  rotulo,
+  destaque = false,
+}: {
   valor: number;
   rotulo: string;
   destaque?: boolean;
@@ -242,7 +247,7 @@ function Numero({ valor, rotulo, destaque = false }: {
     <div
       className={
         destaque
-          ? "bg-amber-500/10 flex flex-col rounded-lg border border-amber-500/30 p-3"
+          ? "flex flex-col rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"
           : "bg-muted/40 flex flex-col rounded-lg border p-3"
       }
     >
@@ -270,7 +275,9 @@ function normalizar(payload: unknown): RoomOccupancy {
   const porMesaBruto = bruto.por_mesa;
   const por_mesa: Record<string, number> = {};
   if (porMesaBruto && typeof porMesaBruto === "object") {
-    for (const [mesa, pessoas] of Object.entries(porMesaBruto as Record<string, unknown>)) {
+    for (const [mesa, pessoas] of Object.entries(
+      porMesaBruto as Record<string, unknown>
+    )) {
       por_mesa[mesa] = Number(pessoas) || 0;
     }
   }

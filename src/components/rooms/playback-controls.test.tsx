@@ -210,7 +210,10 @@ describe("PlaybackControls", () => {
   describe("leitura ao vivo (Fase 8g·C)", () => {
     it("o aviso da TV tira o card do estado antigo", async () => {
       render(<PlaybackControls {...baseProps} />);
-      expect(mocks.onPlaybackChange).toHaveBeenCalledWith(ROOM_CODE, expect.any(Function));
+      expect(mocks.onPlaybackChange).toHaveBeenCalledWith(
+        ROOM_CODE,
+        expect.any(Function)
+      );
       const onChange = mocks.onPlaybackChange.mock.calls[0][1] as () => void;
 
       // A TV terminou a faixa e a sala ficou ociosa.
@@ -244,13 +247,19 @@ describe("PlaybackControls", () => {
       expect(screen.queryByRole("button", { name: /pausar/i })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /pular/i })).toBeDisabled();
       // Continua sabendo que há fila — só não há nada no ar.
-      expect(screen.queryByText(/nenhuma música aprovada na fila/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/nenhuma música aprovada na fila/i)
+      ).not.toBeInTheDocument();
     });
 
     it("leitura que falha não zera o card", async () => {
       render(<PlaybackControls {...baseProps} />);
       const onChange = mocks.onPlaybackChange.mock.calls[0][1] as () => void;
-      mocks.getPlayerStateAction.mockResolvedValue({ ok: false, error: "rede caiu", code: "X" });
+      mocks.getPlayerStateAction.mockResolvedValue({
+        ok: false,
+        error: "rede caiu",
+        code: "X",
+      });
 
       act(() => {
         onChange();

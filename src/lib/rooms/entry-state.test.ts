@@ -82,7 +82,12 @@ describe("getMemberEntryState", () => {
 
   it("normaliza coluna ausente (banco sem a 00040) sem quebrar a tela", async () => {
     mocks.rpc.mockResolvedValue({
-      data: { status: "approved", mesa_numero: 1, pre_approval: false, approved_at: null },
+      data: {
+        status: "approved",
+        mesa_numero: 1,
+        pre_approval: false,
+        approved_at: null,
+      },
       error: null,
     });
 

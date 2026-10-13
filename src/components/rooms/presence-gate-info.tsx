@@ -2,7 +2,15 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Info, LoaderCircle, MapPin, RotateCcw, Ruler, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Info,
+  LoaderCircle,
+  MapPin,
+  RotateCcw,
+  Ruler,
+  TriangleAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {

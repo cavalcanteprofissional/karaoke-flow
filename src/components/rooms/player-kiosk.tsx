@@ -11,9 +11,16 @@ import {
 } from "@/components/rooms/youtube-stage";
 import type { YouTubeStageHandle } from "@/components/rooms/youtube-stage";
 import { Button } from "@/components/ui/button";
-import { getPlayerStateAction, claimNextSongAction, releaseCurrentItemAction } from "@/lib/rooms/playback-actions";
+import {
+  getPlayerStateAction,
+  claimNextSongAction,
+  releaseCurrentItemAction,
+} from "@/lib/rooms/playback-actions";
 import { setPlayerArmed, usePlayerArmed } from "@/lib/rooms/player-arm";
-import { announcePlaybackChange, subscribeToPlaybackChanges } from "@/lib/rooms/player-channel";
+import {
+  announcePlaybackChange,
+  subscribeToPlaybackChanges,
+} from "@/lib/rooms/player-channel";
 import { announceQueueChange } from "@/lib/rooms/room-channel";
 import {
   playerHeadline,
@@ -212,7 +219,8 @@ export function PlayerKiosk({
       // Aba oculta não paga poll: a TV fica sempre visível, e se a aba está
       // atrás, ninguém está lendo a tela. O broadcast segue como caminho rápido
       // e o próximo poll (5s) alcança assim que a aba volta.
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
       void refresh();
     }, POLL_MS);
     return () => clearInterval(timer);

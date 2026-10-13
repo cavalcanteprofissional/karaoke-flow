@@ -58,7 +58,9 @@ describe("RoomCodeCard", () => {
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "ZEZE" } });
     fireEvent.click(screen.getByRole("button", { name: /Salvar/i }));
-    await waitFor(() => expect(mocks.updateRoomCodeAction).toHaveBeenCalledWith("room-1", "ZEZE"));
+    await waitFor(() =>
+      expect(mocks.updateRoomCodeAction).toHaveBeenCalledWith("room-1", "ZEZE")
+    );
 
     expect(mocks.push).toHaveBeenCalledWith("/salas/ZEZE/sala");
     expect(mocks.refresh).toHaveBeenCalled();

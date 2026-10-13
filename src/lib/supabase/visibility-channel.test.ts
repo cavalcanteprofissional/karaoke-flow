@@ -61,10 +61,7 @@ describe("subscribeWhileVisible", () => {
   it("desassina no hidden e reassina no retorno", () => {
     const first = vi.fn();
     const second = vi.fn();
-    const subscribe = vi
-      .fn()
-      .mockReturnValueOnce(first)
-      .mockReturnValueOnce(second);
+    const subscribe = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
 
     const unsubscribe = subscribeWhileVisible(subscribe);
     expect(subscribe).toHaveBeenCalledTimes(1);

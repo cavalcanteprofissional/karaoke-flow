@@ -51,7 +51,10 @@ export function resetMissingAppUrlWarning(): void {
 
 export function makeOauthState(roomCode: string | undefined): string {
   const nonce = randomBytes(16).toString("hex");
-  return JSON.stringify({ nonce, room: roomCode ? normalizeRoomCode(roomCode) : undefined });
+  return JSON.stringify({
+    nonce,
+    room: roomCode ? normalizeRoomCode(roomCode) : undefined,
+  });
 }
 
 export type OauthStatePayload = {
@@ -63,7 +66,8 @@ export function parseOauthState(raw: string | null): OauthStatePayload | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as OauthStatePayload;
-    if (parsed && typeof parsed.nonce === "string" && parsed.nonce.length > 0) return parsed;
+    if (parsed && typeof parsed.nonce === "string" && parsed.nonce.length > 0)
+      return parsed;
   } catch {
     return null;
   }

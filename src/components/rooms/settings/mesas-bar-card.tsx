@@ -73,9 +73,9 @@ export function MesasBarCard({ bar }: MesasBarCardProps) {
           Mesas do bar
         </CardTitle>
         <CardDescription>
-          De 1 a {MESA_MAX} mesas. Um bar de mesa única não pergunta a mesa na
-          entrada: quem entra pelo código já senta na mesa 1. Diminuir remove as
-          últimas mesas e move quem estava nelas para a mesa 1.
+          De 1 a {MESA_MAX} mesas. Um bar de mesa única não pergunta a mesa na entrada:
+          quem entra pelo código já senta na mesa 1. Diminuir remove as últimas mesas e
+          move quem estava nelas para a mesa 1.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

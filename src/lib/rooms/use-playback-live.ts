@@ -40,10 +40,7 @@ function fromPlayerState(state: PlayerState): PlaybackLive {
   };
 }
 
-export function usePlaybackLive(
-  roomCode: string,
-  initial: PlaybackLive
-): PlaybackLive {
+export function usePlaybackLive(roomCode: string, initial: PlaybackLive): PlaybackLive {
   const [live, setLive] = useState<PlaybackLive>(initial);
 
   const refresh = useCallback(async () => {

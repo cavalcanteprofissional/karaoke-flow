@@ -28,7 +28,9 @@ export function normalizeQuery(query: string): string {
 
 export function isCacheFresh(createdAt: string, now: number = Date.now()): boolean {
   const ageSeconds = (now - Date.parse(createdAt)) / 1000;
-  return Number.isFinite(ageSeconds) && ageSeconds >= 0 && ageSeconds <= SONG_CACHE_TTL_SECONDS;
+  return (
+    Number.isFinite(ageSeconds) && ageSeconds >= 0 && ageSeconds <= SONG_CACHE_TTL_SECONDS
+  );
 }
 
 export type SongCacheStore = {

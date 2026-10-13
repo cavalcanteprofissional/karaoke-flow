@@ -8,7 +8,11 @@ vi.mock("qrcode", () => ({ default: { toDataURL: qrMock.toDataURL } }));
 import { PixDonation } from "./pix-donation";
 import { readPixPayload } from "@/lib/pix/brcode";
 
-const base = { chave: "cavalcante@outlook.com", nome: "Lucas Cavalcante", cidade: "Sao Paulo" };
+const base = {
+  chave: "cavalcante@outlook.com",
+  nome: "Lucas Cavalcante",
+  cidade: "Sao Paulo",
+};
 
 /** O textarea copia-e-cola é o que o doador usa se o QR não carregar. */
 function payloadNaTela(): string {
@@ -78,7 +82,9 @@ describe("PixDonation", () => {
   });
 
   it("avisa quando o navegador bloqueia a cópia, sem fingir que copiou", async () => {
-    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("nope")) } });
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error("nope")) },
+    });
     render(<PixDonation {...base} />);
     await waitFor(() => expect(qrMock.toDataURL).toHaveBeenCalled());
 
@@ -94,7 +100,10 @@ describe("PixDonation", () => {
    * foi testado.
    */
   it("copia mesmo sem Clipboard API (HTTP da rede local)", async () => {
-    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+    });
     const copia: string[] = [];
     let textareasDuranteCopia = 0;
     Object.defineProperty(document, "execCommand", {
@@ -126,7 +135,9 @@ describe("PixDonation", () => {
     qrMock.toDataURL.mockRejectedValue(new Error("canvas indisponível"));
     render(<PixDonation {...base} />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Não foi possível gerar o QR/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Não foi possível gerar o QR/
+    );
     expect(payloadNaTela()).not.toBe("");
     expect(screen.getByText(base.chave)).toBeInTheDocument();
   });

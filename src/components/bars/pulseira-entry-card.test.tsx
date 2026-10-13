@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PulseiraPreco } from "@/types/bar";
 
 const mocks = vi.hoisted(() => {
@@ -131,8 +125,6 @@ describe("PulseiraEntryCard", () => {
 
   it("desabilita o botão com código curto demais", () => {
     render(<PulseiraEntryCard {...baseProps} initialPulseira="AB" />);
-    expect(
-      screen.getByRole("button", { name: /Ativar pulseira/ })
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Ativar pulseira/ })).toBeDisabled();
   });
 });

@@ -1,5 +1,10 @@
 import { YouTubeApiError } from "@/lib/youtube/errors";
-import type { YouTubeApiErrorPayload, YouTubeAuthMode, YouTubeSearchParams, YouTubeVideo } from "@/lib/youtube/types";
+import type {
+  YouTubeApiErrorPayload,
+  YouTubeAuthMode,
+  YouTubeSearchParams,
+  YouTubeVideo,
+} from "@/lib/youtube/types";
 
 const API_BASE = "https://www.googleapis.com/youtube/v3";
 const DURATION_BATCH_SIZE = 50;
@@ -12,7 +17,11 @@ type SearchRequestInit = {
  * Aplica a credencial na URL/chamada: OAuth (app/host) vai em `Authorization:
  * Bearer`; API key vai como parâmetro `?key=`. Nunca os dois juntos.
  */
-function withAuth(url: URL, apiKey: string, authMode: YouTubeAuthMode): SearchRequestInit {
+function withAuth(
+  url: URL,
+  apiKey: string,
+  authMode: YouTubeAuthMode
+): SearchRequestInit {
   if (authMode === "bearer") {
     return { headers: { Authorization: `Bearer ${apiKey}` } };
   }
@@ -63,13 +72,19 @@ export async function searchYouTube(
   searchUrl.searchParams.set("videoEmbeddable", "true");
   const searchInit = withAuth(searchUrl, apiKey, authMode);
 
-  const searchBody = (await requestJson<SearchResponse>(searchUrl.toString(), fetchFn, searchInit)).body;
+  const searchBody = (
+    await requestJson<SearchResponse>(searchUrl.toString(), fetchFn, searchInit)
+  ).body;
 
   const items = searchBody?.items ?? [];
   if (items.length === 0) return [];
 
-  const found: Array<{ videoId: string; title: string; thumbnailUrl: string | null; channelTitle: string | null }> =
-    [];
+  const found: Array<{
+    videoId: string;
+    title: string;
+    thumbnailUrl: string | null;
+    channelTitle: string | null;
+  }> = [];
 
   for (const item of items) {
     const videoId = item.id?.videoId;
@@ -85,7 +100,12 @@ export async function searchYouTube(
 
   if (found.length === 0) return [];
 
-  const durations = await fetchDurations(found.map((f) => f.videoId), apiKey, authMode, fetchFn);
+  const durations = await fetchDurations(
+    found.map((f) => f.videoId),
+    apiKey,
+    authMode,
+    fetchFn
+  );
 
   return found.map((f) => ({
     ...f,
@@ -108,7 +128,11 @@ async function fetchDurations(
     videosUrl.searchParams.set("id", batch.join(","));
     const init = withAuth(videosUrl, apiKey, authMode);
 
-    const { body } = await requestJson<VideosResponse>(videosUrl.toString(), fetchFn, init);
+    const { body } = await requestJson<VideosResponse>(
+      videosUrl.toString(),
+      fetchFn,
+      init
+    );
     for (const item of body.items ?? []) {
       if (!item.id) continue;
       const seconds = parseIso8601Duration(item.contentDetails?.duration);
@@ -139,7 +163,8 @@ async function requestJson<T>(
   }
 
   if (!response.ok) {
-    const details = typeof payload?.error?.message === "string" ? payload.error.message : "";
+    const details =
+      typeof payload?.error?.message === "string" ? payload.error.message : "";
     throw new YouTubeApiError(
       details,
       payload,

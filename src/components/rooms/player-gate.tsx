@@ -96,7 +96,9 @@ export function PlayerGate({
         <p className="text-5xl font-bold tracking-tight sm:text-7xl">
           {playerGateTitle(state, phase)}
         </p>
-        <p className="text-2xl text-zinc-300 sm:text-3xl">{playerGateHint(state, phase)}</p>
+        <p className="text-2xl text-zinc-300 sm:text-3xl">
+          {playerGateHint(state, phase)}
+        </p>
       </div>
 
       {phase === 1 ? (
@@ -128,9 +130,8 @@ export function PlayerGate({
       )}
 
       <p className="flex max-w-xl items-center gap-2 text-lg text-zinc-500">
-        <WifiOff className="size-5" />
-        A TV continua acompanhando a fila. Quem estiver no celular pode pedir música pelo
-        QR.
+        <WifiOff className="size-5" />A TV continua acompanhando a fila. Quem estiver no
+        celular pode pedir música pelo QR.
       </p>
     </div>
   );

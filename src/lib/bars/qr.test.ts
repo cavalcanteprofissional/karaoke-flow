@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { barJoinUrl, entryRoute, mesaJoinUrl, parseEntryToken, pulseiraRedeemUrl } from "./qr";
+import {
+  barJoinUrl,
+  entryRoute,
+  mesaJoinUrl,
+  parseEntryToken,
+  pulseiraRedeemUrl,
+} from "./qr";
 import { createBarSchema } from "./schema";
 
 describe("parseEntryToken", () => {
@@ -64,7 +70,9 @@ describe("parseEntryToken", () => {
   });
 
   it("lê a pulseira que vem no QR da casa (Fase 18)", () => {
-    expect(parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&pulseira=ABC234")).toEqual({
+    expect(
+      parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&pulseira=ABC234")
+    ).toEqual({
       bar: "ZEHBAR",
       pulseira: "ABC234",
     });
@@ -81,9 +89,9 @@ describe("parseEntryToken", () => {
   });
 
   it("ignora pulseira inválida mantendo o resto do token", () => {
-    expect(
-      parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&pulseira=AB")
-    ).toEqual({ bar: "ZEHBAR" });
+    expect(parseEntryToken("https://karaoke.app/entrar?bar=ZEHBAR&pulseira=AB")).toEqual({
+      bar: "ZEHBAR",
+    });
   });
 });
 

@@ -115,7 +115,9 @@ export function PlaybackControls({
     if (ok) {
       toast.success("Link do player copiado.");
     } else {
-      toast.error("Não foi possível copiar. Use “Abrir player na TV” e copie o link da barra.");
+      toast.error(
+        "Não foi possível copiar. Use “Abrir player na TV” e copie o link da barra."
+      );
     }
   }
 

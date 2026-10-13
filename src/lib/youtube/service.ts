@@ -90,9 +90,14 @@ export type SearchSuccess = {
   source: ResolvedApiKey["source"] | null;
 };
 
-export type SearchOutcome = { ok: true; data: SearchSuccess } | { ok: false; failure: SearchFailure };
+export type SearchOutcome =
+  { ok: true; data: SearchSuccess } | { ok: false; failure: SearchFailure };
 
-const EMPTY_QUERY: SearchFailure = { status: 400, error: "Digite algo para buscar.", code: "EMPTY_QUERY" };
+const EMPTY_QUERY: SearchFailure = {
+  status: 400,
+  error: "Digite algo para buscar.",
+  code: "EMPTY_QUERY",
+};
 
 /**
  * A API do YouTube não foi consultada e não foi ela que recusou — é este
@@ -128,9 +133,7 @@ const SERVER_SEARCH_FAILED: SearchFailure = {
  * → chave de dev, esta última só para conta `dev`) — tudo com portas
  * injetáveis para testes sem rede nem banco.
  */
-export async function searchYouTubeForRoom(
-  ports: SearchPorts
-): Promise<SearchOutcome> {
+export async function searchYouTubeForRoom(ports: SearchPorts): Promise<SearchOutcome> {
   const query = normalizeQuery(ports.searchQuery);
   if (!query) return { ok: false, failure: EMPTY_QUERY };
 
@@ -151,7 +154,10 @@ export async function searchYouTubeForRoom(
 
   const room = await ports.getRoom(ports.roomCode);
   if (!room) {
-    return { ok: false, failure: { status: 404, error: "Sala não encontrada.", code: "ROOM_NOT_FOUND" } };
+    return {
+      ok: false,
+      failure: { status: 404, error: "Sala não encontrada.", code: "ROOM_NOT_FOUND" },
+    };
   }
 
   const membership = await ports.getMembership(room.roomId, ports.userId);
@@ -224,9 +230,10 @@ export async function searchYouTubeForRoom(
         // O `503` + este `hint` é o que substitui a mensagem opaca da Fase 4:
         // o participante vê que a busca está desligada por configuração, e o
         // dono do bar recebe o passo em vez de uma desculpa genérica.
-        hint: room.policy === "own_only"
-          ? "O dono do bar precisa salvar uma chave da YouTube Data API v3 nas configurações da sala."
-          : "Este bar pediu a chave da plataforma, mas nenhuma está disponível agora.",
+        hint:
+          room.policy === "own_only"
+            ? "O dono do bar precisa salvar uma chave da YouTube Data API v3 nas configurações da sala."
+            : "Este bar pediu a chave da plataforma, mas nenhuma está disponível agora.",
         code: "CREDENTIAL_NOT_CONFIGURED",
       },
     };

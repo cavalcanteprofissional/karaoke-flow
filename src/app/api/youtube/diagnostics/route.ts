@@ -83,18 +83,28 @@ function environmentReport(isDev: boolean): DiagnosticReport {
 
   const nextSteps: string[] = [];
   if (!supabaseServiceRole) {
-    nextSteps.push("Falta SUPABASE_SERVICE_ROLE_KEY: sem service role não dá para ler a chave da sala nem o cache compartilhado.");
+    nextSteps.push(
+      "Falta SUPABASE_SERVICE_ROLE_KEY: sem service role não dá para ler a chave da sala nem o cache compartilhado."
+    );
   }
   if (!oauthClientId || !oauthClientSecret) {
-    nextSteps.push("Faltam YOUTUBE_OAUTH_CLIENT_ID/SECRET: sem elas o botão 'conectar conta do YouTube' não funciona.");
+    nextSteps.push(
+      "Faltam YOUTUBE_OAUTH_CLIENT_ID/SECRET: sem elas o botão 'conectar conta do YouTube' não funciona."
+    );
   }
   if (!isDev) {
-    nextSteps.push("Esta sessão não é dev (is_dev() = false): a chave de YOUTUBE_API_KEY NÃO será usada, por decisão.");
+    nextSteps.push(
+      "Esta sessão não é dev (is_dev() = false): a chave de YOUTUBE_API_KEY NÃO será usada, por decisão."
+    );
   } else if (!youtubeApiKey && !appRefreshToken) {
-    nextSteps.push("Conta dev sem YOUTUBE_API_KEY nem YOUTUBE_APP_REFRESH_TOKEN: a busca usa a chave da sala ou o pool do bar, e nada mais.");
+    nextSteps.push(
+      "Conta dev sem YOUTUBE_API_KEY nem YOUTUBE_APP_REFRESH_TOKEN: a busca usa a chave da sala ou o pool do bar, e nada mais."
+    );
   }
   if (youtubeApiKey && !isDev) {
-    nextSteps.push("YOUTUBE_API_KEY está presente no deploy e será ignorada para esta sessão (não-dev). Remova da Vercel se não for mais usada por dev.");
+    nextSteps.push(
+      "YOUTUBE_API_KEY está presente no deploy e será ignorada para esta sessão (não-dev). Remova da Vercel se não for mais usada por dev."
+    );
   }
 
   return {
@@ -144,7 +154,11 @@ async function resolveForRoom(
     .eq("code", roomCode)
     .maybeSingle();
   if (!room) {
-    return { credential: null, isDev, note: `Sala "${roomCode}" não existe ou você não é membro.` };
+    return {
+      credential: null,
+      isDev,
+      note: `Sala "${roomCode}" não existe ou você não é membro.`,
+    };
   }
 
   const { data: secretRow } = await admin
@@ -240,7 +254,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // Modo ambiente: sem chave da sala e, por padrão, sem chamar o Google.
   if (!roomCode) {
-    if (!wantsProbe) return NextResponse.json(environmentReport(true), { headers: NO_STORE });
+    if (!wantsProbe)
+      return NextResponse.json(environmentReport(true), { headers: NO_STORE });
   }
 
   try {
@@ -267,7 +282,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           ...report,
           room: roomCode ?? null,
           resolvedFrom: resolved.credential?.source ?? "none",
-          hint: resolved.credential ? null : (resolved.note ?? missHint(roomCode ?? null)),
+          hint: resolved.credential
+            ? null
+            : (resolved.note ?? missHint(roomCode ?? null)),
           code: resolved.credential ? null : "CREDENTIAL_NOT_CONFIGURED",
         },
         { headers: NO_STORE }
@@ -289,7 +306,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         isDev: resolved.isDev,
         resolvedFrom: resolved.credential?.source ?? "none",
         nextSteps: probe.ok
-          ? ["Chave aceita pelo YouTube. Se a busca ainda falha no app, o problema está em outro caminho."]
+          ? [
+              "Chave aceita pelo YouTube. Se a busca ainda falha no app, o problema está em outro caminho.",
+            ]
           : report.nextSteps,
       },
       { headers: NO_STORE }

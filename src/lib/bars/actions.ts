@@ -172,7 +172,10 @@ export async function updateBarMesasAction(
     }
     return {
       ok: false,
-      error: friendlyError(error.message, "Não foi possível salvar a quantidade de mesas."),
+      error: friendlyError(
+        error.message,
+        "Não foi possível salvar a quantidade de mesas."
+      ),
     };
   }
 

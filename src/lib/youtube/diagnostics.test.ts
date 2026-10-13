@@ -13,7 +13,11 @@ import { YouTubeApiError } from "./errors";
 describe("probeYouTubeCredential", () => {
   const KEY = "AIzaSy-SECRET-DO-NOT-LOGAR";
 
-  function jsonResponse(body: unknown, status: number, headers?: Record<string, string>): Response {
+  function jsonResponse(
+    body: unknown,
+    status: number,
+    headers?: Record<string, string>
+  ): Response {
     return new Response(JSON.stringify(body), {
       status,
       headers: { "content-type": "application/json", ...headers },
@@ -46,9 +50,14 @@ describe("probeYouTubeCredential", () => {
   });
 
   it("propaga o reason do Google (o que faltava na Fase 4)", async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      jsonResponse({ error: { code: 403, errors: [{ reason: "dailyLimitExceeded" }] } }, 403)
-    );
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: 403, errors: [{ reason: "dailyLimitExceeded" }] } },
+          403
+        )
+      );
     const result = await probeYouTubeCredential({
       credential: { key: KEY, source: "dev" },
       fetcher,
@@ -61,9 +70,11 @@ describe("probeYouTubeCredential", () => {
   });
 
   it("chave com restrição de origem é diagnosticada como tal", async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      jsonResponse({ error: { errors: [{ reason: "ipRefererBlocked" }] } }, 400)
-    );
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { errors: [{ reason: "ipRefererBlocked" }] } }, 400)
+      );
     const result = await probeYouTubeCredential({
       credential: { key: KEY, source: "dev" },
       fetcher,
@@ -111,19 +122,26 @@ describe("probeYouTubeCredential", () => {
 
   it("OAuth vai como Bearer, não como ?key=", async () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [] }, 200));
-    await probeYouTubeCredential({ credential: { key: "ya29.TOKEN", source: "host" }, fetcher });
+    await probeYouTubeCredential({
+      credential: { key: "ya29.TOKEN", source: "host" },
+      fetcher,
+    });
 
     const url = new URL(String(fetcher.mock.calls[0][0]));
     const init = fetcher.mock.calls[0][1] as RequestInit;
     expect(url.searchParams.get("key")).toBeNull();
-    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer ya29.TOKEN");
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      "Bearer ya29.TOKEN"
+    );
   });
 
   // ── O teste que protege o segredo ──────────────────────────────────────────
   it("a chave NÃO aparece no relatório, em nenhum campo", async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      jsonResponse({ error: { errors: [{ reason: "keyInvalid" }] } }, 400)
-    );
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { errors: [{ reason: "keyInvalid" }] } }, 400)
+      );
     const result = await probeYouTubeCredential({
       credential: { key: KEY, source: "room" },
       fetcher,
@@ -188,7 +206,9 @@ describe("safeDiagnosticDetail", () => {
   });
 
   it("erro nosso (sem YouTubeApiError) passa a mensagem", () => {
-    const detail = safeDiagnosticDetail(new Error("Credenciais de service role ausentes"));
+    const detail = safeDiagnosticDetail(
+      new Error("Credenciais de service role ausentes")
+    );
     expect(detail.thrownMessage).toContain("service role");
     expect(detail.redacted).toBe(false);
   });
@@ -199,7 +219,7 @@ describe("safeDiagnosticDetail", () => {
     // chave. Filtro só no `YouTubeApiError` não segura isto.
     const detail = safeDiagnosticDetail(
       new Error(
-        'request to https://www.googleapis.com/youtube/v3/search?key=AIzaSy-SECRET-DO-NOT-LOGAR failed'
+        "request to https://www.googleapis.com/youtube/v3/search?key=AIzaSy-SECRET-DO-NOT-LOGAR failed"
       )
     );
 
@@ -210,7 +230,10 @@ describe("safeDiagnosticDetail", () => {
   });
 
   it.each([
-    ["access token de OAuth", "token exchange failed: access_token=ya29.abcdefghijklmnop"],
+    [
+      "access token de OAuth",
+      "token exchange failed: access_token=ya29.abcdefghijklmnop",
+    ],
     ["refresh token", "invalid_grant: refresh_token=1//0gSECRETvalue"],
     ["JWT do Supabase", "AuthApiError: eyJhbGciOiJIUzI1NiIs.eyJzdWIiOiIxIn0.SIGNATURE"],
     ["service role nova", "failed: sb_secret_abcdefghijklmnop"],

@@ -32,7 +32,11 @@ export class MemoryRateLimiter {
     list.push(now);
     this.hits.set(key, list);
     if (this.hits.size > 10_000) this.prune(now);
-    return { allowed: true, remaining: this.maxHits - list.length, resetAt: now + this.windowMs };
+    return {
+      allowed: true,
+      remaining: this.maxHits - list.length,
+      resetAt: now + this.windowMs,
+    };
   }
 
   prune(now: number = Date.now()): void {

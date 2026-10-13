@@ -79,7 +79,8 @@ export function PendingEntries({ roomId, initial }: PendingEntriesProps) {
 
     const poll = window.setInterval(() => {
       // Aba oculta não paga poll; ao voltar, o `visibilitychange` relê na hora.
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
       run();
     }, 10000);
 

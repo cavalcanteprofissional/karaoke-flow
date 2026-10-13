@@ -23,13 +23,7 @@ import { YouTubeApiError } from "@/lib/youtube/errors";
  * suficiente para diagnosticar e insuficiente para roubar.
  */
 
-export type DiagnosticSource =
-  | "room"
-  | "host"
-  | "platform"
-  | "app"
-  | "dev"
-  | "none";
+export type DiagnosticSource = "room" | "host" | "platform" | "app" | "dev" | "none";
 
 export type YouTubeDiagnostic = {
   /** `false` = a chamada foi feita e o YouTube aceitou. */
@@ -80,7 +74,8 @@ export async function probeYouTubeCredential(params: {
   }
 
   const { key, source } = params.credential;
-  const authMode: YouTubeAuthMode = source === "app" || source === "host" ? "bearer" : "key";
+  const authMode: YouTubeAuthMode =
+    source === "app" || source === "host" ? "bearer" : "key";
 
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("part", "snippet");

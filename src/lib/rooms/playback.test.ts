@@ -369,7 +369,10 @@ describe("shouldShowPlayerGate (toque de partida)", () => {
 
   it("pede o toque quando há faixa tocando e a TV não foi armada", () => {
     expect(
-      shouldShowPlayerGate({ ...base, currentItemId: "11111111-1111-4111-8111-111111111111" })
+      shouldShowPlayerGate({
+        ...base,
+        currentItemId: "11111111-1111-4111-8111-111111111111",
+      })
     ).toBe(true);
   });
 

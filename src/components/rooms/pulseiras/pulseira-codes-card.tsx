@@ -38,7 +38,8 @@ const STATUS_LABEL: Record<PulseiraStatus, string> = {
 };
 
 const STATUS_CLASS: Record<PulseiraStatus, string> = {
-  disponivel: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  disponivel:
+    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
   usado: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
   expirado: "bg-muted text-muted-foreground border-border",
 };
@@ -81,8 +82,8 @@ export function PulseiraCodesCard({
           Distribuição de códigos
         </CardTitle>
         <CardDescription>
-          Cada código vale 24h e é de uso único. O QR já leva o visitante para a
-          entrada com o código preenchido.
+          Cada código vale 24h e é de uso único. O QR já leva o visitante para a entrada
+          com o código preenchido.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -126,8 +127,8 @@ export function PulseiraCodesCard({
 
         {codigos.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            Nenhum código gerado ainda. Gere o primeiro lote para imprimir e levar
-            ao balcão.
+            Nenhum código gerado ainda. Gere o primeiro lote para imprimir e levar ao
+            balcão.
           </p>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
@@ -136,7 +137,7 @@ export function PulseiraCodesCard({
               return (
                 <li
                   key={row.id}
-                  className="flex flex-col items-center gap-2 rounded-xl border p-3 text-center break-inside-avoid"
+                  className="flex break-inside-avoid flex-col items-center gap-2 rounded-xl border p-3 text-center"
                 >
                   <span
                     className={cn(

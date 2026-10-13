@@ -99,7 +99,9 @@ describe("RoomOccupancyCard", () => {
     mocks.state.payload = cheio;
     const { container } = render(<RoomOccupancyCard {...base} />);
 
-    await waitFor(() => expect(screen.getByText("Quem está na sala")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Quem está na sala")).toBeInTheDocument()
+    );
     const texto = textOf(container);
     expect(texto).toMatch(/5 pessoas na sala/);
     expect(screen.getByText("na sala")).toBeInTheDocument();
@@ -152,7 +154,9 @@ describe("RoomOccupancyCard", () => {
 
     // Uma ida só no banco no mount: a segunda vem do evento.
     expect(mocks.rpc).toHaveBeenCalledTimes(2);
-    expect(mocks.rpc).toHaveBeenCalledWith("admin_room_occupancy", { p_room_id: "room-1" });
+    expect(mocks.rpc).toHaveBeenCalledWith("admin_room_occupancy", {
+      p_room_id: "room-1",
+    });
     await waitFor(() => expect(textOf(container)).toMatch(/5 pessoas na sala/));
   });
 

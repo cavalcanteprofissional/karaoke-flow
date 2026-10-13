@@ -31,7 +31,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return redirectWithError(request, "state-mismatch");
   }
 
-  const tokens = await exchangeAuthorizationCode(code, `${oauthBaseUrl(request)}/auth/youtube/callback`);
+  const tokens = await exchangeAuthorizationCode(
+    code,
+    `${oauthBaseUrl(request)}/auth/youtube/callback`
+  );
   if (!tokens.refreshToken) {
     return redirectWithError(request, "no-refresh-token");
   }

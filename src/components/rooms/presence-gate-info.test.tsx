@@ -57,7 +57,9 @@ describe("PresenceGateInfo", () => {
    * existe.
    */
   it("avisa que a entrada livre não dispensa a localização", () => {
-    const { container } = render(<PresenceGateInfo {...base} entryModeApproval={false} />);
+    const { container } = render(
+      <PresenceGateInfo {...base} entryModeApproval={false} />
+    );
     const text = textOf(container);
 
     expect(text).toMatch(/entrada livre ligada o guest entra direto na sala/);
@@ -140,7 +142,9 @@ describe("PresenceGateInfo", () => {
 
     expect(actionMock.updateBarRadiusAction).toHaveBeenCalledWith("bar-1", 550);
     await waitFor(() =>
-      expect((screen.getByLabelText("Raio de presença") as HTMLInputElement).value).toBe("550")
+      expect((screen.getByLabelText("Raio de presença") as HTMLInputElement).value).toBe(
+        "550"
+      )
     );
   });
 
@@ -214,7 +218,9 @@ describe("PresenceGateInfo", () => {
     await user.tab();
 
     await waitFor(() =>
-      expect((screen.getByLabelText("Raio de presença") as HTMLInputElement).value).toBe("500")
+      expect((screen.getByLabelText("Raio de presença") as HTMLInputElement).value).toBe(
+        "500"
+      )
     );
     expect(lastRadiusProps().radiusMeters).toBe(500);
     expect(screen.getByRole("alert")).toHaveTextContent(/Só o dono do bar/i);

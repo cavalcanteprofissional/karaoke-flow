@@ -167,9 +167,8 @@ describe("addSongToQueueAction", () => {
       data: { id: ROOM_ID, host_id: HOST, bar_id: bar === null ? null : "bar-1" },
       error: null,
     };
-    mocks.results["bars.maybeSingle"] = bar === null
-      ? { data: null, error: null }
-      : { data: bar, error: null };
+    mocks.results["bars.maybeSingle"] =
+      bar === null ? { data: null, error: null } : { data: bar, error: null };
     mocks.results["queue_items.select"] = { data: INSERTED, error: null };
   }
 

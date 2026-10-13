@@ -45,7 +45,12 @@ type EnterStatus = "idle" | "joining" | "error" | "pending" | "rejected" | "appr
 
 /** Entrada DIRETA por código de sala: no mount, chama a Server Action de
  * entrada (queda do anti-pattern de mutação durante o render) e redireciona. */
-export function EnterRoomByCode({ code, preview, membership, presence }: EnterRoomByCodeProps) {
+export function EnterRoomByCode({
+  code,
+  preview,
+  membership,
+  presence,
+}: EnterRoomByCodeProps) {
   const router = useRouter();
   const [status, setStatus] = useState<EnterStatus>(membership?.status ?? "idle");
   const [errorMsg, setErrorMsg] = useState("");

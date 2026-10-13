@@ -176,7 +176,10 @@ async function main() {
   if (HOST_USER_ID) {
     const { error: devErr } = await admin
       .from("dev_accounts")
-      .upsert({ user_id: HOST_USER_ID }, { onConflict: "user_id", ignoreDuplicates: true });
+      .upsert(
+        { user_id: HOST_USER_ID },
+        { onConflict: "user_id", ignoreDuplicates: true }
+      );
     if (devErr) {
       throw new Error(
         "dev_accounts: " +

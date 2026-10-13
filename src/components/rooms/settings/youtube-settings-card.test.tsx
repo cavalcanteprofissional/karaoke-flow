@@ -27,7 +27,9 @@ vi.mock("@/lib/rooms/actions", () => ({
     mocks.updateYoutubeSafeSearchAction(...args) as unknown,
 }));
 
-function renderCard(props: Partial<React.ComponentProps<typeof YoutubeSettingsCard>> = {}) {
+function renderCard(
+  props: Partial<React.ComponentProps<typeof YoutubeSettingsCard>> = {}
+) {
   return render(
     <YoutubeSettingsCard
       roomId="room-1"
@@ -75,10 +77,9 @@ describe("YoutubeSettingsCard — textos honestos sobre a busca no YouTube", () 
   it("o link de OAuth leva o código da sala", () => {
     renderCard({ roomCode: "ZEZE" });
 
-    expect(screen.getByRole("link", { name: /Conectar conta do YouTube/i })).toHaveAttribute(
-      "href",
-      "/auth/youtube/authorize?room=ZEZE"
-    );
+    expect(
+      screen.getByRole("link", { name: /Conectar conta do YouTube/i })
+    ).toHaveAttribute("href", "/auth/youtube/authorize?room=ZEZE");
   });
 
   it("a chave deixou de ser 'opcional'", () => {
@@ -120,9 +121,7 @@ describe("YoutubeSettingsCard — chave salva", () => {
     expect(screen.getByText(/Conectado à conta do YouTube/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Remover conexão/i })).toBeInTheDocument();
     // Sem conexão não há botão que pareça funcionar e não funciona.
-    expect(
-      screen.queryByRole("link", { name: /Conectar conta do YouTube/i })
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: /Conectar conta do YouTube/i })).toBeNull();
   });
 });
 

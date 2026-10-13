@@ -58,7 +58,11 @@ const h = vi.hoisted(() => {
         }
         const key = table === "rooms_public" ? "rooms" : table;
         const rows =
-          key === "bars" ? state.bars : key === "youtube_credential_pools" ? state.pools : state.rooms;
+          key === "bars"
+            ? state.bars
+            : key === "youtube_credential_pools"
+              ? state.pools
+              : state.rooms;
         const match = rows.find((row: Row) =>
           conditions.every(([field, value]) => row[field] === value)
         );
@@ -155,7 +159,8 @@ const server = setupServer(
         {
           error: {
             code: 403,
-            message: "The request cannot be completed because you have violated this API project's quota.",
+            message:
+              "The request cannot be completed because you have violated this API project's quota.",
             errors: [{ reason: "ipRefererBlocked", message: "..." }],
           },
         },
@@ -348,7 +353,9 @@ describe("GET /api/youtube/diagnostics — por sala, sem chamar o Google", () =>
     h.reset({
       hostToken: "ya29.TOKEN-DO-HOST",
       rooms: [{ id: "r1", code: "AB12", host_id: "host-1", bar_id: "b1" }],
-      bars: [{ id: "b1", youtube_credential_policy: "platform_pool", youtube_pool_id: "p1" }],
+      bars: [
+        { id: "b1", youtube_credential_policy: "platform_pool", youtube_pool_id: "p1" },
+      ],
       pools: [{ id: "p1", api_key: POOL_KEY, active: true }],
     });
     process.env.YOUTUBE_API_KEY = DEV_KEY;
@@ -365,7 +372,9 @@ describe("GET /api/youtube/diagnostics — por sala, sem chamar o Google", () =>
   it("pool inativo não é usado, e o passo cita a plataforma como causa possível", async () => {
     h.reset({
       rooms: [{ id: "r1", code: "AB12", host_id: "host-1", bar_id: "b1" }],
-      bars: [{ id: "b1", youtube_credential_policy: "platform_pool", youtube_pool_id: "p1" }],
+      bars: [
+        { id: "b1", youtube_credential_policy: "platform_pool", youtube_pool_id: "p1" },
+      ],
       pools: [{ id: "p1", api_key: POOL_KEY, active: false }],
     });
 
@@ -453,7 +462,11 @@ describe("GET /api/youtube/diagnostics — quando o próprio diagnóstico quebra
     // O `createAdmin()` explodindo com uma mensagem que cita a URL da chave é
     // exatamente o caso que o `error.message` cru vazava. A resposta precisa
     // continuar útil (o `envPresent` volta) e continuar limpa.
-    h.reset({ adminThrows: new Error(`falhou: https://www.googleapis.com/youtube?key=${ROOM_KEY}`) });
+    h.reset({
+      adminThrows: new Error(
+        `falhou: https://www.googleapis.com/youtube?key=${ROOM_KEY}`
+      ),
+    });
 
     const response = await GET(requestFor("?room=AB12&probe=1"));
     const body = await response.json();

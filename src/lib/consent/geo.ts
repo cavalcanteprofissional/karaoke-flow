@@ -62,8 +62,7 @@ export function captureGeolocation(
 
     const onError = (error: GeolocationPositionError): void => {
       resolve({
-        status:
-          error.code === error.PERMISSION_DENIED ? "denied" : "unavailable",
+        status: error.code === error.PERMISSION_DENIED ? "denied" : "unavailable",
         ts: new Date().toISOString(),
       });
     };

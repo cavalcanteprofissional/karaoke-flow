@@ -211,7 +211,10 @@ export async function updateYoutubeSafeSearchAction(
   if (error) {
     return {
       ok: false,
-      error: friendlyError(error.message, "Não foi possível salvar o filtro de conteúdo."),
+      error: friendlyError(
+        error.message,
+        "Não foi possível salvar o filtro de conteúdo."
+      ),
     };
   }
   if (!data || data.length === 0) {

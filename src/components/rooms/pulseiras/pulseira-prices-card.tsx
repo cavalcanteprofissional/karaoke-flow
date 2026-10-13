@@ -40,11 +40,7 @@ type PulseiraPricesCardProps = {
  * (decisão da Fase 18): sem faixa, o resgate acontece sem preço. A faixa que
  * cobre AGORA aparece destacada — é o "valor de hoje" do cartaz público.
  */
-export function PulseiraPricesCard({
-  barId,
-  precos,
-  disabled,
-}: PulseiraPricesCardProps) {
+export function PulseiraPricesCard({ barId, precos, disabled }: PulseiraPricesCardProps) {
   const [dia, setDia] = useState(String(horaLocalPulseira().dow));
   const [inicio, setInicio] = useState("18:00");
   const [fim, setFim] = useState("22:00");
@@ -100,7 +96,9 @@ export function PulseiraPricesCard({
         </CardTitle>
         <CardDescription>
           Preço por dia e faixa de horas.{" "}
-          <span className="font-medium">Valor de referência — sem cobrança pelo app.</span>
+          <span className="font-medium">
+            Valor de referência — sem cobrança pelo app.
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -169,7 +167,11 @@ export function PulseiraPricesCard({
           onClick={salvar}
           disabled={disabled || busy}
         >
-          {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}
+          {busy ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <Plus className="size-4" />
+          )}
           Salvar faixa
         </Button>
 
@@ -208,9 +210,11 @@ export function PulseiraPricesCard({
                             <span className="font-mono">
                               {formatHora(p.hora_inicio)}–{formatHora(p.hora_fim)}
                             </span>
-                            <span className="font-medium">{formatCentavos(p.preco_centavos)}</span>
+                            <span className="font-medium">
+                              {formatCentavos(p.preco_centavos)}
+                            </span>
                             {ativa && (
-                              <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold tracking-wide uppercase">
+                              <span className="text-[10px] font-semibold tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
                                 hoje
                               </span>
                             )}

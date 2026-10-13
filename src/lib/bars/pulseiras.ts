@@ -15,9 +15,10 @@ export const PULSEIRA_TIMEZONE = "America/Sao_Paulo";
  * (0=domingo … 6=sábado) e minuto do dia. Dividir em partes com `Intl` é o
  * jeito estável de converter o instante para o fuso certo sem biblioteca.
  */
-export function horaLocalPulseira(
-  agora: Date = new Date()
-): { dow: number; minutos: number } {
+export function horaLocalPulseira(agora: Date = new Date()): {
+  dow: number;
+  minutos: number;
+} {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: PULSEIRA_TIMEZONE,
     hourCycle: "h23",
@@ -41,7 +42,11 @@ export function horaLocalPulseira(
   const dow = semana[valueOf("weekday")] ?? 0;
   const hora = Number(valueOf("hour"));
   const minuto = Number(valueOf("minute"));
-  return { dow, minutos: (Number.isFinite(hora) ? hora : 0) * 60 + (Number.isFinite(minuto) ? minuto : 0) };
+  return {
+    dow,
+    minutos:
+      (Number.isFinite(hora) ? hora : 0) * 60 + (Number.isFinite(minuto) ? minuto : 0),
+  };
 }
 
 /** "18:00[:SS]" → 1080. Uma fonte só para intérpretes e o app não divergirem. */

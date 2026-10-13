@@ -101,9 +101,16 @@ describe("resolveYouTubeApiKey", () => {
   });
 
   it("retorna null quando nada está disponível", async () => {
-    await expect(resolveYouTubeApiKey({ roomKey: null, devApiKey: null })).resolves.toBeNull();
     await expect(
-      resolveYouTubeApiKey({ roomKey: "", isDev: false, appToken: async () => null, devApiKey: "" })
+      resolveYouTubeApiKey({ roomKey: null, devApiKey: null })
+    ).resolves.toBeNull();
+    await expect(
+      resolveYouTubeApiKey({
+        roomKey: "",
+        isDev: false,
+        appToken: async () => null,
+        devApiKey: "",
+      })
     ).resolves.toBeNull();
   });
 });

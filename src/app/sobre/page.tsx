@@ -106,8 +106,8 @@ export default function AboutPage() {
           <CardContent className="text-muted-foreground flex flex-col gap-3 text-sm">
             <p>
               Nasci da irritação real: todo app de karaokê resolve duas pessoas por vez. O
-              objetivo aqui é o contrário — a TV toca sem ninguém segurar o celular, e quem
-              está na mesa só precisa apontar a câmera.
+              objetivo aqui é o contrário — a TV toca sem ninguém segurar o celular, e
+              quem está na mesa só precisa apontar a câmera.
             </p>
             <p>
               O código é meu, do zero, e está no GitHub. Se você abre bar, restaurante ou
@@ -158,8 +158,8 @@ export default function AboutPage() {
               <PixDonation chave={chave} nome={nome} cidade={cidade} />
             ) : (
               <p className="text-muted-foreground text-sm">
-                A chave Pix ainda não foi configurada neste deploy. Para apoiar, me chame no
-                GitHub e eu te passo a chave.
+                A chave Pix ainda não foi configurada neste deploy. Para apoiar, me chame
+                no GitHub e eu te passo a chave.
               </p>
             )}
           </CardContent>

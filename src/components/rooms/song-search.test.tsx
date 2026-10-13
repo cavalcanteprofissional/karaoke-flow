@@ -51,7 +51,8 @@ vi.mock("@/lib/consent/geo", () => ({
 // Pedir/trocar música tem que aparecer na lista dos outros aparelhos da sala
 // na hora (2026-09-27) — daí o aviso por broadcast.
 vi.mock("@/lib/rooms/room-channel", () => ({
-  announceQueueChange: (...args: unknown[]) => mocks.announceQueueChange(...args) as unknown,
+  announceQueueChange: (...args: unknown[]) =>
+    mocks.announceQueueChange(...args) as unknown,
 }));
 
 /**
@@ -389,7 +390,11 @@ describe("SongSearch — uma música ativa por participante", () => {
 
     // A faixa acabou na TV e o realtime chegou: nada de novo pedido, nada de F5.
     mocks.useOwnActiveSong.mockReturnValue({ playing: false, title: null });
-    rerender(searchElement({ ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" } }));
+    rerender(
+      searchElement({
+        ownActiveSong: { playing: true, replacedTitle: "Tocando pra mim" },
+      })
+    );
 
     expect(await searchAndGetAddButton()).toBeEnabled();
     expect(screen.queryByTestId("aviso-tocando")).toBeNull();
@@ -517,7 +522,8 @@ describe("SongSearch — erros de busca (Fase 8f)", () => {
 
   it("chave com restrição de origem mostra o passo do Google Cloud", async () => {
     await searchWithError({
-      error: "A chave do YouTube deste bar tem restrição de origem e a busca não consegue usar.",
+      error:
+        "A chave do YouTube deste bar tem restrição de origem e a busca não consegue usar.",
       code: "KEY_RESTRICTED",
       hint: "No Google Cloud, edite a chave e deixe as restrições sem restrição.",
     });
@@ -554,7 +560,10 @@ describe("SongSearch — erros de busca (Fase 8f)", () => {
 
   // O teste que fecha o defeito: HTTP 503 NÃO pode virar "falha de rede".
   it("resposta HTTP de erro nunca aparece como 'falha de rede'", async () => {
-    await searchWithError({ error: "A busca está temporariamente indisponível.", code: "SERVER_MISCONFIGURED" });
+    await searchWithError({
+      error: "A busca está temporariamente indisponível.",
+      code: "SERVER_MISCONFIGURED",
+    });
 
     expect(screen.queryByText(/Falha de rede/)).toBeNull();
     expect(screen.getByText("A busca está temporariamente indisponível.")).toBeTruthy();
@@ -606,7 +615,10 @@ describe("SongSearch — erros de busca (Fase 8f)", () => {
 
   it("rate limit continua dizendo para aguardar", async () => {
     await searchWithError(
-      { error: "Você buscou demais. Espere um pouco e tente de novo.", code: "RATE_LIMITED" },
+      {
+        error: "Você buscou demais. Espere um pouco e tente de novo.",
+        code: "RATE_LIMITED",
+      },
       429
     );
 

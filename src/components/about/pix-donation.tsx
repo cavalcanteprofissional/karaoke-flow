@@ -64,7 +64,8 @@ export function PixDonation({ chave, nome, cidade }: PixDonationProps) {
       })
       .catch((error: unknown) => {
         console.error("[PixDonation] falha ao gerar o QR", { chave, error });
-        if (active) setFalha("Não foi possível gerar o QR. Use o código copia e cola abaixo.");
+        if (active)
+          setFalha("Não foi possível gerar o QR. Use o código copia e cola abaixo.");
       });
     return () => {
       active = false;
@@ -106,7 +107,7 @@ export function PixDonation({ chave, nome, cidade }: PixDonationProps) {
       <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
         <div className="flex h-44 w-44 shrink-0 items-center justify-center rounded-xl border bg-white p-2">
           {falha ? (
-            <TriangleAlert className="size-6 text-destructive" aria-hidden />
+            <TriangleAlert className="text-destructive size-6" aria-hidden />
           ) : qr?.payload === payload ? (
             /* eslint-disable-next-line @next/next/no-img-element -- data URL PNG; next/image não trata */
             <img
@@ -139,21 +140,31 @@ export function PixDonation({ chave, nome, cidade }: PixDonationProps) {
             />
           </div>
 
-          <Button type="button" variant="outline" size="sm" onClick={copiar} disabled={!payload}>
-            {copiado ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={copiar}
+            disabled={!payload}
+          >
+            {copiado ? (
+              <Check className="size-4 text-emerald-500" />
+            ) : (
+              <Copy className="size-4" />
+            )}
             {copiado ? "Copiado!" : "Copiar código Pix"}
           </Button>
         </div>
       </div>
 
       {resultado.erro && (
-        <p role="alert" className="text-amber-500 text-sm">
+        <p role="alert" className="text-sm text-amber-500">
           {resultado.erro} A chave abaixo ainda funciona copiada à mão:
         </p>
       )}
 
       {falha && (
-        <p role="alert" className="text-amber-500 text-sm">
+        <p role="alert" className="text-sm text-amber-500">
           {falha}
         </p>
       )}

@@ -50,7 +50,9 @@ describe("RoomBehaviorCard — pré-aprovação de 24h", () => {
     expect(
       screen.getByText(/Quem tem login e foi aprovado nas últimas 24h/)
     ).toBeInTheDocument();
-    expect(screen.getByText(/Usuário sem login nunca é pré-aprovado/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Usuário sem login nunca é pré-aprovado/)
+    ).toBeInTheDocument();
   });
 
   it("está junto dos outros toggles da sala", () => {

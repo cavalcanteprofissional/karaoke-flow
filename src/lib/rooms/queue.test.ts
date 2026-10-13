@@ -233,8 +233,9 @@ describe("buildQueueRemoval (remover da fila)", () => {
   });
 
   it("o host tira o que está tocando e o pedido de qualquer pessoa", () => {
-    expect(buildQueueRemoval(ctx({ userId: "user-2", item: { ...item, status: "playing" } })))
-      .toEqual({ ok: true, itemId: item.id });
+    expect(
+      buildQueueRemoval(ctx({ userId: "user-2", item: { ...item, status: "playing" } }))
+    ).toEqual({ ok: true, itemId: item.id });
   });
 
   it("recusa item que já saiu da fila", () => {
@@ -421,7 +422,12 @@ describe("buildQueueSongReplacement (Bloco D)", () => {
  * travado por causa de rede) e nunca um título inventado.
  */
 describe("readOwnActiveSong (aviso da tela de busca)", () => {
-  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+  const song = (id: string, status: string, position = 1) => ({
+    id,
+    title: id,
+    status,
+    position,
+  });
   function fakeSupabase(result: { data: unknown } | { error: unknown }) {
     const spy = vi.fn().mockReturnValue(result);
     return {
@@ -504,7 +510,12 @@ describe("readOwnActiveSong (aviso da tela de busca)", () => {
  * sempre depois da primeira música.
  */
 describe("resolveOwnActiveSong (uma música ativa por participante)", () => {
-  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+  const song = (id: string, status: string, position = 1) => ({
+    id,
+    title: id,
+    status,
+    position,
+  });
   const ctx = (over: Partial<Parameters<typeof resolveOwnActiveSong>[0]> = {}) => ({
     isHost: false,
     ownSongs: [] as { id: string; title: string; status: string; position: number }[],
@@ -536,7 +547,7 @@ describe("resolveOwnActiveSong (uma música ativa por participante)", () => {
       terminais.every((status) => !QUEUE_VISIBLE_STATUSES.includes(status as never))
     ).toBe(true);
     expect(
-terminais.every(
+      terminais.every(
         (status) => resolveOwnActiveSong(ctx({ ownSongs: [song("antiga", status)] })).ok
       )
     ).toBe(true);
@@ -552,7 +563,7 @@ terminais.every(
     }
   });
 
-it("o host não tem limite — nem para tocar, nem para acumular", () => {
+  it("o host não tem limite — nem para tocar, nem para acumular", () => {
     const lotacao = [
       song("1", "pending"),
       song("2", "approved"),
@@ -575,7 +586,12 @@ it("o host não tem limite — nem para tocar, nem para acumular", () => {
  * tem como discordar do cliente.
  */
 describe("ownActiveSongView (o que a tela mostra)", () => {
-  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+  const song = (id: string, status: string, position = 1) => ({
+    id,
+    title: id,
+    status,
+    position,
+  });
 
   it("tocando: trava e diz qual é", () => {
     expect(ownActiveSongView([song("Evidências", "playing")], false)).toEqual({
@@ -600,7 +616,10 @@ describe("ownActiveSongView (o que a tela mostra)", () => {
 
   it("uma tocando vence a mais antiga da fila no nome mostrado", () => {
     expect(
-      ownActiveSongView([song("velha", "approved", 1), song("tocando", "playing", 2)], false)
+      ownActiveSongView(
+        [song("velha", "approved", 1), song("tocando", "playing", 2)],
+        false
+      )
     ).toEqual({ playing: true, title: "tocando" });
   });
 
@@ -622,7 +641,12 @@ describe("ownActiveSongView (o que a tela mostra)", () => {
  * recusa por teto com a MESMA frase que a trigger levanta (`KF001`).
  */
 describe("resolveOwnActiveSong no modo no-stop", () => {
-  const song = (id: string, status: string, position = 1) => ({ id, title: id, status, position });
+  const song = (id: string, status: string, position = 1) => ({
+    id,
+    title: id,
+    status,
+    position,
+  });
   const ctx = (over: Partial<Parameters<typeof resolveOwnActiveSong>[0]> = {}) => ({
     isHost: false,
     ownSongs: [] as { id: string; title: string; status: string; position: number }[],
@@ -632,15 +656,19 @@ describe("resolveOwnActiveSong no modo no-stop", () => {
   });
 
   it("pedir com a sua tocando é permitido (a TV não é cortada)", () => {
-    expect(resolveOwnActiveSong(ctx({ ownSongs: [song("tocando", "playing")] }))).toEqual({
-      ok: true,
-      replaced: null,
-    });
+    expect(resolveOwnActiveSong(ctx({ ownSongs: [song("tocando", "playing")] }))).toEqual(
+      {
+        ok: true,
+        replaced: null,
+      }
+    );
   });
 
   it("abaixo do teto: permite e NÃO substitui", () => {
     expect(
-      resolveOwnActiveSong(ctx({ ownSongs: [song("a", "approved"), song("b", "playing")] }))
+      resolveOwnActiveSong(
+        ctx({ ownSongs: [song("a", "approved"), song("b", "playing")] })
+      )
     ).toEqual({ ok: true, replaced: null });
   });
 
@@ -680,7 +708,13 @@ describe("ownActiveSongView no modo no-stop", () => {
   it("mostra o contador e não trava enquanto há vaga", () => {
     expect(
       ownActiveSongView([song("a", "approved")], false, { noStop: true, maxActive: 3 })
-    ).toEqual({ playing: false, title: null, noStop: true, activeCount: 1, maxActive: 3 });
+    ).toEqual({
+      playing: false,
+      title: null,
+      noStop: true,
+      activeCount: 1,
+      maxActive: 3,
+    });
   });
 
   it("no teto: trava o botão mantendo o contador", () => {

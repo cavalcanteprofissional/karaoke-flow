@@ -234,7 +234,9 @@ describe("EntryApprovalWait", () => {
   it("não oferece link de fuga quando só revalida", async () => {
     vi.useFakeTimers();
     try {
-      render(<EntryApprovalWait {...defaultProps} mode="refresh" initialStatus="approved" />);
+      render(
+        <EntryApprovalWait {...defaultProps} mode="refresh" initialStatus="approved" />
+      );
 
       expect(mocks.router.refresh).toHaveBeenCalled();
       await act(async () => {
@@ -243,7 +245,9 @@ describe("EntryApprovalWait", () => {
 
       // O escape existe para uma navegação que não conclui; aqui não há
       // navegação para concluir.
-      expect(screen.queryByRole("link", { name: /abrir o karaokê agora/i })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /abrir o karaokê agora/i })
+      ).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

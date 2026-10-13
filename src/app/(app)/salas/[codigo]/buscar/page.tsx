@@ -221,11 +221,11 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
            * servidor, criava duas respostas para a mesma pergunta na mesma tela —
            * o cabeçalho jurando que a música ainda tocava com o botão já livre.
            */}
-<CardDescription>
-              {replaceItem
-                ? "Escolha a música que substitui a atual. A posição na fila e a aprovação são mantidas."
-                : "Pesquise no YouTube e adicione à fila. A duração e a miniatura aparecem automaticamente."}
-            </CardDescription>
+          <CardDescription>
+            {replaceItem
+              ? "Escolha a música que substitui a atual. A posição na fila e a aprovação são mantidas."
+              : "Pesquise no YouTube e adicione à fila. A duração e a miniatura aparecem automaticamente."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <SongSearch

@@ -19,7 +19,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: (...args: unknown[]) => mocks.refresh(...args) }),
+  useRouter: () => ({
+    push: vi.fn(),
+    refresh: (...args: unknown[]) => mocks.refresh(...args),
+  }),
 }));
 vi.mock("@/lib/bars/actions", () => ({
   updateBarMesasAction: (...args: unknown[]) =>
@@ -27,7 +30,9 @@ vi.mock("@/lib/bars/actions", () => ({
 }));
 
 function renderCard(quantidadeMesas = 3) {
-  return render(<MesasBarCard bar={{ id: "bar-1", quantidade_mesas: quantidadeMesas }} />);
+  return render(
+    <MesasBarCard bar={{ id: "bar-1", quantidade_mesas: quantidadeMesas }} />
+  );
 }
 
 function input(): HTMLInputElement {
@@ -62,7 +67,11 @@ describe("MesasBarCard", () => {
 
   it("aumentar não pede confirmação", async () => {
     const confirmSpy = vi.spyOn(window, "confirm");
-    mocks.updateBarMesasAction.mockResolvedValue({ ok: true, quantidadeMesas: 4, reallocados: 0 });
+    mocks.updateBarMesasAction.mockResolvedValue({
+      ok: true,
+      quantidadeMesas: 4,
+      reallocados: 0,
+    });
     renderCard(3);
 
     fireEvent.change(input(), { target: { value: "4" } });
@@ -90,12 +99,18 @@ describe("MesasBarCard", () => {
 
   it("diminuir confirmado grava e avisa quem foi realocado", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    mocks.updateBarMesasAction.mockResolvedValue({ ok: true, quantidadeMesas: 2, reallocados: 3 });
+    mocks.updateBarMesasAction.mockResolvedValue({
+      ok: true,
+      quantidadeMesas: 2,
+      reallocados: 3,
+    });
     renderCard(3);
 
     fireEvent.change(input(), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: /Salvar/i }));
-    await waitFor(() => expect(mocks.updateBarMesasAction).toHaveBeenCalledWith("bar-1", 2));
+    await waitFor(() =>
+      expect(mocks.updateBarMesasAction).toHaveBeenCalledWith("bar-1", 2)
+    );
 
     await vi.waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith(

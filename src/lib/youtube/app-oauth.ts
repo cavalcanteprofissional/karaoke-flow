@@ -13,7 +13,11 @@ export function clearCachedAppToken(): void {
 }
 
 async function refreshTokenFlow(
-  credentials: { clientId: string | undefined; clientSecret: string | undefined; refreshToken: string },
+  credentials: {
+    clientId: string | undefined;
+    clientSecret: string | undefined;
+    refreshToken: string;
+  },
   fetcher: typeof fetch
 ): Promise<string | null> {
   const { clientId, clientSecret, refreshToken } = credentials;
@@ -39,7 +43,10 @@ async function refreshTokenFlow(
   if (!response.ok) return null;
 
   try {
-    const data = (await response.json()) as { access_token?: string; expires_in?: number };
+    const data = (await response.json()) as {
+      access_token?: string;
+      expires_in?: number;
+    };
     return data.access_token ?? null;
   } catch {
     return null;
@@ -101,7 +108,8 @@ export async function exchangeAuthorizationCode(
   } catch {
     return { accessToken: null, refreshToken: null, expiresInSeconds: null };
   }
-  if (!response.ok) return { accessToken: null, refreshToken: null, expiresInSeconds: null };
+  if (!response.ok)
+    return { accessToken: null, refreshToken: null, expiresInSeconds: null };
 
   try {
     const data = (await response.json()) as {
@@ -112,7 +120,9 @@ export async function exchangeAuthorizationCode(
     return {
       accessToken: data.access_token ?? null,
       refreshToken: data.refresh_token ?? null,
-      expiresInSeconds: Number.isFinite(data.expires_in) ? (data.expires_in as number) : null,
+      expiresInSeconds: Number.isFinite(data.expires_in)
+        ? (data.expires_in as number)
+        : null,
     };
   } catch {
     return { accessToken: null, refreshToken: null, expiresInSeconds: null };

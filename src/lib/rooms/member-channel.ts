@@ -32,7 +32,8 @@ export function roomMembersChannelName(roomId: string): string {
 const EVENT = "members-changed";
 
 /** Estado da assinatura, para o console — falha de realtime tem que aparecer. */
-export type MembersChannelStatus = "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | "CLOSED";
+export type MembersChannelStatus =
+  "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | "CLOSED";
 
 /**
  * Avisa os aparelhos da sala depois de qualquer mutação de `room_members`.

@@ -175,7 +175,8 @@ export function EntryApprovalWait({
     const poll = window.setInterval(() => {
       // Aba oculta não paga poll. Ao voltar, o `visibilitychange` reconcilia na
       // hora, então quem espera aprovação não fica preso ao intervalo de 8s.
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
       void reconcile();
     }, 8000);
 

@@ -93,7 +93,9 @@ export function QrScanner({
     typeof navigator !== "undefined" && !navigator.mediaDevices?.getUserMedia;
   const errorMessage =
     cameraError ??
-    (cameraUnsupported ? "Este navegador não dá acesso à câmera. Digite o código." : null);
+    (cameraUnsupported
+      ? "Este navegador não dá acesso à câmera. Digite o código."
+      : null);
   const opening = open && !ready && !errorMessage;
 
   useEffect(() => {

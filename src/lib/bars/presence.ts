@@ -34,7 +34,10 @@ export function requirePresence(params: {
   return checkPresence({
     isHost,
     userCoords,
-    barCoords: bar.latitude !== null && bar.longitude !== null ? { latitude: bar.latitude, longitude: bar.longitude } : null,
+    barCoords:
+      bar.latitude !== null && bar.longitude !== null
+        ? { latitude: bar.latitude, longitude: bar.longitude }
+        : null,
     radiusMeters: bar.raioPermitidoMetros,
   });
 }

@@ -6,7 +6,12 @@ import {
   barRadiusSchema,
   createRoomSchema,
 } from "./schema";
-import { MESA_MAX, RAIO_MAX_METROS, RAIO_MIN_METROS, RAIO_PADRAO_METROS } from "@/types/bar";
+import {
+  MESA_MAX,
+  RAIO_MAX_METROS,
+  RAIO_MIN_METROS,
+  RAIO_PADRAO_METROS,
+} from "@/types/bar";
 
 describe("barRadiusSchema", () => {
   it("aceita as bordas da faixa do banco (50–1000 m)", () => {
@@ -112,12 +117,13 @@ describe("createRoomSchema — 2ª sala dentro de um bar existente", () => {
 
   it("aplica as mesmas regras de 3–12 alfanuméricos do código do bar", () => {
     // curta demais
-    expect(createRoomSchema.safeParse({ bar_id: BAR_ID, codigo_entrada: "ab" }).success).toBe(
-      false
-    );
+    expect(
+      createRoomSchema.safeParse({ bar_id: BAR_ID, codigo_entrada: "ab" }).success
+    ).toBe(false);
     // longa demais
     expect(
-      createRoomSchema.safeParse({ bar_id: BAR_ID, codigo_entrada: "A".repeat(13) }).success
+      createRoomSchema.safeParse({ bar_id: BAR_ID, codigo_entrada: "A".repeat(13) })
+        .success
     ).toBe(false);
     // com acento/espaço é normalizada antes do regex; o que sobra inválido reprova
     expect(

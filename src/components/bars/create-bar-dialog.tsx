@@ -125,7 +125,11 @@ export function CreateBarDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className={cn(triggerClassName, "w-full")} variant={triggerVariant} size={triggerSize}>
+        <Button
+          className={cn(triggerClassName, "w-full")}
+          variant={triggerVariant}
+          size={triggerSize}
+        >
           <Plus className="size-4" />
           {triggerLabel}
         </Button>

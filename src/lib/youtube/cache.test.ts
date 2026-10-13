@@ -4,7 +4,9 @@ import { isCacheFresh, normalizeQuery, SONG_CACHE_TTL_SECONDS } from "./cache";
 
 describe("normalizeQuery", () => {
   it("colapsa espaços, minúsculas, remove acentos e ordena (bucket)", () => {
-    expect(normalizeQuery("   Ana Castela    Vai  Dar Namoro  ")).toBe("ana castela dar namoro vai");
+    expect(normalizeQuery("   Ana Castela    Vai  Dar Namoro  ")).toBe(
+      "ana castela dar namoro vai"
+    );
   });
 
   it("remoção de acentos ajuda buscas aproximadas", () => {

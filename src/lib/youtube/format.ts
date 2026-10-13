@@ -1,5 +1,6 @@
 export function formatDurationSeconds(total: number | null | undefined): string | null {
-  if (total === null || total === undefined || !Number.isFinite(total) || total < 0) return null;
+  if (total === null || total === undefined || !Number.isFinite(total) || total < 0)
+    return null;
   const seconds = Math.floor(total % 60);
   const minutes = Math.floor((total / 60) % 60);
   const hours = Math.floor(total / 3600);

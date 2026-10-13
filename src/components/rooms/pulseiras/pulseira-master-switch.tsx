@@ -55,19 +55,21 @@ export function PulseiraMasterSwitch({
       return;
     }
     toast.success(
-      next
-        ? `Pulseira ligada em ${barNome}.`
-        : `Pulseira desligada em ${barNome}.`
+      next ? `Pulseira ligada em ${barNome}.` : `Pulseira desligada em ${barNome}.`
     );
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className={cn("flex items-center gap-2 text-base", busy && "opacity-80")}>
+        <CardTitle
+          className={cn("flex items-center gap-2 text-base", busy && "opacity-80")}
+        >
           <Ticket className="text-muted-foreground size-4" />
           Pulseira
-          {busy && <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />}
+          {busy && (
+            <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
+          )}
         </CardTitle>
         <CardDescription>
           O ingresso de uso único do bar: quem quiser cantar ativa um código aqui.

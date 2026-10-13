@@ -99,7 +99,9 @@ function nomeCurto(valor: string, limite: number, campo: string): string {
     // cortar na última palavra inteira antes do limite.
     const cortado = texto.slice(0, limite);
     const ultimoEspaco = cortado.lastIndexOf(" ");
-    const inteiro = (ultimoEspaco > limite / 2 ? cortado.slice(0, ultimoEspaco) : cortado).trim();
+    const inteiro = (
+      ultimoEspaco > limite / 2 ? cortado.slice(0, ultimoEspaco) : cortado
+    ).trim();
 
     // E uma palavra de ligação sobrando no fim ("LUCAS CAVALCANTE DOS") é pior
     // que faltar o sobrenome: some com ela também. A alternativa seria cortar
@@ -155,7 +157,10 @@ export function buildPixPayload(input: PixPayloadInput): string {
   const chave = limpar(input.chave);
   const nome = nomeCurto(input.nome, 25, "Nome do recebedor");
   const cidade = nomeCurto(input.cidade, 15, "Cidade do recebedor");
-  const txid = semAcento(input.txid ?? TXID_PADRAO).trim().slice(0, 25) || TXID_PADRAO;
+  const txid =
+    semAcento(input.txid ?? TXID_PADRAO)
+      .trim()
+      .slice(0, 25) || TXID_PADRAO;
 
   // 26 → Merchant Account Information: GUI + chave. A chave é o campo 01
   // dentro dele; é o que faz o app reconhecer a chave e mostrar o nome.
@@ -195,7 +200,9 @@ export type PixPayloadLeitura = {
 export function readPixPayload(payload: string): PixPayloadLeitura {
   const campos = lerTlv(payload);
   const conta = campos.get("26") ? lerTlv(campos.get("26")!) : new Map<string, string>();
-  const adicionais = campos.get("62") ? lerTlv(campos.get("62")!) : new Map<string, string>();
+  const adicionais = campos.get("62")
+    ? lerTlv(campos.get("62")!)
+    : new Map<string, string>();
 
   // O CRC é calculado sobre tudo que vem **antes** do campo 63, mais o "6304"
   // que o manual manda concatenar como seed final.
@@ -239,7 +246,7 @@ function lerTlv(texto: string): Map<string, string> {
     campos.set(id, valor);
     i += 4 + tamanho;
   }
-// Sobra é um tamanho declarado curto demais: sem esta checagem o parser
+  // Sobra é um tamanho declarado curto demais: sem esta checagem o parser
   // "aceita" o payload truncado e o CRC passa a ser conferido sobre a metade
   // errada do texto.
   if (i !== texto.length) {

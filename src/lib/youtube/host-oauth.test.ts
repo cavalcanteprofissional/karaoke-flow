@@ -51,7 +51,9 @@ describe("getHostAccessToken", () => {
   // A chave do cache é o host: sem isso, o token de um bar apareceria na busca
   // de outro quando os dois ids não batessem.
   it("o cache é por host, não global", async () => {
-    const store = { getRefreshToken: vi.fn().mockImplementation(async (id: string) => `refresh-${id}`) };
+    const store = {
+      getRefreshToken: vi.fn().mockImplementation(async (id: string) => `refresh-${id}`),
+    };
     const refresher = vi.fn().mockImplementation(async (rt: string) => `access-${rt}`);
 
     const a = await getHostAccessToken({ hostId: "host-a", store, refresher });
@@ -85,10 +87,14 @@ describe("getHostAccessToken", () => {
     const store = { getRefreshToken: vi.fn().mockResolvedValue("refresh-123") };
     const refresher = vi.fn().mockRejectedValueOnce(new Error("rede"));
 
-    await expect(getHostAccessToken({ hostId: "host-1", store, refresher })).rejects.toThrow("rede");
+    await expect(
+      getHostAccessToken({ hostId: "host-1", store, refresher })
+    ).rejects.toThrow("rede");
 
     refresher.mockResolvedValueOnce("access-456");
-    expect(await getHostAccessToken({ hostId: "host-1", store, refresher })).toBe("access-456");
+    expect(await getHostAccessToken({ hostId: "host-1", store, refresher })).toBe(
+      "access-456"
+    );
   });
 
   // Só cacheia quando houve token: guardar `null` faria o bar com OAuth
@@ -134,11 +140,15 @@ describe("getHostAccessToken", () => {
     refresher.mockResolvedValueOnce("access-conta-nova");
     invalidateCachedHostToken("host-1");
 
-    expect(await getHostAccessToken({ hostId: "host-1", store, refresher })).toBe("access-conta-nova");
+    expect(await getHostAccessToken({ hostId: "host-1", store, refresher })).toBe(
+      "access-conta-nova"
+    );
   });
 
   it("invalidate é por host: não derruba o token de outro bar", async () => {
-    const store = { getRefreshToken: vi.fn(async (hostId: string) => `refresh-${hostId}`) };
+    const store = {
+      getRefreshToken: vi.fn(async (hostId: string) => `refresh-${hostId}`),
+    };
     const refresher = vi.fn(async (refreshToken: string) => `access-${refreshToken}`);
 
     await getHostAccessToken({ hostId: "host-1", store, refresher });

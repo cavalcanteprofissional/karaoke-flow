@@ -17,7 +17,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
 
   return (
-    <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/90 backdrop-blur-md md:hidden">
+    <nav className="pb-safe border-border/60 bg-background/90 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-md md:hidden">
       <div className="grid h-16 grid-cols-[repeat(auto-fit,minmax(0,1fr))] items-center px-2">
         {items.map((item) => {
           const active = item.matchExact
@@ -30,9 +30,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-xs font-medium transition-colors",
-                active
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <item.icon className="size-6" />

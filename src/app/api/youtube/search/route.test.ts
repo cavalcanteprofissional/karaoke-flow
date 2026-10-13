@@ -19,42 +19,48 @@ const h = vi.hoisted(() => {
     // (`dev_accounts`), não numa env, então o mock responde a `is_dev`.
     isDev: false,
     tables: {
-rooms: [] as Row[],
-        bars: [] as Row[],
-        members: [] as Row[],
+      rooms: [] as Row[],
+      bars: [] as Row[],
+      members: [] as Row[],
+    },
+    // Pools da plataforma (migration 20261005000043): só service role lê.
+    pools: [] as Row[],
+  };
+
+  type WalkableQuery = {
+    select(): WalkableQuery;
+    eq(field: string, value: unknown): WalkableQuery;
+    maybeSingle(): Promise<{ data: unknown }>;
+    upsert(row: Record<string, unknown>): Promise<{ error: null; data: null }>;
+  };
+
+  const createQuery = (table: string, admin: boolean): WalkableQuery => {
+    const conditions: Array<[string, unknown]> = [];
+    const query: WalkableQuery = {
+      select(): WalkableQuery {
+        return query;
       },
-      // Pools da plataforma (migration 20261005000043): só service role lê.
-      pools: [] as Row[],
-    };
-
-    type WalkableQuery = {
-      select(): WalkableQuery;
-      eq(field: string, value: unknown): WalkableQuery;
-      maybeSingle(): Promise<{ data: unknown }>;
-      upsert(row: Record<string, unknown>): Promise<{ error: null; data: null }>;
-    };
-
-    const createQuery = (table: string, admin: boolean): WalkableQuery => {
-      const conditions: Array<[string, unknown]> = [];
-      const query: WalkableQuery = {
-        select(): WalkableQuery {
-          return query;
-        },
-        eq(field: string, value: unknown): WalkableQuery {
-          conditions.push([field, value]);
-          return query;
-        },
+      eq(field: string, value: unknown): WalkableQuery {
+        conditions.push([field, value]);
+        return query;
+      },
       maybeSingle: async () => {
         if (admin && table === "song_cache") {
           const key = conditions.find(([f]) => f === "query_normalized")?.[1];
-          return { data: (key !== undefined && typeof key === "string" && state.songCache.get(key)) || null };
+          return {
+            data:
+              (key !== undefined &&
+                typeof key === "string" &&
+                state.songCache.get(key)) ||
+              null,
+          };
         }
         if (admin && table === "youtube_oauth_tokens") {
           const hostId = conditions.find(([f]) => f === "host_id")?.[1];
           return {
             data:
               hostId !== undefined && typeof hostId === "string"
-                ? state.hostTokens.get(hostId) ?? null
+                ? (state.hostTokens.get(hostId) ?? null)
                 : null,
           };
         }
@@ -70,8 +76,8 @@ rooms: [] as Row[],
             : table === "youtube_credential_pools"
               ? state.pools
               : (state.tables[key as keyof typeof state.tables] ?? []);
-        const match = rows.find(
-          (row: Row) => conditions.every(([field, value]) => row[field] === value)
+        const match = rows.find((row: Row) =>
+          conditions.every(([field, value]) => row[field] === value)
         );
         return { data: match ?? null };
       },
@@ -84,7 +90,9 @@ rooms: [] as Row[],
           });
         }
         if (table === "youtube_oauth_tokens") {
-          state.hostTokens.set(row.host_id as string, { refresh_token: row.refresh_token as string });
+          state.hostTokens.set(row.host_id as string, {
+            refresh_token: row.refresh_token as string,
+          });
         }
         return { error: null, data: null };
       },
@@ -182,7 +190,10 @@ const server = setupServer(
       );
     }
     if (googleMode === "search-error") {
-      return HttpResponse.json({ error: { code: 500, message: "nope" } }, { status: 500 });
+      return HttpResponse.json(
+        { error: { code: 500, message: "nope" } },
+        { status: 500 }
+      );
     }
     return HttpResponse.json({
       items: [
@@ -212,10 +223,9 @@ const server = setupServer(
 );
 
 function requestFor(extra: Record<string, string> = {}): NextRequest {
-  return new NextRequest(
-    "http://localhost/api/youtube/search?room=AB12&q=kate%20bush",
-    { headers: { "x-forwarded-for": "1.2.3.4", ...extra } }
-  );
+  return new NextRequest("http://localhost/api/youtube/search?room=AB12&q=kate%20bush", {
+    headers: { "x-forwarded-for": "1.2.3.4", ...extra },
+  });
 }
 
 function seedRoom(overrides: Record<string, unknown> = {}): void {
@@ -253,7 +263,11 @@ function seedRoom(overrides: Record<string, unknown> = {}): void {
 function setGeoCookie(latitude: number, longitude: number): void {
   h.state.geo.set(
     "kf-geo",
-    JSON.stringify({ status: "granted", coords: { latitude, longitude }, ts: new Date().toISOString() })
+    JSON.stringify({
+      status: "granted",
+      coords: { latitude, longitude },
+      ts: new Date().toISOString(),
+    })
   );
 }
 
@@ -293,7 +307,15 @@ describe("GET /api/youtube/search", () => {
 
   it("membro pendente retorna 403 PENDING", async () => {
     h.reset({
-      rooms: [{ id: "r1", code: "AB12", host_id: "host-id", youtube_api_key: ROOM_KEY, bar_id: null }],
+      rooms: [
+        {
+          id: "r1",
+          code: "AB12",
+          host_id: "host-id",
+          youtube_api_key: ROOM_KEY,
+          bar_id: null,
+        },
+      ],
       members: [{ room_id: "r1", user_id: "member-id", status: "pending" }],
     });
     const response = await GET(requestFor());
@@ -362,7 +384,11 @@ describe("GET /api/youtube/search", () => {
     googleMode = "quota";
     const response = await GET(requestFor());
     expect(response.status).toBe(502);
-    const body = (await response.json()) as { error: string; code?: string; hint?: string };
+    const body = (await response.json()) as {
+      error: string;
+      code?: string;
+      hint?: string;
+    };
     expect(body.code).toBe("QUOTA_EXHAUSTED");
     expect(body.error).toContain("cota");
     expect(body.hint).toBeTruthy();
@@ -438,7 +464,13 @@ describe("GET /api/youtube/search", () => {
   it("bar sem coords + participante sem geo é bloqueado (GEO_UNAVAILABLE)", async () => {
     h.reset({
       rooms: [
-        { id: "r1", code: "AB12", host_id: "host-id", youtube_api_key: ROOM_KEY, bar_id: null },
+        {
+          id: "r1",
+          code: "AB12",
+          host_id: "host-id",
+          youtube_api_key: ROOM_KEY,
+          bar_id: null,
+        },
       ],
       members: [{ room_id: "r1", user_id: "member-id", status: "approved" }],
     });

@@ -23,8 +23,7 @@ import { createClient } from "@/lib/supabase/server";
 export type PulseiraActionResult = { ok: true } | { ok: false; error: string };
 
 export type GerarPulseirasResult =
-  | { ok: true; geradas: number }
-  | { ok: false; error: string };
+  { ok: true; geradas: number } | { ok: false; error: string };
 
 export type ResgatarPulseiraResult =
   | {
@@ -47,10 +46,15 @@ function firstError(error: { errors: { message?: string }[] }): string {
 }
 
 function traduzirRpcHospedeiro(message: string, fallback: string): string {
-  if (/bar não encontrado|não autenticado|permission denied|row-level security/i.test(message)) {
+  if (
+    /bar não encontrado|não autenticado|permission denied|row-level security/i.test(
+      message
+    )
+  ) {
     return "Só o dono do bar pode gerenciar as pulseiras.";
   }
-  if (/já existe uma faixa/i.test(message)) return "Já existe uma faixa sobreposta neste dia.";
+  if (/já existe uma faixa/i.test(message))
+    return "Já existe uma faixa sobreposta neste dia.";
   if (/horário inválido|dia da semana inválido|preço inválido/i.test(message)) {
     return message;
   }
@@ -65,7 +69,9 @@ function traduzirRpcHospedeiro(message: string, fallback: string): string {
  * limpeza na mesma transação, host-only. O caminho antigo (`update bars` direto)
  * deixava códigos velhos revivendo ao religar.
  */
-export async function setPulseirasAtivadasAction(raw: unknown): Promise<PulseiraActionResult> {
+export async function setPulseirasAtivadasAction(
+  raw: unknown
+): Promise<PulseiraActionResult> {
   const parsed = pulseiraToggleSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
@@ -83,7 +89,10 @@ export async function setPulseirasAtivadasAction(raw: unknown): Promise<Pulseira
   if (error) {
     return {
       ok: false,
-      error: traduzirRpcHospedeiro(error.message, "Não foi possível salvar o interruptor da pulseira."),
+      error: traduzirRpcHospedeiro(
+        error.message,
+        "Não foi possível salvar o interruptor da pulseira."
+      ),
     };
   }
 
@@ -111,7 +120,10 @@ export async function gerarPulseirasAction(raw: unknown): Promise<GerarPulseiras
     p_qtd: parsed.data.qtd,
   });
   if (error) {
-    return { ok: false, error: traduzirRpcHospedeiro(error.message, "Não foi possível gerar as pulseiras.") };
+    return {
+      ok: false,
+      error: traduzirRpcHospedeiro(error.message, "Não foi possível gerar as pulseiras."),
+    };
   }
 
   revalidatePath("/salas/[codigo]/pulseiras", "page");
@@ -119,7 +131,9 @@ export async function gerarPulseirasAction(raw: unknown): Promise<GerarPulseiras
 }
 
 /** Cria/atualiza uma faixa de valor (dia da semana + janela HH:MM). */
-export async function salvarPrecoPulseiraAction(raw: unknown): Promise<PulseiraActionResult> {
+export async function salvarPrecoPulseiraAction(
+  raw: unknown
+): Promise<PulseiraActionResult> {
   const parsed = precoPulseiraSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
@@ -137,7 +151,10 @@ export async function salvarPrecoPulseiraAction(raw: unknown): Promise<PulseiraA
     p_preco_centavos: parsed.data.preco_centavos,
   });
   if (error) {
-    return { ok: false, error: traduzirRpcHospedeiro(error.message, "Não foi possível salvar o valor.") };
+    return {
+      ok: false,
+      error: traduzirRpcHospedeiro(error.message, "Não foi possível salvar o valor."),
+    };
   }
 
   revalidatePath("/salas/[codigo]/pulseiras", "page");
@@ -146,7 +163,9 @@ export async function salvarPrecoPulseiraAction(raw: unknown): Promise<PulseiraA
 }
 
 /** Remove uma faixa de valor pela chave que a identifica (dia + início). */
-export async function removerPrecoPulseiraAction(raw: unknown): Promise<PulseiraActionResult> {
+export async function removerPrecoPulseiraAction(
+  raw: unknown
+): Promise<PulseiraActionResult> {
   const parsed = removerPrecoPulseiraSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
@@ -162,7 +181,10 @@ export async function removerPrecoPulseiraAction(raw: unknown): Promise<Pulseira
     p_inicio: parsed.data.inicio,
   });
   if (error) {
-    return { ok: false, error: traduzirRpcHospedeiro(error.message, "Não foi possível remover o valor.") };
+    return {
+      ok: false,
+      error: traduzirRpcHospedeiro(error.message, "Não foi possível remover o valor."),
+    };
   }
 
   revalidatePath("/salas/[codigo]/pulseiras", "page");
@@ -187,7 +209,9 @@ const RESGATE_MENSAGENS: Record<string, string> = {
  * `ok`/`code`/`message`; o `code` é o que a tela usa para decidir o que mostrar
  * (incluindo a mensagem própria do ANONYMOUS, que manda criar conta).
  */
-export async function resgatarPulseiraAction(raw: unknown): Promise<ResgatarPulseiraResult> {
+export async function resgatarPulseiraAction(
+  raw: unknown
+): Promise<ResgatarPulseiraResult> {
   const parsed = resgatarPulseiraSchema.safeParse(raw);
   if (!parsed.success) {
     return { ok: false, code: "DADOS_INVALIDOS", error: firstError(parsed.error) };
@@ -198,7 +222,11 @@ export async function resgatarPulseiraAction(raw: unknown): Promise<ResgatarPuls
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { ok: false, code: "UNAUTHENTICATED", error: RESGATE_MENSAGENS.UNAUTHENTICATED };
+    return {
+      ok: false,
+      code: "UNAUTHENTICATED",
+      error: RESGATE_MENSAGENS.UNAUTHENTICATED,
+    };
   }
 
   const { data, error } = (await supabase.rpc("resgatar_pulseira", {
@@ -207,7 +235,11 @@ export async function resgatarPulseiraAction(raw: unknown): Promise<ResgatarPuls
   })) as { data: Record<string, unknown> | null; error: { message: string } | null };
 
   if (error || !data) {
-    return { ok: false, code: "RESGATE_FAILED", error: "Não foi possível ativar a pulseira." };
+    return {
+      ok: false,
+      code: "RESGATE_FAILED",
+      error: "Não foi possível ativar a pulseira.",
+    };
   }
 
   if (data.ok !== true) {

@@ -87,7 +87,7 @@ export function PulseiraEntryCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           {temPulseira || resgatada ? (
-            <TicketCheck className="text-emerald-600 dark:text-emerald-400 size-4" />
+            <TicketCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
           ) : (
             <Ticket className="text-muted-foreground size-4" />
           )}
@@ -144,11 +144,7 @@ export function PulseiraEntryCard({
                   className="font-mono tracking-widest"
                 />
               </div>
-              <Button
-                type="button"
-                onClick={ativar}
-                disabled={busy || codigo.length < 3}
-              >
+              <Button type="button" onClick={ativar} disabled={busy || codigo.length < 3}>
                 {busy ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (

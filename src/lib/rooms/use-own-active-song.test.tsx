@@ -91,7 +91,12 @@ function renderView(props: Partial<UseOwnActiveSongInput> = {}) {
   };
 }
 
-const tocando: Song = { id: "item-1", title: "Evidências", status: "playing", position: 1 };
+const tocando: Song = {
+  id: "item-1",
+  title: "Evidências",
+  status: "playing",
+  position: 1,
+};
 
 beforeEach(() => {
   mocks.state.read = { data: [tocando], error: null };
@@ -167,8 +172,13 @@ describe("useOwnActiveSong — leitura ao vivo da música ativa", () => {
     expect(view()).toEqual({ playing: false, title: null });
   });
 
-it("a música que está na fila (não tocando) continua sendo avisada, com o nome", async () => {
-    const naFila: Song = { id: "item-2", title: "Já pedi essa", status: "approved", position: 3 };
+  it("a música que está na fila (não tocando) continua sendo avisada, com o nome", async () => {
+    const naFila: Song = {
+      id: "item-2",
+      title: "Já pedi essa",
+      status: "approved",
+      position: 3,
+    };
     mocks.state.read = { data: [naFila], error: null };
 
     const { view } = renderView();

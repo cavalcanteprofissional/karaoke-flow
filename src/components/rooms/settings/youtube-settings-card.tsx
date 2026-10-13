@@ -131,9 +131,9 @@ export function YoutubeSettingsCard({
            * sala não tem busca — e a chave vem de um projeto do Google Cloud.
            */}
           Esta sala precisa de uma chave da{" "}
-          <span className="font-medium">YouTube Data API v3</span> para buscar
-          músicas. A chave é do seu projeto no Google Cloud e a cota é desse
-          projeto — não existe cota por pessoa.
+          <span className="font-medium">YouTube Data API v3</span> para buscar músicas. A
+          chave é do seu projeto no Google Cloud e a cota é desse projeto — não existe
+          cota por pessoa.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -170,9 +170,7 @@ export function YoutubeSettingsCard({
               variant="outline"
               size="sm"
               onClick={saveYoutubeKey}
-              disabled={
-                youtubeBusy || youtubeKey.trim() === (apiKey ?? "")
-              }
+              disabled={youtubeBusy || youtubeKey.trim() === (apiKey ?? "")}
             >
               {youtubeBusy ? (
                 <LoaderCircle className="size-4 animate-spin" />
@@ -210,10 +208,10 @@ export function YoutubeSettingsCard({
               Google Cloud
             </a>
             , crie um projeto, ative a{" "}
-            <span className="font-medium">YouTube Data API v3</span> e gere uma chave
-            de API. Deixe as restrições de origem e de endereço IP sem restrição: a
-            busca roda no servidor e não envia Referer — uma chave restrita
-            funciona na sua máquina e falha no site.
+            <span className="font-medium">YouTube Data API v3</span> e gere uma chave de
+            API. Deixe as restrições de origem e de endereço IP sem restrição: a busca
+            roda no servidor e não envia Referer — uma chave restrita funciona na sua
+            máquina e falha no site.
           </p>
         </div>
 
@@ -224,7 +222,9 @@ export function YoutubeSettingsCard({
            * que era o mesmo "entrar com Google" do app — que não tem relação
            * nenhuma com a YouTube Data API e não dá nenhuma credencial.
            */}
-          <Label htmlFor="yt-connect">Conta do YouTube conectada (alternativa à chave)</Label>
+          <Label htmlFor="yt-connect">
+            Conta do YouTube conectada (alternativa à chave)
+          </Label>
           {youtubeConnectedAt ? (
             <div className="flex items-center justify-between gap-3">
               <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -266,12 +266,12 @@ export function YoutubeSettingsCard({
                  * dispensar chave colada à mão; o que ele não oferece é cota
                  * separada.
                  */}
-                Em vez de colar uma chave, você pode autorizar a busca a usar
-                a sua conta do YouTube. Isso{" "}
-                <span className="font-medium">não cria uma cota separada</span>:
-                a leitura continua sendo cobrada no mesmo projeto do Google
-                Cloud. Serve para não ter chave guardada aqui — para ter cota
-                própria, o caminho é um projeto seu no Google Cloud.
+                Em vez de colar uma chave, você pode autorizar a busca a usar a sua conta
+                do YouTube. Isso{" "}
+                <span className="font-medium">não cria uma cota separada</span>: a leitura
+                continua sendo cobrada no mesmo projeto do Google Cloud. Serve para não
+                ter chave guardada aqui — para ter cota própria, o caminho é um projeto
+                seu no Google Cloud.
               </p>
               <a
                 id="yt-connect"

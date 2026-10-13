@@ -72,7 +72,11 @@ function RadiusGeometry({
     const latlng = L.latLng(latitude, longitude);
     const point = map.latLngToContainerPoint(latlng);
     const metersPerPixel = measureMetersPerPixel(map, latlng);
-    if (!Number.isFinite(point.x) || !Number.isFinite(metersPerPixel) || metersPerPixel <= 0) {
+    if (
+      !Number.isFinite(point.x) ||
+      !Number.isFinite(metersPerPixel) ||
+      metersPerPixel <= 0
+    ) {
       onChange(null);
       return;
     }
@@ -99,13 +103,20 @@ function RadiusGeometry({
  * wrapper relativo — `pointer-events-none` para não roubar o pan/zoom — e cada
  * anel pulsa para dar leitura de "distância" mesmo sem rótulo.
  */
-function RadiusSprites({ geometry, radiusMeters }: { geometry: MapGeometry; radiusMeters: number }) {
+function RadiusSprites({
+  geometry,
+  radiusMeters,
+}: {
+  geometry: MapGeometry;
+  radiusMeters: number;
+}) {
   const ticks = radiusTicks(radiusMeters);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
       {ticks.map((meters, index) => {
         const diameterPx = (meters / geometry.metersPerPixel) * 2;
-        if (!Number.isFinite(diameterPx) || diameterPx < 4 || diameterPx > 8000) return null;
+        if (!Number.isFinite(diameterPx) || diameterPx < 4 || diameterPx > 8000)
+          return null;
         return (
           <span
             key={meters}
@@ -186,7 +197,11 @@ export function PresenceRadiusMap({
             fillOpacity: 1,
           }}
         />
-        <FitRadius latitude={latitude} longitude={longitude} radiusMeters={radiusMeters} />
+        <FitRadius
+          latitude={latitude}
+          longitude={longitude}
+          radiusMeters={radiusMeters}
+        />
         <RadiusGeometry
           latitude={latitude}
           longitude={longitude}

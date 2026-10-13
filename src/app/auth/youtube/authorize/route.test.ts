@@ -9,7 +9,10 @@ import {
 } from "@/app/auth/youtube/oauth";
 import { GET } from "./route";
 
-function requestAt(host = "localhost:3000", path = "/auth/youtube/authorize?room=AB12"): NextRequest {
+function requestAt(
+  host = "localhost:3000",
+  path = "/auth/youtube/authorize?room=AB12"
+): NextRequest {
   return new NextRequest(`http://${host}${path}`);
 }
 

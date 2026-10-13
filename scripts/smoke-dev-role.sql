@@ -16,7 +16,7 @@
 --   8. nada disso persiste (tudo em transação + ROLLBACK).
 --
 -- NÃO DESTRUTIVO: `begin` … `rollback`. Nada é gravado no projeto.
--- As identidades vêm do PRÓPRIO DOMÍNIO (host de ZEHBAR / BARSEG / um
+-- As identidades vêm do PRÓPRIO DOMÍNIO (host de KARAOKEDOZE / BARDAESQUINA / um
 -- participante), sem UUID fixo de pessoa — roda em outro projeto sem edição.
 --
 -- Como os papéis funcionam aqui:
@@ -41,8 +41,8 @@ create temporary table smoke_dev_role (
 
 do $$
 declare
-  v_dev uuid;   -- host de ZEHBAR: o dev
-  v_nd uuid;    -- host de BARSEG: host comum, NÃO dev
+  v_dev uuid;   -- host de KARAOKEDOZE: o dev
+  v_nd uuid;    -- host de BARDAESQUINA: host comum, NÃO dev
   v_nh uuid;    -- participante: não é host de nada
   v_bar_dev uuid;
   v_bar_nd uuid;
@@ -50,12 +50,12 @@ declare
   i integer;
   v_count integer;
 begin
-  select host_id into v_dev from public.bars where code = 'ZEHBAR';
-  select host_id into v_nd  from public.bars where code = 'BARSEG';
+  select host_id into v_dev from public.bars where code = 'KARAOKEDOZE';
+  select host_id into v_nd  from public.bars where code = 'BARDAESQUINA';
   select user_id into v_nh  from public.room_members limit 1;
 
   if v_dev is null or v_nd is null or v_nh is null then
-    raise exception 'rode `npm run seed` antes (esperados ZEHBAR, BARSEG e membros)';
+    raise exception 'rode `npm run seed` antes (esperados KARAOKEDOZE, BARDAESQUINA e membros)';
   end if;
 
   select id into v_bar_dev from public.bars where host_id = v_dev limit 1;
@@ -65,12 +65,12 @@ begin
   perform set_config('request.jwt.claims',
     '{"sub":"' || v_dev || '","role":"authenticated","is_anonymous":"false"}', false);
   insert into smoke_dev_role values
-    ('1a is_dev() do host de ZEHBAR', public.is_dev()::text, public.is_dev() is true);
+    ('1a is_dev() do host de KARAOKEDOZE', public.is_dev()::text, public.is_dev() is true);
 
   perform set_config('request.jwt.claims',
     '{"sub":"' || v_nd || '","role":"authenticated","is_anonymous":"false"}', false);
   insert into smoke_dev_role values
-    ('1b is_dev() do host de BARSEG', public.is_dev()::text, public.is_dev() is false);
+    ('1b is_dev() do host de BARDAESQUINA', public.is_dev()::text, public.is_dev() is false);
 
   ------------------------------------------------- 2) dev: 2o bar e mais salas
   perform set_config('request.jwt.claims',
@@ -150,7 +150,7 @@ begin
   -- 6) Confere que o smoke REALMENTE exercitou o caminho do dev dentro da
   -- transação. O estado do banco depois é o do `rollback` do fim do arquivo —
   -- não dá (e não deve) conferir o "voltou ao normal" daqui de dentro.
-  -- Contagem das salas do dev: 1 (KARAOKE, do seed) + 1 (a que `create_bar`
+  -- Contagem das salas do dev: 1 (KARAOKEDOZE, do seed) + 1 (a que `create_bar`
   -- cria junto com o bar novo) + 3 (SMOKE1..3) = 5.
   insert into smoke_dev_role
   select '6a smoke exercitou 2 bars + 5 salas do dev',

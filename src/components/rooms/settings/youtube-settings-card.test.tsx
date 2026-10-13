@@ -14,6 +14,7 @@ import { YoutubeSettingsCard } from "./youtube-settings-card";
 const mocks = vi.hoisted(() => ({
   updateYoutubeKeyAction: vi.fn(),
   youtubeDisconnectAction: vi.fn(),
+  updateYoutubeSafeSearchAction: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -22,6 +23,8 @@ vi.mock("@/lib/rooms/actions", () => ({
     mocks.updateYoutubeKeyAction(...args) as unknown,
   youtubeDisconnectAction: (...args: unknown[]) =>
     mocks.youtubeDisconnectAction(...args) as unknown,
+  updateYoutubeSafeSearchAction: (...args: unknown[]) =>
+    mocks.updateYoutubeSafeSearchAction(...args) as unknown,
 }));
 
 function renderCard(props: Partial<React.ComponentProps<typeof YoutubeSettingsCard>> = {}) {
@@ -31,6 +34,7 @@ function renderCard(props: Partial<React.ComponentProps<typeof YoutubeSettingsCa
       roomCode="KARAOKE"
       apiKey={null}
       youtubeConnectedAt={null}
+      safeSearch
       {...props}
     />
   );
@@ -119,5 +123,28 @@ describe("YoutubeSettingsCard — chave salva", () => {
     expect(
       screen.queryByRole("link", { name: /Conectar conta do YouTube/i })
     ).toBeNull();
+  });
+});
+
+describe("YoutubeSettingsCard — filtro de conteúdo explícito (item 6)", () => {
+  it("nasce ligado e desligar chama a action com false", async () => {
+    mocks.updateYoutubeSafeSearchAction.mockResolvedValue({ ok: true });
+    renderCard({ safeSearch: true });
+
+    const toggle = screen.getByRole("switch", { name: /Filtrar conteúdo explícito/i });
+    expect(toggle).toBeChecked();
+
+    fireEvent.click(toggle);
+    await vi.waitFor(() =>
+      expect(mocks.updateYoutubeSafeSearchAction).toHaveBeenCalledWith("room-1", false)
+    );
+  });
+
+  it("nasce desligado quando a sala não filtra", () => {
+    renderCard({ safeSearch: false });
+
+    expect(
+      screen.getByRole("switch", { name: /Filtrar conteúdo explícito/i })
+    ).not.toBeChecked();
   });
 });

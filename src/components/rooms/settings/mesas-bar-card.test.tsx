@@ -82,6 +82,9 @@ describe("MesasBarCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Salvar/i }));
     await waitFor(() => expect(window.confirm).toHaveBeenCalled());
 
+    expect(window.confirm).toHaveBeenCalledWith(
+      "Diminuir de 3 para 2 mesas? Quem estiver nas mesas removidas vai para a mesa 1."
+    );
     expect(mocks.updateBarMesasAction).not.toHaveBeenCalled();
   });
 

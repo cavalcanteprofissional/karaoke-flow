@@ -38,6 +38,12 @@ export function PulseiraMasterSwitch({
   const anterior = useRef(initialAtivadas);
 
   async function commit(next: boolean) {
+    if (!next) {
+      const confirmed = window.confirm(
+        "Desligar a pulseira? Os códigos gerados e os acessos ativos serão apagados."
+      );
+      if (!confirmed) return;
+    }
     anterior.current = ativadas;
     setAtivadas(next);
     setBusy(true);

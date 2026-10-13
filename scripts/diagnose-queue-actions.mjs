@@ -45,7 +45,7 @@ for (const k of [url, anonKey]) {
   }
 }
 
-const ROOM_CODE = process.argv[2] ?? "KARAOKE";
+const ROOM_CODE = process.argv[2] ?? "KARAOKEDOZE";
 const SEED_HOST = g("SEED_HOST_EMAIL") ?? "dono@exemplo.com";
 const SEED_PASS = g("SEED_PASSWORD") ?? "senha123";
 // Argumento explícito vence o .env.local (que pode ter credencial personalizada).

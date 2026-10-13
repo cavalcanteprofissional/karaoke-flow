@@ -29,12 +29,12 @@ declare
   v_linha public.rooms%rowtype;
   v_ativo integer;
 begin
-  select host_id into v_host from public.bars where code = 'ZEHBAR';
+  select host_id into v_host from public.bars where code = 'KARAOKEDOZE';
   select id into v_membro from auth.users where id = '00000000-0000-0000-0000-000000000002';
   select id into v_forasteiro from auth.users where id = '00000000-0000-0000-0000-000000000003';
   if v_host is null or v_membro is null or v_forasteiro is null then
     insert into smoke8g values
-      ('00 setup', jsonb_build_object('erro', 'host do ZEHBAR ou usuarios de teste ausentes: rode npm run seed'));
+      ('00 setup', jsonb_build_object('erro', 'host do KARAOKEDOZE ou usuarios de teste ausentes: rode npm run seed'));
     return;
   end if;
 

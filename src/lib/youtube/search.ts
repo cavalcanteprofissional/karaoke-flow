@@ -39,9 +39,10 @@ type VideosResponse = {
 
 /**
  * Busca vídeos de karaokê na YouTube Data API v3 (servidor).
- * `safeSearch=strict` + `videoEmbeddable=true` (spec §13: moderação de conteúdo
- * e vídeos reproduzíveis no player). Segunda chamada em lotes para enriquecer
- * com a duração (ISO 8601 -> segundos). `fetchFn` injetável para testes.
+ * `safeSearch` (item 6) é `strict` por padrão e o host pode desligar por sala;
+ * `videoEmbeddable=true` garante vídeos reproduzíveis no player. Segunda
+ * chamada em lotes para enriquecer com a duração (ISO 8601 -> segundos).
+ * `fetchFn` injetável para testes.
  */
 export async function searchYouTube(
   params: YouTubeSearchParams
@@ -58,7 +59,7 @@ export async function searchYouTube(
   searchUrl.searchParams.set("type", "video");
   searchUrl.searchParams.set("q", query);
   searchUrl.searchParams.set("maxResults", String(maxResults));
-  searchUrl.searchParams.set("safeSearch", "strict");
+  searchUrl.searchParams.set("safeSearch", params.safeSearch ?? "strict");
   searchUrl.searchParams.set("videoEmbeddable", "true");
   const searchInit = withAuth(searchUrl, apiKey, authMode);
 

@@ -7,7 +7,7 @@ export type RoomStatus = "active" | "closed";
 export type MemberStatus = "pending" | "approved" | "rejected";
 
 /**
- * A sala como o CLIENTE pode ler: as 14 colunas da view `rooms_public`.
+ * A sala como o CLIENTE pode ler: as 15 colunas da view `rooms_public`.
  *
  * Desde a migration `20260930000038` (Fase 8c·C, fechando F1/F2 da auditoria
  * de RLS) o tipo NÃO tem mais `youtube_api_key` nem `player_token`: as duas
@@ -27,6 +27,12 @@ export type Room = {
   entry_mode: RoomEntryMode;
   queue_approval_mode: RoomQueueApprovalMode;
   require_song_confirmation: boolean;
+  /**
+   * Filtro de conteúdo explícito da busca do YouTube (item 6, migration
+   * `20261012000003`). `true` (padrão) manda `safeSearch=strict`; `false` manda
+   * `none`. Coluna de `rooms` exposta por `rooms_public`.
+   */
+  youtube_safe_search: boolean;
   /**
    * Pré-aprovação de 24h ao reentrar (Fase 8a). Só vale para usuário COM
    * login; anônimo nunca é pré-aprovado. Default ON no banco e travado em ON

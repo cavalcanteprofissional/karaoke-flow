@@ -23,7 +23,7 @@
 --   11 nada disso persiste: `begin` … `rollback`.
 
 -- Conta de teste: Bruno (…0003) cria o bar da smoke (não tem bar no seed e,
--- como não é dev, o teto "1 bar por dono" não atrapalha). Zé (host do ZEHBAR),
+-- como não é dev, o teto "1 bar por dono" não atrapalha). Zé (host do KARAOKEDOZE),
 -- Ana (…0002) e Betânia (…0004) entram como participantes.
 --
 -- Rodar: node scripts/apply-sql.mjs scripts/smoke-pulseiras.sql 16000
@@ -58,9 +58,9 @@ declare
   v_dia int;
   r record;
 begin
-  select host_id into v_ze from public.bars where code = 'ZEHBAR';
+  select host_id into v_ze from public.bars where code = 'KARAOKEDOZE';
   if v_ze is null then
-    raise exception 'rode `npm run seed` antes (esperado o bar ZEHBAR)';
+    raise exception 'rode `npm run seed` antes (esperado o bar KARAOKEDOZE)';
   end if;
 
   -- ─────────────────────────── 01) contrato de create_bar ────────────────────
@@ -100,8 +100,8 @@ begin
     'pulseiras_ativadas', r.pulseiras_ativadas,
     'bar_nome', r.bar_nome
   )::text, (r.pulseiras_ativadas is true));
-  select * into r from public.get_entry_preview('ZEHBAR', null);
-  insert into smoke18 values ('03b preview do ZEHBAR (sem pulseira)', jsonb_build_object(
+  select * into r from public.get_entry_preview('KARAOKEDOZE', null);
+  insert into smoke18 values ('03b preview do KARAOKEDOZE (sem pulseira)', jsonb_build_object(
     'pulseiras_ativadas', r.pulseiras_ativadas
   )::text, (r.pulseiras_ativadas is false));
 
@@ -267,7 +267,7 @@ begin
   )::text, (v_out ->> 'code') = 'ANONYMOUS' and v_ativadas is true);
 
   -- Bar sem pulseira: resgatar num bar de outro mundo não é "uso".
-  select id into v_bar_off from public.bars where code = 'ZEHBAR';
+  select id into v_bar_off from public.bars where code = 'KARAOKEDOZE';
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub', v_bet::text, 'role', 'authenticated', 'is_anonymous', 'false')::text,
     true);
@@ -385,8 +385,8 @@ begin
   )::text, (v_out ->> 'pulseira_exigida')::boolean = true
     and (v_out ->> 'tem_pulseira')::boolean = true);
 
-  -- Ana também é membro do KARAOKE (sala do ZEHBAR, sem pulseira no bar).
-  v_out := public.member_entry_state((select id from public.rooms where code = 'KARAOKE'));
+  -- Ana também é membro do KARAOKEDOZE (sala do KARAOKEDOZE, sem pulseira no bar).
+  v_out := public.member_entry_state((select id from public.rooms where code = 'KARAOKEDOZE'));
   insert into smoke18 values ('10c bar sem pulseira (false/false)', jsonb_build_object(
     'exigida', v_out ->> 'pulseira_exigida',
     'tem', v_out ->> 'tem_pulseira'

@@ -5,9 +5,11 @@ Documento que define como testamos o projeto, dividido em duas partes:
 1. **Boas práticas e stack** — convenções para testes unitários, de integração e e2e.
 2. **Etapas de testes funcionais** — checklist de verificação à parte do código, por fluxo de negócio.
 
-> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-08):** suite com **768 testes** (58 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 25 (inclui o teto de 10 mesas da Fase 16), i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 88 (`credentials` 18 com o portão `is_dev`, `errors` 15 — que incluem o payload real do deploy, `badRequest` + "API key not valid", e o contrapeso que impede promover `badRequest` a chave inválida só pelo `reason`, `service` 15, `host-oauth` 16 com a invalidação na desconexão e no refresh em andamento, `diagnostics` 21 com a redação de segredo em exceção nossa, `search` 9), `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 13 (raio + `createRoomSchema` da Fase 8b·quater + `barMesasSchema` da Fase 16) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **21 provas via MSW** — Bearer OAuth host/app, o portão `is_dev` nos dois sentidos, pool ativo/inativo e `own_only` ignorando `youtube_pool_id` — e a **`/api/youtube/diagnostics` com 18** (o portão 401/403, o relatório sem gastar cota, `?room=`, `?probe=1` com `keyInvalid` e `ipRefererBlocked`, a sala inexistente que não pode virar "sem credencial", e a exceção com segredo redigida), o **roundtrip authorize→callback** com 4 provas do estado mais o `redirect_uri` derivado da env (12 no total, com o aviso de `NEXT_PUBLIC_APP_URL` ausente), a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 30, incluindo o host pedindo música da Fase 17, `song-search` 17 com o bloco da Fase 8f — passo do host, participante sem atalho, resposta HTTP que nunca vira "falha de rede" e o atalho de configuração indo para `/bar/[codigo]` —, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host), `src/lib/supabase/admin.test.ts` 5 (o memo por `(url, key)`), as **4 telas do host da Fase 17** (`settings/room-behavior-card` 4 com o toggle travado, `settings/youtube-settings-card` 9 com os textos que não podem voltar a mentir, `settings/mesas-bar-card` 5, `settings/room-code-card` 4 e `host-screen-nav` 3) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). A Fase 8f acrescenta o **`scripts/smoke-youtube-credential.sql`** — **19/19 no Supabase Cloud em 06/10/2026** (default `own_only`, as quatro recusas de coerência, o FK `RESTRICT`, os pools invisíveis ao cliente, a RPC de saúde sem devolver a chave e o bypass do trigger para service role). A Fase 8g acrescenta o **`scripts/smoke-release-current-item.sql`** — **11/11 no Supabase Cloud em 07/10/2026** (o `KF001` recusando no ar, o release devolvendo `approved` na mesma posição com a sala `idle`, as duas portas do `player_room_id`, a sala encerrada e o cantor destravado em seguida). A Fase 16 acrescenta o **`scripts/smoke-mesas.sql`** — **12 passos no Supabase Cloud em 08/10/2026** (teto 1–10 no `create_bar` e nos checks do banco, corte do ZEHBAR, `update_bar_mesas` com realocação e recusa de não-dono, auto-mesa-1 em bar de 1 mesa, espectador sem mesa e bar de 2 mesas sem escolha — roteiro em §3.17). A Fase 18 acrescenta o **`scripts/smoke-pulseiras.sql`** — **31/31 no Supabase Cloud em 08/10/2026** (o contrato novo do `create_bar`, lote de códigos, RLS de `pulseiras_codigos`, faixas de valor sem sobreposição, o `resgatar_pulseira` nas recusas/renovação e o gate `KF002` — roteiro em §3.19). A Fase 8f acrescenta o roteiro manual de §3.15 (o que a tela mostra × o que só o diagnóstico mostra) — a parte automatizada está coberta e o **`?probe=1` no deploy de preview foi executado** (ver o bloco "verificado no deploy" ao fim da seção). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
+> Status: **Vitest + RTL + jsdom** configurados; **MSW instalado na Fase 4**. **Etapa atual (2026-10-12):** suite com **789 testes** (61 arquivos) — rooms/utils, `src/lib/bars/qr.test.ts` 25 (inclui o teto de 10 mesas da Fase 16), i18n, cookies/geo, Onboarding, `src/lib/youtube/*` 88 (`credentials` 18 com o portão `is_dev`, `errors` 15 — que incluem o payload real do deploy, `badRequest` + "API key not valid", e o contrapeso que impede promover `badRequest` a chave inválida só pelo `reason`, `service` 15, `host-oauth` 16 com a invalidação na desconexão e no refresh em andamento, `diagnostics` 21 com a redação de segredo em exceção nossa, `search` 9), `queue` com a matriz de presença e as regras de aprovação/reordenação/troca (39), `src/lib/bars/schema.test.ts` 13 (raio + `createRoomSchema` da Fase 8b·quater + `barMesasSchema` da Fase 16) + `radiusTickStep`/`radiusTicks` em `geo.test.ts`, a rota `/api/youtube/search` com **21 provas via MSW** — Bearer OAuth host/app, o portão `is_dev` nos dois sentidos, pool ativo/inativo e `own_only` ignorando `youtube_pool_id` — e a **`/api/youtube/diagnostics` com 18** (o portão 401/403, o relatório sem gastar cota, `?room=`, `?probe=1` com `keyInvalid` e `ipRefererBlocked`, a sala inexistente que não pode virar "sem credencial", e a exceção com segredo redigida), o **roundtrip authorize→callback** com 4 provas do estado mais o `redirect_uri` derivado da env (12 no total, com o aviso de `NEXT_PUBLIC_APP_URL` ausente), a **entrada com aprovação** (`entry-approval-wait` 10 + `pending-entry-requests` 5), o gate de presença (`presence-gate-info` 14), a **fila** (`queue-list` 30, incluindo o host pedindo música da Fase 17, `song-search` 17 com o bloco da Fase 8f — passo do host, participante sem atalho, resposta HTTP que nunca vira "falha de rede" e o atalho de configuração indo para `/bar/[codigo]` —, `song-confirm-dialog` 9), o **clipboard** (`clipboard.ts` 7 — o fallback de `execCommand` para HTTP sem secure context), o **player** (`playback` 27 de regras puras, `youtube-stage` 13, `player-error-boundary` 2, `player-kiosk` 21 com a **YouTube IFrame Player API mockada fiel ao ciclo de vida real** — métodos só depois do `onReady`, ver §3.6, `playback-controls` 12 do painel do host), `src/lib/supabase/admin.test.ts` 5 (o memo por `(url, key)`), as **4 telas do host da Fase 17** (`settings/room-behavior-card` 4 com o toggle travado, `settings/youtube-settings-card` 9 com os textos que não podem voltar a mentir, `settings/mesas-bar-card` 5, `settings/room-code-card` 4 e `host-screen-nav` 3) e a **Fase 8a** (`queue-actions` 11, `entry-state` 5, `spectator` 8 — a regra do espectador), mais a **Fase 8c** (`player-arm` do "armado" do gate, `player-gate`/`player-kiosk` com o player montado dentro do toque e o teste de `renderToString` que pega hydration mismatch — o jsdom renderiza só o cliente e não pegaria, `actions` 6 travando que a chave do YouTube é escrita por RPC e nunca por `createAdmin()`). O contrato do playback e o da autorização por sessão/pré-aprovação de 24h têm smoke próprio no banco remoto (`scripts/smoke-playback.sql` e `scripts/smoke-player-session.sql`), e o papel `dev` tem o **`scripts/smoke-dev-role.sql`** (**15/15**, com os 5 casos de bypass do INSERT/UPDATE direto). A **RLS** tem o **`scripts/smoke-rls-audit.sql`** (**62/62** — 48 ataques que precisam falhar e 14 legítimos que precisam passar; de 03/10, os H6/H7/H8 cobrem a ACL de `admin_room_occupancy`, o filtro `is_host` no corpo e o `search_path`, e os S1–S4 cobrem a regra do espectador: claim por sessão recusado, TV com token avançando, espectador sem mesa e quem está no raio ainda sentando), que roda com `set local role anon/authenticated` porque o `postgres` da Management API tem BYPASSRLS e passaria verde de mentira; e a view `profiles_public` tem o **`scripts/smoke-profiles-public.sql`** (9/9). A Fase 8f acrescenta o **`scripts/smoke-youtube-credential.sql`** — **19/19 no Supabase Cloud em 06/10/2026** (default `own_only`, as quatro recusas de coerência, o FK `RESTRICT`, os pools invisíveis ao cliente, a RPC de saúde sem devolver a chave e o bypass do trigger para service role). A Fase 8g acrescenta o **`scripts/smoke-release-current-item.sql`** — **11/11 no Supabase Cloud em 07/10/2026** (o `KF001` recusando no ar, o release devolvendo `approved` na mesma posição com a sala `idle`, as duas portas do `player_room_id`, a sala encerrada e o cantor destravado em seguida). A Fase 16 acrescenta o **`scripts/smoke-mesas.sql`** — **12 passos no Supabase Cloud em 08/10/2026** (teto 1–10 no `create_bar` e nos checks do banco, corte do ZEHBAR, `update_bar_mesas` com realocação e recusa de não-dono, auto-mesa-1 em bar de 1 mesa, espectador sem mesa e bar de 2 mesas sem escolha — roteiro em §3.17). A Fase 18 acrescenta o **`scripts/smoke-pulseiras.sql`** — **31/31 no Supabase Cloud em 08/10/2026** (o contrato novo do `create_bar`, lote de códigos, RLS de `pulseiras_codigos`, faixas de valor sem sobreposição, o `resgatar_pulseira` nas recusas/renovação e o gate `KF002` — roteiro em §3.19). A Fase 8f acrescenta o roteiro manual de §3.15 (o que a tela mostra × o que só o diagnóstico mostra) — a parte automatizada está coberta e o **`?probe=1` no deploy de preview foi executado** (ver o bloco "verificado no deploy" ao fim da seção). Playwright (e2e) segue adiado para depois do MVP. Este arquivo deve ser atualizado conforme as ferramentas entrarem no projeto.
 >
 > **Nota de ambiente (2026-09-26):** o setup de teste (`src/test/setup.ts`) registra um **stub de `ResizeObserver`** — o jsdom não implementa a medição de elemento de que o Radix (Slider, Dialog, Popover) precisa para renderizar.
+
+> **Códigos do seed renomeados (2026-10-12):** o item "código único = nome do bar" fez o backfill derivar os códigos do **nome**: `ZEHBAR → KARAOKEDOZE` e `BARSEG → BARDAESQUINA` (salas idem). Nas seções antigas deste arquivo, leia `ZEHBAR`/`KARAOKE` como **`KARAOKEDOZE`** e `BARSEG`/`BAR2FO` como **`BARDAESQUINA`**.
 
 > **Ambiente Windows (2026-09-25):** `npm test` (pool `threads`) pode falhar na primeira execução com _"Timeout waiting for worker to respond"_; `npx vitest run --pool=forks --maxWorkers=1` roda a suite inteira sem flaky. Nenhuma configuração do repositório foi alterada por causa disso.
 
@@ -317,6 +319,8 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 ### 3.9·ter Player e fila depois do 2º round de correções de 27/09
 
 > Mesmo princípio do roteiro acima: o que quebrou desta vez (`destroy()` depois do React, CTA repetido, lista do participante parada) só aparece com **timing de verdade** — poll de 5s, clique do host e celular com tela dormindo. Aplique a migração `20260927000031_queue_author_delete.sql` **antes** (ela traz a policy nova e o `replica identity full`; sem isso, o teste de remoção falha por RLS).
+>
+> **Atualização de 2026-10-13 (footprint do realtime).** O `postgres_changes` de `queue_items` **saiu** da fila do app (`QueueList` e `useOwnActiveSong`). A camada rápida agora é **broadcast**: quem muta a fila avisa por `announceQueueChange`, e a **TV** também avisa no claim/release (`player-kiosk.tsx`). O aviso é enviado por **`httpSend` (POST)** — quem avisa não abre WebSocket. O que os itens abaixo exercitam continua valendo, mas o caminho é broadcast + poll de 10 s (a lista) + relê no foco/visibilidade; não há mais canal `postgres_changes` de fila para "procurar" no DevTools. Detalhe em `docs/engenharia/limites-free-tier.md` §8.
 
 **TV + console aberto**
 
@@ -412,15 +416,25 @@ Cada execução é um round-trip ao Management API contra um banco cujo estado n
 > Resultado registrado em `docs/engenharia/limites-free-tier.md`.
 >
 > O script **não imprime nenhuma chave, senha ou token de player**, não cria e
-> não apaga nada; a única escrita é o `UPDATE` de §3.3, que não muda conteúdo
-> (só o `updated_at`, via trigger) e some com `--no-write`. Não substitui
+> não apaga nada; a única escrita é o `UPDATE` de §3.3, que não muda conteúdo e
+> **desde 2026-10-13 é cancelado pelo trigger** `touch_updated_at` (`new is not
+> distinct from old`) — a linha nem muda; some com `--no-write`. Não substitui
 > `npm run seed`.
+>
+> **Atualização de 2026-10-13 (footprint do realtime).** Motivo: o relatório
+> `Peak Connections` marcou **776 conexões em 01/out** (teto 200); o emissor do
+> dia foi a **rampa deste script**. Ela agora é **limitada ao teto publicado (200)**
+> e o script avisa que rodá-lo contra produção **infla o pico**. A seção 4 mudou:
+> o aviso de fila é medido por **`httpSend`** (a seção "assinar + fechar" não
+> existe mais), e a latência de ponta a ponta volta a ser validação de aparelho.
+> As seis correções e o que revalidar estão em
+> `docs/engenharia/limites-free-tier.md` §8.
 
 - [ ] `npm run measure:limits` termina sem exceção e imprime as 5 seções
 - [ ] **Postgres:** banco em 2,7% do teto (13,33 MB / 500 MB) — confirmado
 - [ ] **Rampa:** 200 conexões simultâneas abrem com **0 falhas** (teto publicado)
 - [ ] **Broadcast:** p95 abaixo de 2000 ms (medido 166 ms) e **0 perdidos** em 60 envios
-- [ ] **Aviso de fila:** o script aponta `assinar` + `fechar` como o custo dominante e `enviar` como ~0 ms — é a prova de que o alvo de 2 s **falha no p95 por desenho do `announce`**, não por falta de rede
+- [ ] **Aviso de fila:** o script mede o caminho **`httpSend`** (`criar canal` + `POST` + `fechar`), **sem abrir WebSocket** — o emissor não consome o teto de conexões; antes (assinar/fechar por mutação) o custo dominante era abrir a conexão (~1,3 s), e a seção de hoje mostra o `POST`
 - [ ] **Latência na TV de verdade** (o que o script **não** cobre): host aprova uma música no celular, a fila do participante muda **sem esperar o poll** (< 2 s), e a lista muda de novo com o celular em segundo plano (< 10 s, o poll) — roteiro em §3.9·ter
 
 > **Por que o alvo de 2 s é medida de script E de browser:** o script mede rede e
@@ -951,6 +965,46 @@ Rodar: `node scripts/apply-sql.mjs scripts/smoke-mesas.sql 9000`
       bar OFF, ninguém é barrado).
 - [ ] **Sala ao vivo**: participante sem pulseira vai pedir e o aviso de
       "pulseira exigida" aparece na UI (o adversário de verdade é o `KF002`).
+
+---
+
+### 3.20 Validação no aparelho — seis correções (2026-10-12)
+
+**Coberto pela suíte (roda no `npm test`)**
+
+- [x] `leave-room-button.test.tsx` (4): a confirmação diz a consequência; cancelar
+      não sai; confirmar grava e volta para `/dashboard`; erro mostra toast e não
+      navega.
+- [x] `qr-scanner.test.tsx` (6): abrir inicia a leitura; **fechar PARA o stream**
+      (a falha da 2ª abertura); sem `mediaDevices` e câmera negada/em uso têm
+      mensagens distintas; QR reconhecido fecha e entrega o token.
+- [x] `pulseira-master-switch.test.tsx` (4): desligar avisa que apaga códigos e
+      acessos e cancelar não grava; desligar confirmado chama a action com
+      `ativadas: false`; ligar não pede confirmação; erro volta o switch.
+- [x] `youtube-settings-card.test.tsx` (+2): o toggle nasce ligado/desligado e
+      desligar chama `updateYoutubeSafeSearchAction(room, false)`.
+- [x] `service.test.ts` (+1): filtro `none` usa namespace `N:` no cache e repassa
+      `safeSearch: none`; `route.test.ts` (+3): `strict` por padrão, `none` quando
+      a sala desliga e os dois modos **não compartilham cache**;
+      `search.test.ts` (+1): `safeSearch=none` vai como parâmetro.
+- [x] `npm run lint`, `npm run typecheck`, `npm test` (**789 testes, 61
+      arquivos**) e `npm run build` verdes.
+
+**Aparelho (revalidar — fazer no ZEHBAR)**
+
+- [ ] **Código único = nome do bar**: criar/reaproveitar o código da casa valendo
+      para bar e sala; editar pelo card "Código de entrada" e conferir o espelho
+      na sala; `ZEHBAR`/`BARSEG` já refletem `KARAOKEDOZE`/`BARDAESQUINA`.
+- [ ] **Pulseira**: desligar o switch avisa, apaga os códigos/acessos e o cartaz
+      do `/entrar` some; ligar de novo gera lote limpo.
+- [ ] **Filtro de conteúdo**: no card do YouTube (`/bar/<código>`), ligado a
+      busca esconde conteúdo adulto; desligado traz qualquer resultado — e mudar
+      o filtro **não** reaproveita o resultado do outro modo.
+- [ ] **Scanner de QR**: abrir/fechar o diálogo **duas vezes seguidas** (a 2ª
+      não pode falhar); negar a câmera mostra "Permita o acesso…"; aparelho sem
+      câmera mostra "Não encontramos…".
+- [ ] **Confirmações**: reduzir mesas mostra a realocação para a mesa 1; sair da
+      sala explica a fila e a aprovação.
 
 ---
 

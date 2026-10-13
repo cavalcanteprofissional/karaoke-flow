@@ -5,7 +5,7 @@
 --   02 create_bar cria com 10 e materializa 10 linhas de `mesas`;
 --   03 o check de `bars.quantidade_mesas` barra um insert direto de 11;
 --   04 o check de `mesas.numero` barra uma linha 11;
---   05 ZEHBAR ficou com 10 mesas e nenhuma linha acima de 10;
+--   05 KARAOKEDOZE ficou com 10 mesas e nenhuma linha acima de 10;
 --   06 update_bar_mesas pelo dono reduz 10→2, apaga as linhas e realoca quem
 --      estava na mesa 5 para a mesa 1;
 --   07 update_bar_mesas recusa quem não é dono;
@@ -17,7 +17,7 @@
 --
 -- Conta de teste: usa o Bruno (…0003), que não tem bar no seed, para o teto de
 -- "1 bar por dono" não atrapalhar a medição do teto de mesas. Ana (…0002),
--- o host do ZEHBAR (…0001) e a Betânia (…0004) entram como membros.
+-- o host do KARAOKEDOZE (…0001) e a Betânia (…0004) entram como membros.
 --
 -- Rodar: node scripts/apply-sql.mjs scripts/smoke-mesas.sql 9000
 
@@ -39,7 +39,7 @@ declare
   v_mesas int;
   v_mesa int;
 begin
-  select host_id into v_ze from public.bars where code = 'ZEHBAR';
+  select host_id into v_ze from public.bars where code = 'KARAOKEDOZE';
   if v_ze is null then
     insert into smoke16 values ('00 setup', jsonb_build_object('erro', 'rode npm run seed'));
     return;
@@ -120,13 +120,13 @@ begin
     'obs', 'esperado violacao de check (23514)'
   ));
 
-  -- 05 ZEHBAR depois da migration: 10 mesas, nada acima de 10.
+  -- 05 KARAOKEDOZE depois da migration: 10 mesas, nada acima de 10.
   insert into smoke16 values ('04 zehbar com 10 mesas', jsonb_build_object(
-    'quantidade', (select quantidade_mesas from public.bars where code = 'ZEHBAR'),
+    'quantidade', (select quantidade_mesas from public.bars where code = 'KARAOKEDOZE'),
     'linhas', (select count(*) from public.mesas m join public.bars b on b.id = m.bar_id
-                where b.code = 'ZEHBAR'),
+                where b.code = 'KARAOKEDOZE'),
     'acima_de_10', (select count(*) from public.mesas m join public.bars b on b.id = m.bar_id
-                     where b.code = 'ZEHBAR' and m.numero > 10),
+                     where b.code = 'KARAOKEDOZE' and m.numero > 10),
     'obs', 'esperado quantidade 10, linhas 10, acima_de_10 0'
   ));
 
@@ -184,7 +184,7 @@ begin
     ));
   end;
 
-  -- 08 Bar de 1 mesa: update para 1 e o host do ZEHBAR entra SEM p_mesa.
+  -- 08 Bar de 1 mesa: update para 1 e o host do KARAOKEDOZE entra SEM p_mesa.
   perform public.update_bar_mesas(v_bar, 1);
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub', v_ze::text, 'role', 'authenticated')::text, true);

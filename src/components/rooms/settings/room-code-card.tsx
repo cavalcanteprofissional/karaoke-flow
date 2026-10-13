@@ -52,7 +52,8 @@ export function RoomCodeCard({ roomId, roomCode }: RoomCodeCardProps) {
           Código de entrada
         </CardTitle>
         <CardDescription>
-          Quem digita este código na entrada vai direto para a sala — a mesa é escolhida
+          Um código só para a casa: vale para o bar e para a sala. Quem digita
+          este código na entrada vai direto para a sala — a mesa é escolhida
           depois, dentro do karaokê. Trocar o código muda o link{" "}
           <span className="font-mono">/salas/…</span> e o QR que você compartilha.
         </CardDescription>

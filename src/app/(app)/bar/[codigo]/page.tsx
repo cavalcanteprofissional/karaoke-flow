@@ -127,6 +127,7 @@ export default async function BarScreenPage({ params }: BarScreenProps) {
             roomCode={room.code}
             apiKey={keyByRoom.get(room.id) ?? null}
             youtubeConnectedAt={youtubeConnectedAt}
+            safeSearch={room.youtube_safe_search !== false}
           />
         ))
       )}

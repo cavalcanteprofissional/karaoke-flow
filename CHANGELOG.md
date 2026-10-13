@@ -90,6 +90,52 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
   `room-channel`/`player-channel` atualizados. Suíte: **789 → 790 testes**, 61
   arquivos. Gates `lint`, `typecheck`, `test`, `build` verdes.
 
+### Validação no aparelho — seis correções (2026-10-12)
+
+- **Código da casa = nome do bar.** `bars.code` deixou de ser 6 colunas fixas
+  para aceitar **3–12** caracteres derivados do nome, e a sala passa a **espelhar
+  o código do bar** — um código só para a casa vale para o bar e para o karaokê.
+  A migration `20261012000001` troca `unique_room_code`/`create_bar`/`create_room`,
+  ignora o **próprio** bar na checagem de colisão (era essa a causa-raiz do
+  "código já em uso": `unique_room_code` recusava `rooms.code` igual a qualquer
+  `bars.code`, inclusive do mesmo dono) e adiciona a RPC host-only
+  **`update_bar_code(bar_id, code)`**, que edita o código do bar e o espelha na
+  sala. O card "Código de entrada" (`/salas/[codigo]/sala`) passou a editar o
+  **código do bar**, não o da sala. Backfill: `ZEHBAR → KARAOKEDOZE`,
+  `BARSEG → BARDAESQUINA` (mesmo texto do seed).
+- **Desligar a pulseira apaga os códigos e os acessos.** O switch mestre
+  (`/salas/[codigo]/pulseiras`) agora avisa a consequência ao desligar e chama a
+  nova RPC **`set_pulseiras_ativadas(bar_id, ativadas)`** (migration
+  `20261012000002`): numa transação só grava o flag e, se desligou, apaga
+  `pulseiras_codigos` + `pulseiras_acessos` do bar (as faixas de preço ficam).
+  Era preciso RPC porque a RLS de `pulseiras_*` só tem SELECT para o host.
+- **Filtrar conteúdo explícito é opção da sala.** Nova coluna
+  **`rooms.youtube_safe_search`** (default `true`, migration `20261012000003`) e
+  um toggle no card "Busca de música (YouTube)" (`/bar/[codigo]`): ligado manda
+  `safeSearch=strict`, desligado manda `none`. A busca (`/api/youtube/search`)
+  lê a coluna pela `rooms_public` (view recriada com os grants de coluna) e a
+  **chave do cache** ganhou namespace (`S:`/`N:`) — mudar o filtro não pode
+  reaproveitar o resultado do outro modo. Novo RPC/action host-only
+  `updateYoutubeSafeSearchAction`.
+- **Scanner de QR: a câmera parava de verdade?** O `QrScanner` reescrito:
+  `stop()` sempre no cleanup (o `stopRef` era zerado antes de parar o stream, e a
+  segunda abertura falhava com `NotReadableError`), estado "abrindo", mensagem
+  **por tipo** de falha (`NotAllowedError`/`NotFoundError`/`NotReadableError`/
+  sem `mediaDevices`) e o `<video>` montado por ref de callback em estado — o
+  `DialogContent` do Radix só monta o nó **depois** do primeiro commit, então um
+  `videoRef.current` lido num efeito preso a `[open]` chegava `null`.
+- **Textos de confirmação padronizados.** "Diminuir de N para M mesas? Quem
+  estiver nas mesas removidas vai para a mesa 1." e "Sair desta sala? Você sai
+  da fila e, para voltar, precisa entrar de novo — pedindo aprovação se a sala
+  exigir." — pergunta + consequência, no mesmo formato dos demais
+  `window.confirm`.
+- **Testes:** `leave-room-button` (4, novo), `qr-scanner` (6, novo),
+  `pulseira-master-switch` (4, novo), `youtube-settings-card` (+2, o toggle),
+  `service` (+1, o namespace `N:` e o repasse), `route` (+3, `strict`/`none` e
+  caches separados) e `search` (+1, `safeSearch=none`). Suíte: **768 → 789
+  testes**, 58 → 61 arquivos. Gates `lint`, `typecheck`, `test`, `build` verdes.
+  Roteiro manual em `TESTING.md` §3.20.
+
 ### Fase 18 — pulseira: o ingresso de uso único do bar (2026-10-08)
 
 - **Pulseira é modo do bar, não da sala.** `bars.pulseiras_ativadas` nasce

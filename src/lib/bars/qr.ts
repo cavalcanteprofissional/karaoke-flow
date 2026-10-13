@@ -1,6 +1,6 @@
 /**
- * Código de entrada: bar (QR) mantém 6 chars gerados; sala é configurável
- * (3–12 alfanuméricos). Um mesmo padrão cobre os dois.
+ * Código de entrada: é UM só (item 3) — o código do bar, derivado do nome
+ * (3–12 alfanuméricos), e a sala espelha o mesmo código. Um padrão cobre os dois.
  */
 import { resolveAppUrl } from "@/lib/app-url";
 import { MESA_MAX } from "@/types/bar";

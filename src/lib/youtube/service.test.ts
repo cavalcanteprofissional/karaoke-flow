@@ -19,6 +19,7 @@ youtubeApiKey: null,
     bar: BAR_AT_BAR,
     policy: "own_only",
     poolKey: null,
+    safeSearch: "strict",
 };
 
 const USER_COORDS = { latitude: -23.5613, longitude: -46.6565 };
@@ -63,7 +64,7 @@ describe("searchYouTubeForRoom", () => {
     expect(outcome.data.cached).toBe(false);
     expect(outcome.data.source).toBe("app");
     expect(put.called).toBe(1);
-    expect(put.query).toBe("ana castela");
+    expect(put.query).toBe("S:ana castela");
   });
 
   it("usa o bucket normalizado como chave de cache", async () => {
@@ -71,10 +72,24 @@ describe("searchYouTubeForRoom", () => {
     await searchYouTubeForRoom(
       basePorts({
         searchQuery: "  ANA   CASTELA!! ",
-        cache: { get: async (q) => { get.called = true; expect(q).toBe("ana castela"); return null; }, put: async () => {} },
+        cache: { get: async (q) => { get.called = true; expect(q).toBe("S:ana castela"); return null; }, put: async () => {} },
       })
     );
     expect(get.called).toBe(true);
+  });
+
+  it("filtro desligado usa namespace 'N:' e repassa safeSearch=none", async () => {
+    const get = { called: false };
+    let received: "strict" | "none" | null = null;
+    await searchYouTubeForRoom(
+      basePorts({
+        getRoom: async () => ({ ...ROOM, safeSearch: "none" }),
+        cache: { get: async (q) => { get.called = true; expect(q).toBe("N:ana castela"); return null; }, put: async () => {} },
+        runSearch: async ({ safeSearch }) => { received = safeSearch; return [RESULT]; },
+      })
+    );
+    expect(get.called).toBe(true);
+    expect(received).toBe("none");
   });
 
   it("cache quente evita busca e resolução de credencial", async () => {

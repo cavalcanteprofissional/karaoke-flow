@@ -14,6 +14,13 @@ export type YouTubeSearchParams = {
   maxResults?: number;
   /** key = `?key=` (API key). bearer = `Authorization: Bearer` (OAuth app/host). */
   authMode?: YouTubeAuthMode;
+  /**
+   * Filtro de conteúdo explícito (`safeSearch`). `strict` (padrão) esconde
+   * conteúdo adulto; `none` desliga o filtro — escolha do host em
+   * `rooms.youtube_safe_search` (item 6). `moderate` existe na API do Google,
+   * mas o produto só expõe ligado/desligado.
+   */
+  safeSearch?: "strict" | "none";
   fetchFn?: typeof fetch;
 };
 

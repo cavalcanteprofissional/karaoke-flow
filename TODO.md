@@ -102,6 +102,44 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 
 ---
 
+## Retomada — contexto da próxima sessão (2026-10-12)
+
+> ### Validação no aparelho: seis correções na mesma rodada
+>
+> O dono validou os roteiros §3.17/§3.18/§3.19 no ZEHBAR e reportou seis
+> problemas; todos fechados nesta rodada.
+>
+> - **Item 1 — mesas:** o confirm de diminuir ganhou a consequência ("Quem
+>   estiver nas mesas removidas vai para a mesa 1").
+> - **Item 2 — sair da sala:** o confirm passou a explicar que sair tira da fila
+>   e que voltar exige entrar de novo (com aprovação se a sala exigir).
+> - **Item 3 — código único = nome do bar:** migration `20261012000001`
+>   (`bars.code` 3–12, `unique_bar_code`/`unique_room_code` ignorando o próprio
+>   bar, RPC `update_bar_code`), action e card alinhados, seed com
+>   `KARAOKEDOZE`/`BARDAESQUINA`.
+> - **Item 4 — scanner de QR:** `qr-scanner.tsx` reescrito (stream sempre
+>   parado, mensagens por tipo de erro, `<video>` por ref de callback).
+> - **Item 5 — pulseira:** migration `20261012000002` com a RPC
+>   `set_pulseiras_ativadas` (desligar apaga códigos + acessos) e confirm no
+>   switch.
+> - **Item 6 — filtro de conteúdo do YouTube:** migration `20261012000003`
+>   (`rooms.youtube_safe_search`), toggle no card do YouTube, `safeSearch`
+>   propagado pela busca e namespace no cache.
+>
+> **Suíte: 768 → 789 testes / 58 → 61 arquivos.** Gates `lint`, `typecheck`,
+> `test`, `build` verdes. Roteiro manual em `TESTING.md` §3.20.
+>
+> **Falta (ordem):**
+>
+> - [x] Aplicar as 3 migrations no Cloud (`apply-sql.mjs`) — `OK (201)`
+> - [x] Limpar o Cloud: `KARAOKEDOZE` de volta a **10 mesas** e apagar os 10 códigos
+>       de pulseira órfãos em `BARDAESQUINA` (**feito em 2026-10-13**: salas
+>       `active`, `safe=true`)
+> - [ ] Revalidar no aparelho (§3.17/§3.18/§3.19) e conferir os itens 1–6
+>       (o backfill derivou `BARSEG → BARDAESQUINA`; seed/smokes/docs alinhados)
+
+---
+
 ## Retomada — contexto da próxima sessão (2026-10-08, noite)
 
 > ### Fase 18 — pulseiras: código/QR de uso único, gate de cantar no banco

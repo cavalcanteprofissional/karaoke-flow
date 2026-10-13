@@ -45,7 +45,7 @@ export function MesasBarCard({ bar }: MesasBarCardProps) {
     if (next === bar.quantidade_mesas) return;
     if (next < bar.quantidade_mesas) {
       const confirmed = window.confirm(
-        `Diminuir de ${bar.quantidade_mesas} para ${next} mesa(s)? Quem estiver sentado nas mesas removidas vai para a mesa 1.`
+        `Diminuir de ${bar.quantidade_mesas} para ${next} ${next === 1 ? "mesa" : "mesas"}? Quem estiver nas mesas removidas vai para a mesa 1.`
       );
       if (!confirmed) return;
     }

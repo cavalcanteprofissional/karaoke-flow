@@ -33,6 +33,12 @@ export type RoomSearchContext = {
    * rota é a fronteira que conhece Supabase.
    */
   poolKey: string | null;
+  /**
+   * Filtro de conteúdo explícito da sala (`rooms.youtube_safe_search`, item 6).
+   * `strict` (padrão) ou `none`. Entra na chave do cache — a mesma consulta com
+   * filtros diferentes NÃO pode devolver o mesmo resultado.
+   */
+  safeSearch: "strict" | "none";
 };
 
 export type SearchPorts = {
@@ -49,6 +55,7 @@ export type SearchPorts = {
   runSearch: (params: {
     query: string;
     credential: ResolvedApiKey;
+    safeSearch: "strict" | "none";
   }) => Promise<YouTubeVideo[]>;
 };
 
@@ -185,7 +192,10 @@ export async function searchYouTubeForRoom(
     }
   }
 
-  const cached = await ports.cache.get(query);
+  // O filtro de conteúdo muda o resultado, então faz parte da chave do cache:
+  // "S:" (strict) e "N:" (none) nunca compartilham entrada (item 6).
+  const cacheKey = `${room.safeSearch === "none" ? "N:" : "S:"}${query}`;
+  const cached = await ports.cache.get(cacheKey);
   if (cached) {
     return { ok: true, data: { results: cached, cached: true, source: null } };
   }
@@ -223,8 +233,12 @@ export async function searchYouTubeForRoom(
   }
 
   try {
-    const results = await ports.runSearch({ query, credential });
-    await ports.cache.put(query, results);
+    const results = await ports.runSearch({
+      query,
+      credential,
+      safeSearch: room.safeSearch,
+    });
+    await ports.cache.put(cacheKey, results);
     return { ok: true, data: { results, cached: false, source: credential.source } };
   } catch (error) {
     return { ok: false, failure: failureFromSearchError(error) };

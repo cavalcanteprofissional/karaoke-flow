@@ -20,6 +20,10 @@ function friendlyError(message: string, fallback: string): string {
   if (/você não é membro/i.test(message)) return "Você não é membro desta sala.";
   if (/código de sala inválido|sem código de sala disponível/i.test(message))
     return "Código de sala inválido ou esgotado (3–12 letras/números).";
+  if (/código de bar inválido|sem código de bar disponível/i.test(message))
+    return "Código inválido: use 3–12 letras ou números, sem acentos ou espaços.";
+  if (/já pertence a outro bar|já pertence a outro karaokê/i.test(message))
+    return "Este código já pertence a outro karaokê ou bar. Escolha outro.";
   return message;
 }
 
@@ -169,6 +173,42 @@ export async function updateYoutubeKeyAction(
   return { ok: true };
 }
 
+/**
+ * Filtro de conteúdo explícito da busca do YouTube (item 6 da validação no
+ * aparelho) — toggle host-only que escreve `rooms.youtube_safe_search`
+ * (privilégio de coluna concedido na `20261012000003`). Ligado = `safeSearch=
+ * strict`; desligado = `none`. A busca da sala lê a coluna em `getRoomContext`.
+ */
+export async function updateYoutubeSafeSearchAction(
+  roomId: string,
+  enabled: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  if (typeof enabled !== "boolean") {
+    return { ok: false, error: "Valor inválido." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("rooms")
+    .update({ youtube_safe_search: enabled })
+    .eq("id", roomId)
+    .select("id");
+  if (error) {
+    return {
+      ok: false,
+      error: friendlyError(error.message, "Não foi possível salvar o filtro de conteúdo."),
+    };
+  }
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Só o dono pode mudar o filtro da sala." };
+  }
+
+  revalidatePath("/salas/[codigo]", "page");
+  // O card vive em `/bar/[codigo]`.
+  revalidatePath("/bar/[codigo]", "page");
+  return { ok: true };
+}
+
 /** Cancela o próprio pedido de entrada enquanto ele está `pending` (RLS já
  * permite auto-delete). Quem já está `approved` usa `leaveRoomAction`. */
 export async function cancelEntryRequestAction(
@@ -235,7 +275,7 @@ export async function updateRoomCodeAction(
   const supabase = await createClient();
   const { data: room } = await supabase
     .from("rooms")
-    .select("code")
+    .select("code, bar_id")
     .eq("id", roomId)
     .maybeSingle();
   if (!room) {
@@ -243,6 +283,28 @@ export async function updateRoomCodeAction(
   }
   if (room.code === normalized) {
     return { ok: true, newCode: normalized };
+  }
+
+  // Item 3 da validação no aparelho: o código de entrada é UM só (o do bar).
+  // Sala com bar vinculado troca pelo RPC `update_bar_code`, que valida a
+  // unicidade no banco e espelha o código novo na sala. Só a sala órfã (sem
+  // bar, caso legado) cai no caminho antigo de escrever em `rooms`.
+  if (room.bar_id) {
+    const { data, error } = (await supabase.rpc("update_bar_code", {
+      p_bar_id: room.bar_id,
+      p_code: normalized,
+    })) as { data: unknown; error: { message: string } | null };
+    if (error) {
+      return {
+        ok: false,
+        error: friendlyError(error.message, "Não foi possível trocar o código."),
+      };
+    }
+    const newCode = typeof data === "string" ? data : normalized;
+    revalidatePath("/salas/[codigo]", "page");
+    revalidatePath("/salas/[codigo]/sala", "page");
+    revalidatePath("/bar/[codigo]", "page");
+    return { ok: true, newCode };
   }
 
   const { data: available, error: availError } = (await supabase.rpc(

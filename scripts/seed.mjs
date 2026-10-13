@@ -194,7 +194,7 @@ async function main() {
     {
       id: BAR1,
       host_id: dono,
-      code: "ZEHBAR",
+      code: "KARAOKEDOZE",
       nome: "Karaokê do Zé",
       cidade: "Fortaleza",
       endereco: "R. Cap. Olavo, 1111 - Aerolândia",
@@ -206,7 +206,7 @@ async function main() {
     {
       id: BAR2,
       host_id: betania,
-      code: "BARSEG",
+      code: "BARDAESQUINA",
       nome: "Bar da Esquina",
       cidade: "São Paulo",
       endereco: "Av. Brasil, 456",
@@ -216,7 +216,7 @@ async function main() {
   ]);
   if (barsErr) throw new Error("bars: " + barsErr.message);
   console.log(
-    "bares criados: Karaokê do Zé (ZEHBAR, 10 mesas, dono), Bar da Esquina (BARSEG, 6 mesas, Betânia)"
+    "bares criados: Karaokê do Zé (KARAOKEDOZE, 10 mesas, dono), Bar da Esquina (BARDAESQUINA, 6 mesas, Betânia)"
   );
 
   // ---- Mesas (etiquetas; rótulos opcionais) ----
@@ -239,7 +239,7 @@ async function main() {
     {
       id: ROOM1,
       bar_id: BAR1,
-      code: "KARAOKE",
+      code: "KARAOKEDOZE",
       host_id: dono,
       entry_mode: "open",
       queue_approval_mode: "manual",
@@ -249,7 +249,7 @@ async function main() {
     {
       id: ROOM2,
       bar_id: BAR2,
-      code: "BAR2FO",
+      code: "BARDAESQUINA",
       host_id: betania,
       entry_mode: "approval",
       queue_approval_mode: "auto",
@@ -259,7 +259,7 @@ async function main() {
   ]);
   if (roomsErr) throw new Error("rooms: " + roomsErr.message);
   console.log(
-    "salas criadas: KARAOKE (open/manual/confirm, bar ZEHBAR), BAR2FO (approval/auto, bar BARSEG)"
+    "salas criadas: KARAOKEDOZE (open/manual/confirm, bar KARAOKEDOZE), BARDAESQUINA (approval/auto, bar BARDAESQUINA)"
   );
 
   // ---- Membros (participante obrigatoriamente registra a mesa) ----
@@ -270,15 +270,15 @@ async function main() {
   ]);
   if (membersErr) throw new Error("room_members: " + membersErr.message);
   console.log(
-    "membros criados: ana (mesa 3)/bruno (mesa 7) aprovados em KARAOKE; ana pending (mesa 2) em BAR2FO"
+    "membros criados: ana (mesa 3)/bruno (mesa 7) aprovados em KARAOKEDOZE; ana pending (mesa 2) em BARDAESQUINA"
   );
 
   // ---- Fila (só na sala do Karaokê do Zé) ----
   // O `status` do INSERT é sobrescrito pelo trigger `queue_items_initial_status`
-  // (20260923000018): em sala com `queue_approval_mode = 'manual'` (a KARAOKE),
-  // tudo nasce `pending` — é o comportamento certo, senão a fila de dev não
-  // exercita o botão de aprovar. Por isso o primeiro item é aprovado num UPDATE
-  // logo depois, e não no INSERT.
+  // (20260923000018): em sala com `queue_approval_mode = 'manual'` (a
+  // KARAOKEDOZE), tudo nasce `pending` — é o comportamento certo, senão a fila
+  // de dev não exercita o botão de aprovar. Por isso o primeiro item é aprovado
+  // num UPDATE logo depois, e não no INSERT.
   const { data: queueRows, error: queueErr } = await admin
     .from("queue_items")
     .insert([
@@ -308,7 +308,7 @@ async function main() {
       .eq("id", firstSong);
     if (approveErr) throw new Error("queue_items (aprovar): " + approveErr.message);
   }
-  console.log("fila criada na KARAOKE: 1 approved + 1 pending");
+  console.log("fila criada na KARAOKEDOZE: 1 approved + 1 pending");
 
   console.log(
     "\nSeed concluído. Login dev: " +

@@ -57,7 +57,14 @@ function traduzirRpcHospedeiro(message: string, fallback: string): string {
   return fallback;
 }
 
-/** Liga/desliga a pulseira do bar — o interruptor mestre da tela. */
+/**
+ * Liga/desliga a pulseira do bar — o interruptor mestre da tela.
+ *
+ * Desde a migration `20261012000002` (item 5), desligar também apaga os códigos
+ * gerados e os acessos ativos: a RPC `set_pulseiras_ativadas` faz o flag e a
+ * limpeza na mesma transação, host-only. O caminho antigo (`update bars` direto)
+ * deixava códigos velhos revivendo ao religar.
+ */
 export async function setPulseirasAtivadasAction(raw: unknown): Promise<PulseiraActionResult> {
   const parsed = pulseiraToggleSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -68,17 +75,16 @@ export async function setPulseirasAtivadasAction(raw: unknown): Promise<Pulseira
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Faça login para mudar a pulseira." };
 
-  const { data, error } = await supabase
-    .from("bars")
-    .update({ pulseiras_ativadas: parsed.data.ativadas })
-    .eq("id", parsed.data.bar_id)
-    .select("id");
+  const { error } = await supabase.rpc("set_pulseiras_ativadas", {
+    p_bar_id: parsed.data.bar_id,
+    p_ativadas: parsed.data.ativadas,
+  });
 
   if (error) {
-    return { ok: false, error: "Não foi possível salvar o interruptor da pulseira." };
-  }
-  if (!data || data.length === 0) {
-    return { ok: false, error: "Só o dono do bar pode mudar a pulseira." };
+    return {
+      ok: false,
+      error: traduzirRpcHospedeiro(error.message, "Não foi possível salvar o interruptor da pulseira."),
+    };
   }
 
   revalidatePath("/salas/[codigo]/pulseiras", "page");

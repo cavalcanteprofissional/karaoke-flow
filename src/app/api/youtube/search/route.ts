@@ -45,7 +45,7 @@ async function getRoomContext(
   //    A autorização fica no banco, não num `if` do TypeScript.
   const { data: room } = await supabase
     .from("rooms_public")
-    .select("id, host_id, bar_id")
+    .select("id, host_id, bar_id, youtube_safe_search")
     .eq("code", code)
     .maybeSingle();
   if (!room) return null;
@@ -120,6 +120,8 @@ async function getRoomContext(
     bar,
     policy,
     poolKey,
+    // `null`/ausente = filtro ligado (padrão `strict`).
+    safeSearch: room.youtube_safe_search === false ? "none" : "strict",
   };
 }
 
@@ -250,10 +252,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           devApiKey: resolveDevApiKeyFromEnv(),
         });
       },
-      runSearch: async ({ query, credential }) => {
+      runSearch: async ({ query, credential, safeSearch }) => {
         const authMode: YouTubeAuthMode =
           credential.source === "app" || credential.source === "host" ? "bearer" : "key";
-        return searchYouTube({ query, apiKey: credential.key, authMode, maxResults: 10 });
+        return searchYouTube({
+          query,
+          apiKey: credential.key,
+          authMode,
+          maxResults: 10,
+          safeSearch,
+        });
       },
     });
 

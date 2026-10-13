@@ -49,8 +49,8 @@ create temporary table smoke_youtube_credential (
 
 do $$
 declare
-  v_dev uuid;      -- host de ZEHBAR: o dev
-  v_nd uuid;       -- host de BARSEG: host comum, NÃO dev
+  v_dev uuid;      -- host de KARAOKEDOZE: o dev
+  v_nd uuid;       -- host de BARDAESQUINA: host comum, NÃO dev
   v_bar_dev uuid;
   v_bar_nd uuid;
   v_pool uuid;
@@ -59,11 +59,11 @@ declare
   v_policy text;
   v_count integer;
 begin
-  select host_id into v_dev from public.bars where code = 'ZEHBAR';
-  select host_id into v_nd  from public.bars where code = 'BARSEG';
+  select host_id into v_dev from public.bars where code = 'KARAOKEDOZE';
+  select host_id into v_nd  from public.bars where code = 'BARDAESQUINA';
 
   if v_dev is null or v_nd is null then
-    raise exception 'rode `npm run seed` antes (esperados ZEHBAR e BARSEG)';
+    raise exception 'rode `npm run seed` antes (esperados KARAOKEDOZE e BARDAESQUINA)';
   end if;
 
   select id into v_bar_dev from public.bars where host_id = v_dev limit 1;

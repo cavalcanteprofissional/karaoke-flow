@@ -87,6 +87,20 @@ describe("searchYouTube", () => {
     expect(searchUrl).toContain("q=");
   });
 
+  it("safeSearch=none vai como parâmetro quando o host desliga o filtro", async () => {
+    const urls: string[] = [];
+    const fetchFn = (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      urls.push(url);
+      return Promise.resolve(jsonResponse({ items: [] }));
+    };
+
+    await searchYouTube({ query: "funk", apiKey: API_KEY, safeSearch: "none", fetchFn });
+
+    const searchUrl = urls.find((u) => u.includes("/search")) as string;
+    expect(searchUrl).toContain("safeSearch=none");
+  });
+
   it("query vazia retorna [] sem tocar na rede", async () => {
     const fetchFn = () => {
       throw new Error("não deveria chamar a rede");

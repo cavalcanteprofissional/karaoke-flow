@@ -33,7 +33,7 @@ O karaokê de bar hoje é papel, disputa de voz e fila no olho. O objetivo é di
 
 - **Acesso anônimo** — qualquer pessoa entra e pede música **sem criar conta**; criar bar exige login real.
 - **Domínio bar → mesas → karaokê** — o host é 1 bar com **1 a 10 mesas** (padrão 1, limite cobrado pelo banco e pela RPC `update_bar_mesas`); cada bar nasce com **1 karaokê** (fila + player próprios); "adicionar salas" fica desabilitado (multi-sala é futuro). **Bar de uma mesa só não pergunta mesa**: quem entra pelo código já senta na 1 e vai direto para a fila.
-- **QR por bar e por mesa** — `?bar=ZEHBAR` e `?bar=ZEHBAR&mesa=3` para entrar **em 1 toque** com a mesa já selecionada; QR legado de sala (`?code=...`) continua funcionando.
+- **QR por bar e por mesa** — `?bar=KARAOKEDOZE` e `?bar=KARAOKEDOZE&mesa=3` para entrar **em 1 toque** com a mesa já selecionada; QR legado de sala (`?code=...`) continua funcionando.
 - **Fluxo de entrada com preview** — digite o código ou escaneie → preview do bar (dono, modo de entrada, mesas) → escolha da mesa → `join_room`. Modo `open` entra direto; modo `approval` fica pendente até o host aprovar (Realtime).
 - **Dashboard** — "Meu bar" (código + mesas + badge de karaokê) para o host e "Bares que frequento" para participantes, com contador de entradas pendentes.
 - **Página do karaokê** — a **tela ao vivo** com contexto "Bar · Mesa N"; o host vê a navegação para as telas de configuração e, na tela **Sala**, o QR do bar e a grade de QRs das mesas (exportáveis em PNG).
@@ -115,7 +115,7 @@ Pré-requisitos: **Node 24+**, conta Supabase (projeto Cloud ou `supabase start`
    - **Nunca commite o `.env.local`** (está no `.gitignore`).
 3. (Opcional) Crie os dados de desenvolvimento:
    ```bash
-   npm run seed        # 4 usuários + Bar 1 (ZEHBAR, 12 mesas) + Bar 2 (BARSEG, 6 mesas)
+   npm run seed        # 4 usuários + Bar 1 (KARAOKEDOZE, 10 mesas) + Bar 2 (BARDAESQUINA, 6 mesas)
    ```
 4. Rode:
    ```bash
@@ -167,8 +167,8 @@ Os usuários do **seed** são resolvidos **por id fixo**; as credenciais saem de
 
 | Variável                               | Default (documentado)                   | Função                                                                                                                                                                                                                  |
 | -------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SEED_HOST_EMAIL`                      | `dono@exemplo.com`                      | conta do dono (host do `ZEHBAR` / `KARAOKE`)                                                                                                                                                                            |
-| `SEED_HOST2_EMAIL`                     | `betania@exemplo.com`                   | conta Betânia (host do `BARSEG` / `BAR2FO`)                                                                                                                                                                             |
+| `SEED_HOST_EMAIL`                      | `dono@exemplo.com`                      | conta do dono (host do `KARAOKEDOZE` / `KARAOKEDOZE`)                                                                                                                                                                    |
+| `SEED_HOST2_EMAIL`                     | `betania@exemplo.com`                   | conta Betânia (host do `BARDAESQUINA` / `BARDAESQUINA`)                                                                                                                                                                   |
 | `SEED_USER_EMAIL` / `SEED_USER2_EMAIL` | `ana@exemplo.com` / `bruno@exemplo.com` | participantes                                                                                                                                                                                                           |
 | `SEED_PASSWORD`                        | `senha123` (**pública**)                | senha aplicada **só na criação** do usuário                                                                                                                                                                             |
 | `SEED_HOST_USER_ID`                    | _(vazio)_                               | **opcional**: auth user id que assume o slot do dono (bar 1 + sala 1) no lugar do `…0001` fixo **e ganha o papel `dev`** (sem teto de bars/salas). A conta precisa já existir no Auth; em branco = comportamento antigo |

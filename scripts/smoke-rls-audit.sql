@@ -30,8 +30,8 @@
 --   correção quebrou o produto. Por isso os casos legítimos existem.
 --
 -- NÃO DESTRUTIVO: `begin` … `rollback`. Nada é gravado no projeto.
--- As identidades vêm do PRÓPRIO DOMÍNIO (bars ZEHBAR/BARSEG, salas
--- KARAOKE/BAR2FO e seus membros), sem UUID fixo de pessoa — roda em outro
+-- As identidades vêm do PRÓPRIO DOMÍNIO (bars KARAOKEDOZE/BARDAESQUINA, salas
+-- KARAOKEDOZE/BARDAESQUINA e seus membros), sem UUID fixo de pessoa — roda em outro
 -- projeto sem edição. Rode `npm run seed` antes.
 --
 -- POR QUE PRECISA DE `set local role`
@@ -53,7 +53,7 @@
 --   45 casos · 37 ok · **8 vermelhos, que são os bugs** · 13/13 legítimos ok.
 --   Os 8 vermelhos, com o que cada um provou no banco:
 --     B2/B3/B4  (F3) logado sem vínculo lê os 2 bars do sistema, e o membro de
---               KARAOKE lê o bar de BARSEG — nome, endereço e a coordenada
+--               KARAOKEDOZE lê o bar de BARDAESQUINA — nome, endereço e a coordenada
 --               (latitude/longitude) de bares em que nunca entrou. A policy é
 --               `using (auth.uid() is not null)`: "está logado" e só.
 --     M1        (F4) `mesas` idem — 18 linhas de todos os bares, e o app não lê
@@ -93,15 +93,15 @@ create temporary table smoke_rls (
 do $$
 declare
   -- Personas, todas vindas do domínio (nada de UUID fixo de pessoa).
-  v_host_a   uuid;   -- dono do bar ZEHBAR (dev)
-  v_host_b   uuid;   -- dono do bar BARSEG (NÃO dev)
+  v_host_a   uuid;   -- dono do bar KARAOKEDOZE (dev)
+  v_host_b   uuid;   -- dono do bar BARDAESQUINA (NÃO dev)
   v_bar_a    uuid;
   v_bar_b    uuid;
-  v_room_a   uuid;   -- KARAOKE: open/manual/confirm, bar ZEHBAR
-  v_room_b   uuid;   -- BAR2FO: approval/auto, bar BARSEG
-  v_membro   uuid;   -- aprovado em KARAOKE
-  v_colega   uuid;   -- aprovado em KARAOKE, ≠ v_membro
-  v_pendente uuid;   -- pending em BAR2FO (≈ a mesma pessoa que é membro de A;
+  v_room_a   uuid;   -- KARAOKEDOZE: open/manual/confirm, bar KARAOKEDOZE
+  v_room_b   uuid;   -- BARDAESQUINA: approval/auto, bar BARDAESQUINA
+  v_membro   uuid;   -- aprovado em KARAOKEDOZE
+  v_colega   uuid;   -- aprovado em KARAOKEDOZE, ≠ v_membro
+  v_pendente uuid;   -- pending em BARDAESQUINA (≈ a mesma pessoa que é membro de A;
                      --  o teste de auto-aprovação usa o vínculo PENDENTE)
   v_estranho uuid;   -- logado, sem nenhum vínculo
   v_n integer;
@@ -114,12 +114,12 @@ declare
   v_code_a text;
   v_token_a uuid;
 begin
-  select host_id into v_host_a   from public.bars where code = 'ZEHBAR';
-  select id      into v_bar_a    from public.bars where code = 'ZEHBAR';
-  select host_id into v_host_b   from public.bars where code = 'BARSEG';
-  select id      into v_bar_b    from public.bars where code = 'BARSEG';
-  select id      into v_room_a   from public.rooms where code = 'KARAOKE';
-  select id      into v_room_b   from public.rooms where code = 'BAR2FO';
+  select host_id into v_host_a   from public.bars where code = 'KARAOKEDOZE';
+  select id      into v_bar_a    from public.bars where code = 'KARAOKEDOZE';
+  select host_id into v_host_b   from public.bars where code = 'BARDAESQUINA';
+  select id      into v_bar_b    from public.bars where code = 'BARDAESQUINA';
+  select id      into v_room_a   from public.rooms where code = 'KARAOKEDOZE';
+  select id      into v_room_b   from public.rooms where code = 'BARDAESQUINA';
   select user_id into v_membro   from public.room_members
     where room_id = v_room_a and status = 'approved' order by user_id limit 1;
   select user_id into v_colega   from public.room_members
@@ -131,7 +131,7 @@ begin
   if v_host_a is null or v_host_b is null or v_room_a is null
      or v_room_b is null or v_membro is null or v_colega is null
      or v_pendente is null then
-    raise exception 'rode `npm run seed` antes (esperados ZEHBAR, BARSEG, KARAOKE, BAR2FO e membros)';
+    raise exception 'rode `npm run seed` antes (esperados KARAOKEDOZE, BARDAESQUINA, KARAOKEDOZE, BARDAESQUINA e membros)';
   end if;
 
   -- ===========================================================================
@@ -166,7 +166,7 @@ begin
   insert into smoke_rls values ('B2 logado sem vinculo le todos os bars', 'ATAQUE', 'F3',
     case when v_err <> '' then v_err else v_n::text || ' linha(s)' end, v_n = 0);
 
-  -- B3 ATAQUE (F3): participante de KARAOKE lê também o bar alheio (BARSEG).
+  -- B3 ATAQUE (F3): participante de KARAOKEDOZE lê também o bar alheio (BARDAESQUINA).
   v_n := 0; v_err := '';
   begin
     set local role authenticated;
@@ -177,7 +177,7 @@ begin
   exception when others then
     set local role postgres; v_err := 'erro: ' || sqlerrm;
   end;
-  insert into smoke_rls values ('B3 membro de KARAOKE le o bar de BARSEG', 'ATAQUE', 'F3',
+  insert into smoke_rls values ('B3 membro de KARAOKEDOZE le o bar de BARDAESQUINA', 'ATAQUE', 'F3',
     case when v_err <> '' then v_err else v_n::text || ' linha(s)' end, v_n = 0);
 
   -- B4 ATAQUE (F3): o bar traz coordenada. Confere o PIOR campo, não só a
@@ -412,7 +412,7 @@ begin
 
   -- R10 ATAQUE (F1): a escrita da chave é host-only, e recusar tem de ter
   -- efeito — não basta a RPC reclamar, o valor no banco tem de continuar como
-  -- estava. KARAOKE não tem chave configurada no seed, então o teste grava uma,
+  -- estava. KARAOKEDOZE não tem chave configurada no seed, então o teste grava uma,
   -- tenta a reescrita por um não-dono, confere que não mudou e desfaz.
   v_err := ''; v_txt := '';
   begin
@@ -664,7 +664,7 @@ begin
     set local role authenticated;
     perform set_config('request.jwt.claims',
       '{"sub":"' || v_host_b || '","role":"authenticated"}', true);
-    -- `v_colega` e real e nao e membro de BAR2FO: se a policy deixar, a linha
+    -- `v_colega` e real e nao e membro de BARDAESQUINA: se a policy deixar, a linha
     -- do pendente e trasplantada para outra conta (FK satisfeita de verdade).
     update public.room_members set user_id = v_colega
       where room_id = v_room_b and user_id = v_pendente;
@@ -699,7 +699,7 @@ begin
   -- O item é INSERIDO dentro do próprio caso (e some no rollback). A versão
   -- anterior só contava a fila que o seed deixou, e isso transformou um caso
   -- LEGITIMO vermelho sem nenhuma mudança de segurança: em 2026-10-02 a fila da
-  -- KARAOKE já estava vazia no projeto Cloud (a sessão consumiu os itens
+  -- KARAOKEDOZE já estava vazia no projeto Cloud (a sessão consumiu os itens
   -- APPROVED), e o smoke passou a acusar uma regressão que não existia. Um
   -- instrumento que depende de estado que o mundo consome não é um instrumento.
   v_n := 0; v_err := '';
@@ -734,12 +734,12 @@ begin
     case when v_err <> '' then v_err else v_n::text || ' item(ns)' end, v_n = 0);
 
   -- Q3 LEGITIMO: pede música na própria sala e o item nasce `pending`, porque
-  -- a KARAOKE é `queue_approval_mode = 'manual'`. Este caso mata a hipótese
+  -- a KARAOKEDOZE é `queue_approval_mode = 'manual'`. Este caso mata a hipótese
   -- "membro injeta status='approved' e pula a aprovação": quem decide é o
   -- trigger `queue_items_initial_status`, não o cliente.
   --
   -- O modo de aprovação **é mutável pelo app** (o host mexe nas configurações da
-  -- sala), então o smoke não pode depender de a KARAOKE ainda estar como o seed
+  -- sala), então o smoke não pode depender de a KARAOKEDOZE ainda estar como o seed
   -- criou: quem testou pelo celular e deixou em `auto` fazia o caso falhar com
   -- `approved`, blaming o trigger por uma configuração. Forçamos `manual` aqui
   -- como postgres — o `rollback` no fim do arquivo desfaz.
@@ -1387,7 +1387,7 @@ v_n := 0;
     v_n = 2);
 
   -- Q7 ATAQUE: a regra é POR SALA, não por pessoa. `v_colega` é outro
-  -- participante de KARAOKE e tem a MESMA sala — pedir o dele não pode tocar na
+  -- participante de KARAOKEDOZE e tem a MESMA sala — pedir o dele não pode tocar na
   -- fila do `v_membro` (que tem uma ativa). Se a trigger filtrasse só por
   -- `added_by_user_id` sem `room_id`, este caso viraria a reddish do grupo.
   v_txt := '';

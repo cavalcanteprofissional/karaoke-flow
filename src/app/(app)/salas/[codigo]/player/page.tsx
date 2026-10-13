@@ -159,6 +159,7 @@ export default async function PlayerScreenPage({ params }: PlayerScreenProps) {
           roomCode={room.code}
           apiKey={apiKey}
           youtubeConnectedAt={youtubeConnectedAt}
+          safeSearch={room.youtube_safe_search}
         />
       )}
 

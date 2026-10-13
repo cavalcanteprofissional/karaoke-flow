@@ -150,7 +150,12 @@ import { GET } from "./route";
 const ROOM_KEY = "YT-KEY-ROOM-SECRET-123";
 
 let googleMode: "ok" | "quota" | "search-error" = "ok";
-const searchCalls: Array<{ q: string | null; key: string | null; auth: string | null }> = [];
+const searchCalls: Array<{
+  q: string | null;
+  key: string | null;
+  auth: string | null;
+  safe: string | null;
+}> = [];
 
 const server = setupServer(
   http.post("https://oauth2.googleapis.com/token", () =>
@@ -162,6 +167,7 @@ const server = setupServer(
       q: url.searchParams.get("q"),
       key: url.searchParams.get("key"),
       auth: request.headers.get("authorization"),
+      safe: url.searchParams.get("safeSearch"),
     });
     if (googleMode === "quota") {
       return HttpResponse.json(
@@ -571,5 +577,33 @@ describe("GET /api/youtube/search", () => {
     const response = await GET(requestFor());
     expect(response.status).toBe(503);
     expect(searchCalls).toHaveLength(0);
+  });
+
+  // Item 6: a sala decide o filtro de conteúdo explícito da busca.
+  it("por padrão a busca do YouTube vai com safeSearch=strict", async () => {
+    seedRoom();
+    const response = await GET(requestFor());
+    expect(response.status).toBe(200);
+    expect(searchCalls[0].safe).toBe("strict");
+  });
+
+  it("sala com youtube_safe_search=false busca com safeSearch=none", async () => {
+    seedRoom({ youtube_safe_search: false });
+    const response = await GET(requestFor());
+    expect(response.status).toBe(200);
+    expect(searchCalls[0].safe).toBe("none");
+  });
+
+  it("ligado e desligado não compartilham cache", async () => {
+    seedRoom({ youtube_safe_search: true });
+    await GET(requestFor());
+    expect(searchCalls).toHaveLength(1);
+
+    // Mesma query, filtro diferente → precisa bater no YouTube de novo.
+    h.state.tables.rooms[0].youtube_safe_search = false;
+    const second = await GET(requestFor());
+    expect((await second.json()).cached).toBe(false);
+    expect(searchCalls).toHaveLength(2);
+    expect(searchCalls[1].safe).toBe("none");
   });
 });

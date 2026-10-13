@@ -258,6 +258,19 @@ entregue em `spectator.test.ts`, `queue-actions.test.ts`, `queue-list.test.ts` e
 
 ---
 
+## Adendo 2026-10-12 — Validação no aparelho: seis correções
+
+**O dono rodou os roteiros §3.17/§3.18/§3.19 no ZEHBAR e reportou seis atritos.** O fio comum: textos de confirmação que não diziam a consequência, um código que a casa inteira não conseguia reaproveitar e três comportamentos de câmera/segredo que só apareciam no uso real.
+
+- **Código único = nome do bar (item 3).** "Código já em uso" ao tentar usar o mesmo código para bar e sala era **causa-raiz no banco**: `unique_room_code` recusava `rooms.code` igual a **qualquer** `bars.code`, inclusive do próprio dono. Agora `bars.code` aceita **3–12** chars, a checagem ignora o próprio bar, a sala **espelha** o código do bar e o card "Código de entrada" edita o **código da casa** (RPC host-only `update_bar_code`, migration `20261012000001`). Backfill `ZEHBAR → KARAOKEDOZE`, `BARSEG → BARDAESQUINA`.
+- **Desligar a pulseira apaga o que foi emitido (item 5).** O switch mestre passou a avisar e a chamar `set_pulseiras_ativadas(bar_id, ativadas)` (migration `20261012000002`): desligar apaga `pulseiras_codigos` + `pulseiras_acessos` do bar na mesma transação (as faixas de preço ficam). RPC porque a RLS só dá SELECT ao host.
+- **Filtrar conteúdo explícito é escolha da sala (item 6).** `rooms.youtube_safe_search` (default `true`, migration `20261012000003`) e um toggle no card do YouTube (`/bar/[codigo]`): ligado manda `safeSearch=strict`, desligado manda `none`; o cache ganhou namespace (`S:`/`N:`) para os dois modos não se misturarem.
+- **Scanner de QR (item 4).** O stream agora para de verdade no fechamento (o `stopRef` era zerado antes do `stop()`, e a 2ª abertura falhava com `NotReadableError`), há estado "abrindo", mensagem **por tipo** de falha (permissão negada / sem câmera / câmera em uso / sem `mediaDevices`) e o `<video>` é montado por ref de callback (o Radix só monta o nó depois do primeiro commit).
+- **Textos de confirmação (itens 1 e 2).** Padronizados no formato pergunta + consequência: reduzir mesas avisa "Quem estiver nas mesas removidas vai para a mesa 1"; sair da sala explica que sair tira da fila e que voltar exige entrar de novo (com aprovação se a sala exigir).
+- **Validação:** suíte **768 → 789 testes**, 58 → **61 arquivos** (leave-room-button, qr-scanner e pulseira-master-switch novos; youtube-settings-card/service/route/search ampliados); roteiro de aparelho em [`../../TESTING.md`](../../TESTING.md) §3.20; migration em [`../flows/banco-de-dados.md`](../flows/banco-de-dados.md) §1.
+
+---
+
 ## Fase 11 — Visibilidade em dois níveis: agregado da sala + detalhe da mesa
 
 **Decidido com o PO (2026-09-25) — D3:** quem está fora do raio (após aprovado

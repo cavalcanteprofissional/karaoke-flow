@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updateYoutubeKeyAction, youtubeDisconnectAction } from "@/lib/rooms/actions";
+import { Switch } from "@/components/ui/switch";
+import {
+  updateYoutubeKeyAction,
+  updateYoutubeSafeSearchAction,
+  youtubeDisconnectAction,
+} from "@/lib/rooms/actions";
 
 type YoutubeSettingsCardProps = {
   roomId: string;
@@ -24,6 +29,8 @@ type YoutubeSettingsCardProps = {
   apiKey: string | null;
   /** updated_at de youtube_oauth_tokens quando o host conectou a conta Google. */
   youtubeConnectedAt: string | null;
+  /** Filtro de conteúdo explícito da busca (`rooms.youtube_safe_search`). */
+  safeSearch: boolean;
 };
 
 /**
@@ -37,10 +44,29 @@ export function YoutubeSettingsCard({
   roomCode,
   apiKey,
   youtubeConnectedAt,
+  safeSearch,
 }: YoutubeSettingsCardProps) {
   const [youtubeKey, setYoutubeKey] = useState(apiKey ?? "");
   const [youtubeBusy, setYoutubeBusy] = useState(false);
   const [ytConnBusy, setYtConnBusy] = useState(false);
+  const [safeSearchOn, setSafeSearchOn] = useState(safeSearch);
+  const [safeSearchBusy, setSafeSearchBusy] = useState(false);
+
+  async function toggleSafeSearch(next: boolean) {
+    setSafeSearchBusy(true);
+    const result = await updateYoutubeSafeSearchAction(roomId, next);
+    setSafeSearchBusy(false);
+    if (!result.ok) {
+      toast.error(result.error ?? "Não foi possível salvar o filtro de conteúdo.");
+      return;
+    }
+    setSafeSearchOn(next);
+    toast.success(
+      next
+        ? "Filtro de conteúdo explícito ligado."
+        : "Filtro de conteúdo explícito desligado."
+    );
+  }
 
   async function saveYoutubeKey() {
     setYoutubeBusy(true);
@@ -111,6 +137,25 @@ export function YoutubeSettingsCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+          <div className="flex flex-col gap-0.5">
+            <Label htmlFor="yt-safesearch" className="text-sm">
+              Filtrar conteúdo explícito
+            </Label>
+            <p className="text-muted-foreground text-xs">
+              {safeSearchOn
+                ? "A busca esconde conteúdo adulto (recomendado para o bar)."
+                : "O filtro está desligado: a busca pode trazer qualquer resultado."}
+            </p>
+          </div>
+          <Switch
+            id="yt-safesearch"
+            checked={safeSearchOn}
+            disabled={safeSearchBusy}
+            onCheckedChange={toggleSafeSearch}
+          />
+        </div>
+
         <div className="flex flex-col gap-2">
           <Label htmlFor="yt-key">Chave da YouTube Data API v3</Label>
           <div className="flex gap-2">

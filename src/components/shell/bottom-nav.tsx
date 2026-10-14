@@ -30,7 +30,9 @@ export function BottomNav({ items }: { items: NavItem[] }) {
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-xs font-medium transition-colors",
-                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                active
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               <item.icon className="size-6" />

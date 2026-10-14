@@ -8,6 +8,19 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### Design — sistema de estilização neon (2026-10-14)
+
+- **Direção visual definida** com o dono: **neon/festa**, dark-first, primário
+  **magenta de palco** (`oklch(0.68 0.25 350)`) e acento **ciano**
+  (`oklch(0.80 0.14 200)`). Registrada em
+  [`docs/design/design-system.md`](./docs/design/design-system.md) — a fonte única
+  do visual (antes não havia nenhum guia de design).
+- **Correção de tipografia:** `--font-sans` era autorreferente e a **Geist Sans
+  do `next/font` não estava sendo aplicada**; passa a apontar para
+  `--font-geist-sans`, com `--font-display` para troca futura.
+- **Restrição mantida:** a Tela 1 (home) continua **só estilo**, respeitando a
+  spec §2.5.1 (dois botões + consentimento, sem hero/cards/copy de marketing).
+
 ### Fase 20 — Fundação de produção: gates locais, cobertura, formatação, release (2026-10-14)
 
 - **Pre-commit** (`husky` + `lint-staged`): `scan:secrets --staged` + ESLint/

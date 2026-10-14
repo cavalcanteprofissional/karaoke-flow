@@ -6,8 +6,15 @@ import { useRouter } from "next/navigation";
 import { Mic2, Store } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SiteFooter } from "@/components/shell/site-footer";
+import { cn } from "cn";
 import {
   hasConsent,
   readPreferences,
@@ -90,7 +97,7 @@ export function Onboarding() {
   }
 
   return (
-    <div className="bg-background flex min-h-dvh flex-col">
+    <div className="bg-background kf-home-glow flex min-h-dvh flex-col">
       {/* O conteúdo fica num wrapper `flex-1` e o rodapé fora dele: no mesmo
           container, o `gap-16` empurraria a assinatura para 4rem do botão. */}
       <div className="flex flex-1 flex-col items-center justify-center gap-16 p-4">
@@ -99,41 +106,45 @@ export function Onboarding() {
           role="group"
           aria-label="Escolha seu perfil"
         >
-          {ROLES.map(({ role, icon: Icon }) => (
-            <Button
-              key={role}
-              size="lg"
-              variant={role === "host" ? "default" : "outline"}
-              className="w-full gap-3"
-              aria-label={role === "host" ? dict.onboarding.host : dict.onboarding.sing}
-              onClick={() => chooseRole(role)}
-            >
-              <Icon className="size-5" />
-              {role === "host" ? dict.onboarding.host : dict.onboarding.sing}
-            </Button>
-          ))}
+          {ROLES.map(({ role, icon: Icon }, index) => {
+            const isHost = role === "host";
+            const label = isHost ? dict.onboarding.host : dict.onboarding.sing;
+            return (
+              <Button
+                key={role}
+                size="lg"
+                variant={isHost ? "outline" : "default"}
+                className={cn(
+                  "kf-rise ease-neon w-full gap-3 duration-200",
+                  isHost ? "border-primary/40 hover:bg-accent" : "shadow-glow"
+                )}
+                style={{ animationDelay: `${index * 70}ms` }}
+                aria-label={label}
+                onClick={() => chooseRole(role)}
+              >
+                <Icon className="size-5" />
+                {label}
+              </Button>
+            );
+          })}
         </div>
 
-        {bannerOpen && (
-          <div
-            className="bg-background/80 fixed inset-0 z-50 flex items-end justify-center p-4 backdrop-blur-sm sm:items-center"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="kf-consent-title"
+        <Dialog open={bannerOpen} onOpenChange={() => {}}>
+          <DialogContent
+            showCloseButton={false}
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+            className="max-w-md"
           >
-            <Card className="border-border/60 bg-card w-full max-w-md">
-              <CardContent className="flex flex-col gap-4 p-5">
-                <h2 id="kf-consent-title" className="text-lg font-semibold">
-                  {dict.consent.title}
-                </h2>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  {dict.consent.body}
-                </p>
-                <Button onClick={acceptConsent}>{dict.consent.accept}</Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+            <DialogHeader>
+              <DialogTitle id="kf-consent-title">{dict.consent.title}</DialogTitle>
+              <DialogDescription className="leading-relaxed">
+                {dict.consent.body}
+              </DialogDescription>
+            </DialogHeader>
+            <Button onClick={acceptConsent}>{dict.consent.accept}</Button>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <SiteFooter />

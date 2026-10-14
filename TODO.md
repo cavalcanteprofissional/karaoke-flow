@@ -140,8 +140,10 @@ sugestões, tom da casa, IA generativa e rodízio por mesa.
 > _Único item em aberto:_ plugar um provedor de error tracking (Sentry/OTel) —
 > o seam está pronto, falta a conta/DSN (decisão do dono).
 >
-> **Próximo:** **UX/UI e estilização** (foco declarado pelo dono) e, na sequência,
-> o roadmap de produto (Fases 9–15).
+> **Próximo:** **UX/UI e estilização** (foco declarado pelo dono). O plano e o
+> design system neon estão em [`docs/design/design-system.md`](./docs/design/design-system.md)
+> (direção **magenta de palco + ciano**, dark-first; home **só estilo**, respeitando
+> a spec §2.5.1). Na sequência, o roadmap de produto (Fases 9–15).
 
 ---
 

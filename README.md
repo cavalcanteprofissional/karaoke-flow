@@ -100,6 +100,7 @@ supabase/
 scripts/           # seed, apply-sql, enable-anonymous-signins, oauth
 docs/flows/        # fluxos do sistema, do usuário e banco de dados (Mermaid)
 docs/engenharia/   # post-mortems e playbooks de verificação
+docs/design/       # design system, tokens e guia de estilização
 ```
 
 ## ▶️ Começando
@@ -262,6 +263,10 @@ _Nota de manutenção:_ todo diagrama reflete o **código real** (migrations, `s
 
 - [`docs/produto/estado-da-arte.md`](./docs/produto/estado-da-arte.md) — **estado da arte + posicionamento competitivo**: matriz comparativa vs. Watch2Gether/CyTube/Metastream/Singa/Karafun/Stingray, lacunas, diferenciais competitivos, análise de licenças (MIT vs GPLv3) e riscos/trade-offs de YouTube-first.
 - [`docs/produto/roadmap-experiencia.md`](./docs/produto/roadmap-experiencia.md) — **planejamento (sem código)** das Fases 9–15: entrada de gente fora do raio de presença sinalizada só para o dono, permissão "fora do raio vê mas não pede música", tela da mesa (colegas + músicas da mesa), perfil de karaokê com check de som/microfone, tempo de música com teste grátis/alarme/countdown de 30 s, recompensas (dias consecutivos + músicas por bar) e pagamento/pedido de comida via mesa contra o sistema que o bar já usa. Inclui **13 decisões em aberto (D1–D13)** (com D13: estratégia de conteúdo YouTube-first vs. licenciado).
+
+### Design (UI/UX)
+
+- [`docs/design/design-system.md`](./docs/design/design-system.md) — **design system e estilização**: direção neon/festa (magenta de palco + ciano), tokens de cor/tipografia/movimento em `globals.css`, o **plano por fases** e o **guia "onde mexer por tela"** para personalização manual. Fonte única do visual (antes não havia guia de design).
 
 ### Decisões Arquiteturais (ADRs)
 

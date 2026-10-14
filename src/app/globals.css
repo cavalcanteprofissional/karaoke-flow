@@ -7,9 +7,18 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* A Geist Sans é exposta pelo next/font como `--font-geist-sans`; apontar
+     `--font-sans` para si mesmo (o que havia aqui) a deixava sem efeito. */
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  --font-display: var(--font-sans);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --shadow-glow:
+    0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent),
+    0 10px 40px -12px color-mix(in oklch, var(--primary) 55%, transparent);
+  --ease-neon: cubic-bezier(0.2, 0.8, 0.2, 1);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -55,66 +64,70 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --primary: oklch(0.48 0.22 350);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.97 0.01 350);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
+  --muted: oklch(0.97 0.01 350);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.96 0.02 350);
+  --accent-foreground: oklch(0.2 0.03 350);
+  --highlight: oklch(0.62 0.12 200);
+  --highlight-foreground: oklch(0.15 0.02 200);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: oklch(0.9 0.01 350);
+  --input: oklch(0.9 0.01 350);
+  --ring: oklch(0.48 0.22 350);
+  --chart-1: oklch(0.62 0.12 200);
+  --chart-2: oklch(0.48 0.22 350);
+  --chart-3: oklch(0.5 0.2 300);
+  --chart-4: oklch(0.62 0.16 60);
+  --chart-5: oklch(0.58 0.15 150);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-primary: oklch(0.48 0.22 350);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.02 350);
+  --sidebar-accent-foreground: oklch(0.2 0.03 350);
+  --sidebar-border: oklch(0.9 0.01 350);
+  --sidebar-ring: oklch(0.48 0.22 350);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.145 0.012 300);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.19 0.015 300);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.19 0.015 300);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --primary: oklch(0.68 0.25 350);
+  --primary-foreground: oklch(0.15 0.02 350);
+  --secondary: oklch(0.28 0.03 320);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.26 0.02 300);
+  --muted-foreground: oklch(0.72 0.02 300);
+  --accent: oklch(0.3 0.05 330);
+  --accent-foreground: oklch(0.97 0 0);
+  --highlight: oklch(0.8 0.14 200);
+  --highlight-foreground: oklch(0.16 0.02 200);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.7 0.22 345);
+  --chart-1: oklch(0.8 0.14 200);
+  --chart-2: oklch(0.68 0.25 350);
+  --chart-3: oklch(0.62 0.24 300);
+  --chart-4: oklch(0.78 0.16 60);
+  --chart-5: oklch(0.75 0.18 150);
+  --sidebar: oklch(0.19 0.015 300);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-primary: oklch(0.68 0.25 350);
+  --sidebar-primary-foreground: oklch(0.15 0.02 350);
+  --sidebar-accent: oklch(0.3 0.05 330);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.7 0.22 345);
 }
 
 @layer base {
@@ -156,6 +169,36 @@
 
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Glow neon da home (Fase 2): só estilo, sem elemento novo no DOM. O brilho
+     vem de pseudo-elemento, então a Tela 1 continua com dois botões + consent. */
+  .kf-home-glow {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .kf-home-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        60% 42% at 50% 0%,
+        color-mix(in oklch, var(--primary) 22%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        52% 40% at 50% 100%,
+        color-mix(in oklch, var(--highlight) 14%, transparent),
+        transparent 70%
+      );
+  }
+
+  .kf-rise {
+    animation: kf-rise 0.42s var(--ease-neon, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
   }
 }
 
@@ -210,8 +253,20 @@ input,
   }
 }
 
+@keyframes kf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .radius-sprite {
+  .radius-sprite,
+  .kf-rise {
     animation: none;
   }
 }

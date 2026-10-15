@@ -105,7 +105,12 @@ export function PlayerGate({
         <Button
           ref={startRef}
           size="lg"
-          className="h-28 w-full max-w-2xl text-4xl"
+          // `whitespace-normal` porque o `Button` base é `whitespace-nowrap` e
+          // em 375 o texto de `text-4xl` mede ~495px num botão de ~310px —
+          // overflow horizontal de 153px (WCAG 1.4.10 reflow). A TV é o alvo e
+          // passa de `sm`, onde a frase já cabe numa linha; abaixo disso ela
+          // quebra, que é o comportamento certo num celular.
+          className="h-28 w-full max-w-2xl text-2xl leading-tight whitespace-normal sm:text-4xl"
           onClick={onStart}
         >
           <Play className="size-12" />

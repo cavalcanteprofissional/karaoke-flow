@@ -31,9 +31,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         headerNav={<DesktopNav />}
         headerActions={<UserMenu manualLinkingEnabled={manualLinkingEnabled} />}
         nav={<AppNav />}
+        footer={<SiteFooter />}
       >
         {children}
-        <SiteFooter />
       </AppShell>
     </>
   );

@@ -18,32 +18,38 @@ import Link from "next/link";
  */
 export function SiteFooter() {
   return (
-    <footer className="mt-12 w-full border-t pt-8 pb-6">
-      <div className="text-muted-foreground kf-container flex flex-col items-center justify-between gap-4 text-xs sm:flex-row">
-        <p className="text-center sm:text-left">
-          © {new Date().getFullYear()} Lucas Cavalcante.
-          <br className="hidden sm:block" />
-          Todos os direitos reservados.
-        </p>
-        <div className="flex items-center gap-4">
-          <Link href="/sobre" className="hover:text-foreground transition-colors">
-            Sobre
-          </Link>
-          <a
-            href="https://github.com/cavalcanteprofissional"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group hover:text-primary flex items-center gap-2 transition-colors"
-          >
-            <span>Produzido por</span>
-            <Image
-              src="/images/assinatura-lucas.png"
-              alt="Lucas Cavalcante"
-              width={103}
-              height={80}
-              className="h-7 w-auto opacity-70 transition-opacity group-hover:opacity-100"
-            />
-          </a>
+    // O `<footer>` fica em nível de topo (irmão do `<main>`, via `AppShell`):
+    // `<footer>` dentro de `main` não é exposto como landmark `contentinfo`.
+    // O divisor fica no bloco `kf-container` para a linha acompanhar a largura
+    // do conteúdo, e não a da viewport.
+    <footer className="w-full">
+      <div className="kf-container mt-12 border-t pt-8 pb-6">
+        <div className="text-muted-foreground flex flex-col items-center justify-between gap-4 text-xs sm:flex-row">
+          <p className="text-center sm:text-left">
+            © {new Date().getFullYear()} Lucas Cavalcante.
+            <br className="hidden sm:block" />
+            Todos os direitos reservados.
+          </p>
+          <div className="flex items-center gap-4">
+            <Link href="/sobre" className="hover:text-foreground transition-colors">
+              Sobre
+            </Link>
+            <a
+              href="https://github.com/cavalcanteprofissional"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group hover:text-primary flex items-center gap-2 transition-colors"
+            >
+              <span>Produzido por</span>
+              <Image
+                src="/images/assinatura-lucas.png"
+                alt="Lucas Cavalcante"
+                width={103}
+                height={80}
+                className="h-7 w-auto opacity-70 transition-opacity group-hover:opacity-100"
+              />
+            </a>
+          </div>
         </div>
       </div>
     </footer>

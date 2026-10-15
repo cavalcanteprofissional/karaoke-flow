@@ -100,9 +100,10 @@ export function Onboarding() {
     <div className="bg-background kf-home-glow flex min-h-dvh flex-col">
       {/* O conteúdo fica num wrapper `flex-1` e o rodapé fora dele: no mesmo
           container, o `gap-16` empurraria a assinatura para 4rem do botão. */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-16 p-4">
+      <main className="flex flex-1 flex-col items-center justify-center gap-16 p-4">
+        <h1 className="sr-only">Karaokê Watch Party</h1>
         <div
-          className="flex w-full max-w-sm flex-col gap-4"
+          className="flex w-full max-w-sm flex-col gap-4 md:max-w-md"
           role="group"
           aria-label="Escolha seu perfil"
         >
@@ -145,7 +146,7 @@ export function Onboarding() {
             <Button onClick={acceptConsent}>{dict.consent.accept}</Button>
           </DialogContent>
         </Dialog>
-      </div>
+      </main>
 
       <SiteFooter />
     </div>

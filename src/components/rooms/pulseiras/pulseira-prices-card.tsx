@@ -88,7 +88,11 @@ export function PulseiraPricesCard({ barId, precos, disabled }: PulseiraPricesCa
   const hojeCentavos = precoPulseiraHoje(precos);
 
   return (
-    <Card className={cn(disabled && "opacity-60")} aria-disabled={disabled}>
+    <Card
+      className={cn(disabled && "border-dashed")}
+      data-disabled={disabled || undefined}
+      aria-disabled={disabled}
+    >
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Wallet className="text-muted-foreground size-4" />
@@ -203,7 +207,7 @@ export function PulseiraPricesCard({ barId, precos, disabled }: PulseiraPricesCa
                           key={chave}
                           className={cn(
                             "flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm",
-                            ativa && "border-emerald-500/40 bg-emerald-500/5"
+                            ativa && "border-success/40 bg-success/5"
                           )}
                         >
                           <span className="flex items-center gap-2">
@@ -214,7 +218,7 @@ export function PulseiraPricesCard({ barId, precos, disabled }: PulseiraPricesCa
                               {formatCentavos(p.preco_centavos)}
                             </span>
                             {ativa && (
-                              <span className="text-[10px] font-semibold tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
+                              <span className="text-success text-[10px] font-semibold tracking-wide uppercase">
                                 hoje
                               </span>
                             )}

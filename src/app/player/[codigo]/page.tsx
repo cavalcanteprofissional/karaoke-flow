@@ -32,12 +32,12 @@ type PlayerPageProps = {
 
 function PlayerNotice({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex h-dvh items-center justify-center bg-black p-8 text-white">
+    <main className="dark flex h-dvh items-center justify-center bg-black p-8 text-white">
       <div className="flex max-w-md flex-col items-center gap-3 text-center">
-        <p className="text-3xl font-bold">{title}</p>
-        <p className="text-lg text-zinc-400">{description}</p>
+        <h1 className="text-3xl font-bold">{title}</h1>
+        <p className="text-muted-foreground text-lg">{description}</p>
       </div>
-    </div>
+    </main>
   );
 }
 

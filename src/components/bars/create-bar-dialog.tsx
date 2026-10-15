@@ -126,7 +126,7 @@ export function CreateBarDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
-          className={cn(triggerClassName, "w-full")}
+          className={cn("w-full", triggerClassName)}
           variant={triggerVariant}
           size={triggerSize}
         >
@@ -134,7 +134,7 @@ export function CreateBarDialog({
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Store className="size-4" />
@@ -297,7 +297,7 @@ export function CreateBarDialog({
             />
           </div>
 
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">
+          <div className="border-warning/40 bg-warning/10 text-warning flex items-start gap-2 rounded-lg border p-3">
             <MapPin className="mt-0.5 size-4 shrink-0" />
             <p className="text-xs leading-relaxed">
               A localização e o raio de presença confirmam que quem pede música está{" "}

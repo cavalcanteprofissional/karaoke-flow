@@ -448,7 +448,8 @@ export function PlayerKiosk({
   const showIdle = !current && !gateDue;
 
   return (
-    <div className="flex h-dvh flex-col bg-black text-white">
+    <main className="dark flex h-dvh flex-col bg-black text-white">
+      <h1 className="sr-only">Karaokê ao vivo — sala {state.room.code}</h1>
       <div className="relative min-h-0 flex-1">
         {showPlayer && (
           <YouTubeStage
@@ -519,15 +520,15 @@ export function PlayerKiosk({
         )}
       </div>
 
-      <aside className="shrink-0 border-t border-white/10 bg-zinc-950 px-6 py-4">
+      <aside className="border-border bg-card shrink-0 border-t px-6 py-4">
         <div className="flex items-center gap-3">
-          <Radio className="size-5 text-emerald-400" />
+          <Radio className="text-success size-5" />
           <p className="text-lg font-semibold">
             {headline}
             {state.current ? ` — ${state.current.title}` : ""}
           </p>
           {panel.pendingCount > 0 && (
-            <span className="text-sm text-zinc-400">
+            <span className="text-muted-foreground text-sm">
               {panel.pendingCount} aguardando aprovação
             </span>
           )}
@@ -567,22 +568,22 @@ export function PlayerKiosk({
                   key={row.item.id}
                   className={
                     row.highlight === "now"
-                      ? "rounded-lg bg-emerald-500/20 px-3 py-2 text-lg font-bold"
+                      ? "bg-success/20 rounded-lg px-3 py-2 text-lg font-bold"
                       : row.highlight === "next"
-                        ? "rounded-lg border-2 border-amber-400 px-3 py-2 text-lg font-bold"
-                        : "px-3 py-2 text-base text-zinc-300"
+                        ? "border-warning rounded-lg border-2 px-3 py-2 text-lg font-bold"
+                        : "text-foreground/80 px-3 py-2 text-base"
                   }
                 >
-                  <span className="text-zinc-400">#{row.item.position}</span>{" "}
+                  <span className="text-muted-foreground">#{row.item.position}</span>{" "}
                   {row.item.title}
-                  <span className="ml-2 text-sm font-normal text-zinc-400">
+                  <span className="text-muted-foreground ml-2 text-sm font-normal">
                     {duration ? `${duration} · ` : ""}
                     {row.item.requested_by
                       ? `pedido por ${row.item.requested_by}`
                       : "pedido na sala"}
                   </span>
                   {row.highlight === "next" && (
-                    <span className="ml-2 text-sm font-normal text-amber-300">
+                    <span className="text-warning ml-2 text-sm font-normal">
                       em seguida
                     </span>
                   )}
@@ -593,12 +594,12 @@ export function PlayerKiosk({
         )}
 
         {panel.empty && (
-          <p className="mt-3 flex items-center gap-2 text-base text-zinc-400">
+          <p className="text-muted-foreground mt-3 flex items-center gap-2 text-base">
             <Music4 className="size-4" />A fila está vazia — a tela volta a tocar assim
             que alguém pedir.
           </p>
         )}
       </aside>
-    </div>
+    </main>
   );
 }

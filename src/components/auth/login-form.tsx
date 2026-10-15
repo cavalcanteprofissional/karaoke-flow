@@ -136,7 +136,9 @@ export function LoginForm({
   return (
     <Card className="w-full max-w-sm self-center">
       <CardHeader>
-        <CardTitle className="text-lg">Entrar na sua conta</CardTitle>
+        <CardTitle asChild className="text-lg">
+          <h1>Entrar na sua conta</h1>
+        </CardTitle>
         <CardDescription>
           Entre sem login para pedir músicas pelo QR do bar. Para abrir o seu próprio bar,
           faça login com uma conta.
@@ -146,7 +148,7 @@ export function LoginForm({
         {error && (
           <div
             role="alert"
-            className="border-destructive/30 bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg border p-3 text-sm"
+            className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2 rounded-lg border p-3 text-sm"
           >
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <span>{error}</span>

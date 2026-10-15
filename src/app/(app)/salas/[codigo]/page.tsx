@@ -10,6 +10,7 @@ import { HostScreenNav } from "@/components/rooms/host-screen-nav";
 import { QUEUE_VISIBLE_STATUSES } from "@/lib/rooms/queue";
 import { CloseRoomButton } from "@/components/rooms/close-room-button";
 import { LeaveRoomButton } from "@/components/rooms/leave-room-button";
+import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getEntryPreviewAction } from "@/lib/bars/actions";
@@ -32,23 +33,16 @@ type RoomPageProps = {
 
 function RoomClosedNotice() {
   return (
-    <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
-      <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-        <Power className="size-6" />
-      </span>
-      <div className="flex flex-col gap-1">
-        <p className="font-medium">Esta sala foi encerrada</p>
-        <p className="text-muted-foreground text-sm">
-          O dono encerrou o karaokê: a fila foi cancelada e a sala ficou indisponível.
-        </p>
-      </div>
-      <Link
-        href="/dashboard"
-        className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-semibold"
-      >
-        Voltar ao início
-      </Link>
-    </div>
+    <EmptyState
+      icon={Power}
+      title="Esta sala foi encerrada"
+      description="O dono encerrou o karaokê: a fila foi cancelada e a sala ficou indisponível."
+      action={
+        <Button asChild>
+          <Link href="/dashboard">Voltar ao início</Link>
+        </Button>
+      }
+    />
   );
 }
 
@@ -101,23 +95,16 @@ export default async function RoomPage({ params }: RoomPageProps) {
     }
 
     return (
-      <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
-        <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-          <Lock className="size-6" />
-        </span>
-        <div className="flex flex-col gap-1">
-          <p className="font-medium">Você ainda não entrou neste karaokê</p>
-          <p className="text-muted-foreground text-sm">
-            Entre pelo QR ou pelo código para ver a fila e pedir músicas.
-          </p>
-        </div>
-        <Link
-          href={`/entrar?code=${code}`}
-          className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-semibold"
-        >
-          Entrar na sala {code}
-        </Link>
-      </div>
+      <EmptyState
+        icon={Lock}
+        title="Você ainda não entrou neste karaokê"
+        description="Entre pelo QR ou pelo código para ver a fila e pedir músicas."
+        action={
+          <Button asChild>
+            <Link href={`/entrar?code=${code}`}>Entrar na sala {code}</Link>
+          </Button>
+        }
+      />
     );
   }
 

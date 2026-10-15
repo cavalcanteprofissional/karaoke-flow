@@ -215,10 +215,10 @@ export function RoomBehaviorCard({ roomId, initial }: RoomBehaviorCardProps) {
             decisão do PO — com "Entrada livre" desligada, quem foi aprovado
             há mais de 24h volta a pedir aprovação. Para liberar, basta
             remover o `disabled` e o `onCheckedChange` abaixo. */}
-        <div className="flex items-start justify-between gap-3 opacity-60">
+        <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-0.5">
             <Label htmlFor="toggle-pre-approval" className="flex items-center gap-1.5">
-              <Lock className="size-3.5" />
+              <Lock className="text-muted-foreground size-3.5" />
               Aprovação vale por 24h
             </Label>
             <p className="text-muted-foreground text-xs">
@@ -230,6 +230,7 @@ export function RoomBehaviorCard({ roomId, initial }: RoomBehaviorCardProps) {
             id="toggle-pre-approval"
             checked={settings.pre_approval_24h}
             disabled
+            className="cursor-not-allowed opacity-60"
             aria-describedby="toggle-pre-approval-desc"
           />
           <span id="toggle-pre-approval-desc" className="sr-only">

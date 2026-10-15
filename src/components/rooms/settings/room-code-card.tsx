@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { updateRoomCodeAction } from "@/lib/rooms/actions";
 
 type RoomCodeCardProps = {
@@ -59,30 +60,35 @@ export function RoomCodeCard({ roomId, roomCode }: RoomCodeCardProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <Input
-            id="room-code"
-            value={roomCodeInput}
-            onChange={(event) => setRoomCodeInput(event.target.value.toUpperCase())}
-            maxLength={12}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-            className="font-mono tracking-[0.2em] uppercase"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={saveRoomCode}
-            disabled={codeBusy || roomCodeInput.trim().toUpperCase() === roomCode}
-          >
-            {codeBusy ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <KeyRound className="size-4" />
-            )}
-            Salvar
-          </Button>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="room-code" className="text-xs">
+            Código de entrada
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              id="room-code"
+              value={roomCodeInput}
+              onChange={(event) => setRoomCodeInput(event.target.value.toUpperCase())}
+              maxLength={12}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              className="font-mono tracking-[0.2em] uppercase"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={saveRoomCode}
+              disabled={codeBusy || roomCodeInput.trim().toUpperCase() === roomCode}
+            >
+              {codeBusy ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <KeyRound className="size-4" />
+              )}
+              Salvar
+            </Button>
+          </div>
         </div>
         <p className="text-muted-foreground text-xs">
           3–12 letras ou números, sem acentos ou espaços. Padrão: o nome do bar em

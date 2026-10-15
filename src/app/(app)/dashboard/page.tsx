@@ -20,13 +20,7 @@ import { getMyEntryRequestsAction } from "@/lib/bars/actions";
 import { isDevAccount } from "@/lib/dev";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { createClient } from "@/lib/supabase/server";
 import type { Bar } from "@/types/bar";
 import type { MemberStatus, Room } from "@/types/room";
@@ -147,6 +141,7 @@ export default async function DashboardPage() {
                 triggerLabel="Criar bar"
                 triggerVariant="outline"
                 triggerSize="sm"
+                triggerClassName="w-auto"
               />
             )}
           </div>
@@ -305,37 +300,27 @@ export default async function DashboardPage() {
       )}
 
       {pendingCount > 0 && pendingRequests.length === 0 && (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle className="text-base">Entradas aguardando aprovação</CardTitle>
-            <CardDescription>
-              Você tem {pendingCount} pedido{pendingCount > 1 ? "s" : ""} de entrada
-              pendente{pendingCount > 1 ? "s" : ""}. Quando o dono aprovar, o bar aparece
-              aqui.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <EmptyState
+          title="Entradas aguardando aprovação"
+          description={`Você tem ${pendingCount} pedido${pendingCount > 1 ? "s" : ""} de entrada pendente${pendingCount > 1 ? "s" : ""}. Quando o dono aprovar, o bar aparece aqui.`}
+          action={
             <Button asChild variant="secondary" size="sm">
               <Link href="/entrar">Ver código de uma casa</Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       )}
 
       {myBarsList.length === 0 && visited.length === 0 && pendingCount === 0 && (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-            <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-              <Store className="size-6" />
-            </span>
-            <CardTitle className="text-base">Nada por aqui ainda</CardTitle>
-            <CardDescription>
-              {isAnonymous
-                ? "Crie uma conta para montar o seu bar — ou entre em uma casa pelo QR."
-                : "Crie o seu bar e o QR das mesas sai na hora."}
-            </CardDescription>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Store}
+          title="Nada por aqui ainda"
+          description={
+            isAnonymous
+              ? "Crie uma conta para montar o seu bar — ou entre em uma casa pelo QR."
+              : "Crie o seu bar e o QR das mesas sai na hora."
+          }
+        />
       )}
     </div>
   );

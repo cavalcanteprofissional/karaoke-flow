@@ -48,6 +48,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { createClient } from "@/lib/supabase/client";
 import {
   QUEUE_VISIBLE_STATUSES,
@@ -374,12 +375,12 @@ export function QueueList({
               o trigger `20261004000042` já isenta o dono do limite) — esconder o
               link dele era a última peça faltando para o pedido funcionar na UI. */}
           {canRequest && (
-            <Link href={`/salas/${roomCode}/buscar`}>
-              <Button size="sm" variant="outline">
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/salas/${roomCode}/buscar`}>
                 <Mic2 className="size-3.5" />
                 Pedir música
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           )}
         </CardTitle>
         {isHost ? (
@@ -409,7 +410,7 @@ export function QueueList({
               {waiting.map((item) => (
                 <li
                   key={item.id}
-                  className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-2"
+                  className="border-warning/40 bg-warning/5 flex items-center gap-3 rounded-xl border p-2"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{item.title}</p>
@@ -427,7 +428,7 @@ export function QueueList({
                       {busy === item.id ? (
                         <LoaderCircle className="size-4 animate-spin" />
                       ) : (
-                        <Check className="size-4 text-emerald-500" />
+                        <Check className="text-success size-4" />
                       )}
                       Aprovar
                     </Button>
@@ -439,7 +440,7 @@ export function QueueList({
                       disabled={busy === item.id}
                       onClick={() => moderate(item, "rejected")}
                     >
-                      <X className="size-4 text-rose-500" />
+                      <X className="text-destructive size-4" />
                     </Button>
                     {removeButton(item)}
                   </div>
@@ -450,21 +451,24 @@ export function QueueList({
         )}
 
         {items.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 p-4 text-center">
-            <p className="text-muted-foreground text-sm">
-              {canRequest
+          <EmptyState
+            variant="quiet"
+            description={
+              canRequest
                 ? "A fila está vazia — peça a primeira música!"
-                : "Nada tocando agora. A fila aparece aqui assim que o dono liberar uma música."}
-            </p>
-            {canRequest && (
-              <Link href={`/salas/${roomCode}/buscar`}>
-                <Button>
-                  <Mic2 className="size-4" />
-                  Pedir música
+                : "Nada tocando agora. A fila aparece aqui assim que o dono liberar uma música."
+            }
+            action={
+              canRequest && (
+                <Button asChild>
+                  <Link href={`/salas/${roomCode}/buscar`}>
+                    <Mic2 className="size-4" />
+                    Pedir música
+                  </Link>
                 </Button>
-              </Link>
-            )}
-          </div>
+              )
+            }
+          />
         ) : (
           isHost &&
           ordered.length > 0 && (
@@ -588,7 +592,7 @@ function QueueRow({ item, meta, trailing, handle, arrows, sortable }: QueueRowPr
       ref={sortable?.ref}
       style={sortable?.style}
       className={`border-border flex items-center gap-3 rounded-xl border p-2 ${
-        view.isPlaying ? "border-emerald-500/50 bg-emerald-500/5" : ""
+        view.isPlaying ? "border-success/50 bg-success/5" : ""
       }`}
     >
       {handle}

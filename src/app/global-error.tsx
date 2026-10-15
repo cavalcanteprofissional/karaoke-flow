@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { Button } from "@/components/ui/button";
 import { captureError } from "@/lib/observability";
 
 import "./globals.css";
@@ -25,13 +26,9 @@ export default function GlobalError({
           A aplicação encontrou uma falha inesperada. Tente de novo ou recarregue a
           página.
         </p>
-        <button
-          type="button"
-          onClick={() => retry()}
-          className="bg-primary text-primary-foreground rounded-xl px-4 py-3 text-base font-medium"
-        >
+        <Button type="button" onClick={() => retry()}>
           Tentar de novo
-        </button>
+        </Button>
       </body>
     </html>
   );

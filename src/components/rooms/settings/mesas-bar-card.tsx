@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { updateBarMesasAction } from "@/lib/bars/actions";
 import { MESA_MAX } from "@/types/bar";
 
@@ -79,30 +80,35 @@ export function MesasBarCard({ bar }: MesasBarCardProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <Input
-            id="bar-mesas"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={MESA_MAX}
-            value={mesasInput}
-            onChange={(event) => setMesasInput(event.target.value)}
-            className="w-24"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={saveMesas}
-            disabled={mesasBusy || mesasInput === String(bar.quantidade_mesas)}
-          >
-            {mesasBusy ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <LayoutGrid className="size-4" />
-            )}
-            Salvar
-          </Button>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="bar-mesas" className="text-xs">
+            Mesas do bar
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              id="bar-mesas"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={MESA_MAX}
+              value={mesasInput}
+              onChange={(event) => setMesasInput(event.target.value)}
+              className="w-24"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={saveMesas}
+              disabled={mesasBusy || mesasInput === String(bar.quantidade_mesas)}
+            >
+              {mesasBusy ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <LayoutGrid className="size-4" />
+              )}
+              Salvar
+            </Button>
+          </div>
         </div>
         <p className="text-muted-foreground text-xs">
           Hoje o bar tem <span className="font-medium">{bar.quantidade_mesas}</span>{" "}

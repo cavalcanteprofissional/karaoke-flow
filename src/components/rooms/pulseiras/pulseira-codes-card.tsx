@@ -38,9 +38,8 @@ const STATUS_LABEL: Record<PulseiraStatus, string> = {
 };
 
 const STATUS_CLASS: Record<PulseiraStatus, string> = {
-  disponivel:
-    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  usado: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
+  disponivel: "bg-success/10 text-success border-success/30",
+  usado: "bg-destructive/5 text-destructive border-destructive/30",
   expirado: "bg-muted text-muted-foreground border-border",
 };
 
@@ -75,7 +74,11 @@ export function PulseiraCodesCard({
   const agora = new Date();
 
   return (
-    <Card className={cn(disabled && "opacity-60")} aria-disabled={disabled}>
+    <Card
+      className={cn(disabled && "border-dashed")}
+      data-disabled={disabled || undefined}
+      aria-disabled={disabled}
+    >
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <TicketPlus className="text-muted-foreground size-4" />

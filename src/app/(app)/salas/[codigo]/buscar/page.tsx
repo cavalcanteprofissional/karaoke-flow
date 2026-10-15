@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, Clock3, DoorOpen, Music2, Search } from "lucide-react";
 
 import { SongSearch } from "@/components/rooms/song-search";
+import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -47,23 +49,16 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
 
   if (!room) {
     return (
-      <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
-        <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-          <Search className="size-6" />
-        </span>
-        <div className="flex flex-col gap-1">
-          <p className="font-medium">Sala não encontrada</p>
-          <p className="text-muted-foreground text-sm">
-            Confira o código do karaokê e tente de novo.
-          </p>
-        </div>
-        <Link
-          href="/entrar"
-          className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-semibold"
-        >
-          Entrar em um bar
-        </Link>
-      </div>
+      <EmptyState
+        icon={Search}
+        title="Sala não encontrada"
+        description="Confira o código do karaokê e tente de novo."
+        action={
+          <Button asChild>
+            <Link href="/entrar">Entrar em um bar</Link>
+          </Button>
+        }
+      />
     );
   }
 
@@ -86,35 +81,26 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
     return (
       <div className="flex flex-col gap-4">
         <BackLink code={code} />
-        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-8 text-center">
-          <span className="bg-secondary text-secondary-foreground flex size-12 items-center justify-center rounded-2xl">
-            {membership === "pending" ? (
-              <Clock3 className="size-6" />
-            ) : (
-              <DoorOpen className="size-6" />
-            )}
-          </span>
-          <div className="flex flex-col gap-1">
-            <p className="font-medium">
-              {membership === "pending"
-                ? "Aguardando aprovação do host"
-                : "Você ainda não está nesta sala"}
-            </p>
-            <p className="text-muted-foreground text-sm">
-              {membership === "pending"
-                ? "Assim que o dono aprovar sua entrada você pode pedir músicas."
-                : "Entre pela tela inicial com o QR ou o código do bar."}
-            </p>
-          </div>
-          {membership !== "pending" && (
-            <Link
-              href={`/entrar?code=${code}`}
-              className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-semibold"
-            >
-              Entrar na sala {code}
-            </Link>
-          )}
-        </div>
+        <EmptyState
+          icon={membership === "pending" ? Clock3 : DoorOpen}
+          title={
+            membership === "pending"
+              ? "Aguardando aprovação do host"
+              : "Você ainda não está nesta sala"
+          }
+          description={
+            membership === "pending"
+              ? "Assim que o dono aprovar sua entrada você pode pedir músicas."
+              : "Entre pela tela inicial com o QR ou o código do bar."
+          }
+          action={
+            membership !== "pending" && (
+              <Button asChild>
+                <Link href={`/entrar?code=${code}`}>Entrar na sala {code}</Link>
+              </Button>
+            )
+          }
+        />
       </div>
     );
   }
@@ -203,16 +189,18 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Music2 className="text-muted-foreground size-4" />
-            {replaceItem ? "Trocar música" : "Pedir música"} — sala {code}
-            <Badge variant="secondary">
-              {room.no_stop
-                ? "no-stop"
-                : room.queue_approval_mode === "auto"
-                  ? "fila automática"
-                  : "host aprova"}
-            </Badge>
+          <CardTitle asChild className="flex items-center gap-2 text-base">
+            <h1>
+              <Music2 className="text-muted-foreground size-4" />
+              {replaceItem ? "Trocar música" : "Pedir música"} — sala {code}
+              <Badge variant="secondary">
+                {room.no_stop
+                  ? "no-stop"
+                  : room.queue_approval_mode === "auto"
+                    ? "fila automática"
+                    : "host aprova"}
+              </Badge>
+            </h1>
           </CardTitle>
           {/**
            * O texto do cabeçalho é o **neutro** de propósito: a pergunta "posso

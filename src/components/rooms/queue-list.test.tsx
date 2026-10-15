@@ -628,9 +628,13 @@ describe("QueueList — a lista volta a atualizar sozinha (2026-09-27)", () => {
 });
 
 describe("QueueList — o espectador que entrou fora do raio", () => {
-  /** Links para a tela de solicitação: é o que a regra precisa tirar do caminho. */
+  /**
+   * Links para a tela de solicitação: é o que a regra precisa tirar do caminho.
+   * O CTA é um `Button asChild` + `Link` (auditoria UX/UI: interativos
+   * aninhados), então o papel é `link`, não `button`.
+   */
   function botaoPedir(): HTMLElement[] {
-    return screen.queryAllByRole("button", { name: /Pedir música/i });
+    return screen.queryAllByRole("link", { name: /Pedir música/i });
   }
 
   it("não oferece o pedido de música no cabeçalho", async () => {

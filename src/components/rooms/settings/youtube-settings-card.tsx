@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { KeyRound, Link2, LoaderCircle, PlugZap, Video } from "lucide-react";
 import { toast } from "sonner";
 
@@ -215,16 +216,27 @@ export function YoutubeSettingsCard({
           </p>
         </div>
 
-        <div className="flex flex-col gap-1">
+        <div
+          className="flex flex-col gap-1"
+          role="group"
+          aria-labelledby="yt-group-label"
+        >
           {/**
            * "Conta do YouTube", e não "Conta do Google" (Fase 8f): o botão
            * levava a uma tela que parece login do Google e muita gente achava
            * que era o mesmo "entrar com Google" do app — que não tem relação
            * nenhuma com a YouTube Data API e não dá nenhuma credencial.
+           *
+           * `span` + `role="group"`: não existe controle labelable neste bloco
+           * (link e botão não são labelable), então `htmlFor` apontava para
+           * nada.
            */}
-          <Label htmlFor="yt-connect">
+          <span
+            id="yt-group-label"
+            className="flex items-center gap-2 text-sm leading-none font-medium select-none"
+          >
             Conta do YouTube conectada (alternativa à chave)
-          </Label>
+          </span>
           {youtubeConnectedAt ? (
             <div className="flex items-center justify-between gap-3">
               <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -273,16 +285,17 @@ export function YoutubeSettingsCard({
                 ter chave guardada aqui — para ter cota própria, o caminho é um projeto
                 seu no Google Cloud.
               </p>
-              <a
-                id="yt-connect"
-                href={`/auth/youtube/authorize?room=${encodeURIComponent(roomCode)}`}
-                className="mt-1 inline-flex"
-              >
-                <Button variant="secondary" size="sm">
+              {/* `Button asChild` + `Link`: o padrão do repo. Um `<a href>`
+                    envolvendo um `<button>` é interativo aninhado (WCAG 4.1.2) —
+                    teclado tabula nos dois e o leitor de tela anuncia os dois. */}
+              <Button asChild variant="secondary" size="sm" className="mt-1">
+                <Link
+                  href={`/auth/youtube/authorize?room=${encodeURIComponent(roomCode)}`}
+                >
                   <Video className="size-4" />
                   Conectar conta do YouTube
-                </Button>
-              </a>
+                </Link>
+              </Button>
             </div>
           )}
         </div>

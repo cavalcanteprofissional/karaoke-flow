@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -371,18 +372,22 @@ export function QueueList({
         <CardTitle className="flex items-center gap-2 text-base">
           <ListMusic className="text-muted-foreground size-4" />
           Fila de músicas
-          {/* Fase 17: o host também pede música (quantas quiser na própria sala,
-              o trigger `20261004000042` já isenta o dono do limite) — esconder o
-              link dele era a última peça faltando para o pedido funcionar na UI. */}
-          {canRequest && (
+        </CardTitle>
+        {/* Fase 17: o host também pede música (quantas quiser na própria sala,
+            o trigger `20261004000042` já isenta o dono do limite) — esconder o
+            link dele era a última peça faltando para o pedido funcionar na UI.
+            Em `CardAction`, fora do `CardTitle`: dentro do título o botão entrava
+            no nome acessível do heading ("Fila de músicasPedir música"). */}
+        {canRequest && (
+          <CardAction>
             <Button asChild size="sm" variant="outline">
               <Link href={`/salas/${roomCode}/buscar`}>
                 <Mic2 className="size-3.5" />
                 Pedir música
               </Link>
             </Button>
-          )}
-        </CardTitle>
+          </CardAction>
+        )}
         {isHost ? (
           <CardDescription>
             {pending.length > 0

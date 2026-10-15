@@ -37,8 +37,13 @@ function CardTitle({
   className,
   asChild = false,
   ...props
-}: React.ComponentProps<"div"> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot.Root : "div";
+}: React.ComponentProps<"h2"> & { asChild?: boolean }) {
+  // `h2` por padrão (não `div`): títulos de card são seções da tela e viravam
+  // `text:` na árvore de acessibilidade — leitor de tela navegava só pelo `h1`
+  // de cada página. Com o reset do Preflight, `h1..h6` são visualmente
+  // idênticos a `div`, então não há mudança visual. `asChild` continua livre
+  // para quem precisa de outro nível (`h1` na página) ou de outro elemento.
+  const Comp = asChild ? Slot.Root : "h2";
   return (
     <Comp
       data-slot="card-title"

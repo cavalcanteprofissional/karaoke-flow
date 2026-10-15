@@ -193,6 +193,8 @@ export default async function BuscarPage({ params, searchParams }: BuscarPagePro
             <h1>
               <Music2 className="text-muted-foreground size-4" />
               {replaceItem ? "Trocar música" : "Pedir música"} — sala {code}
+              {/* `{" "}`: sem o espaço, o nome acessível do h1 concatena o
+                  badge e o leitor de tela fala "KARAOKEDOZEhost aprova". */}{" "}
               <Badge variant="secondary">
                 {room.no_stop
                   ? "no-stop"

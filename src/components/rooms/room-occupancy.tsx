@@ -171,13 +171,20 @@ export function RoomOccupancyCard({ roomId, quantidadeMesas }: RoomOccupancyCard
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Users className="text-muted-foreground size-4" />
-          Quem está na sala
+        {/* Nota fora do `CardTitle`: dentro do heading ela entrava no nome
+            acessível ("Quem está na salaatualiza sozinho"). O wrapper mantém o
+            `ml-auto` da direita, com o mesmo visual. */}
+        <div className="flex items-center gap-2">
+          <CardTitle asChild>
+            <h2 className="flex items-center gap-2">
+              <Users className="text-muted-foreground size-4" />
+              Quem está na sala
+            </h2>
+          </CardTitle>
           <span className="text-muted-foreground ml-auto text-xs font-normal">
             atualiza sozinho
           </span>
-        </CardTitle>
+        </div>
         <CardDescription>
           {formatar(data.total)} {data.total === 1 ? "pessoa" : "pessoas"} na sala
           {data.pendentes > 0 && (

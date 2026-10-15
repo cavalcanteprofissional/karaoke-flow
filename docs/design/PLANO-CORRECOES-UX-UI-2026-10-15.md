@@ -4,7 +4,7 @@
 
 **Objetivo:** Corrigir achados priorizados sem alterar escopo funcional. Validar com lint, typecheck, format:check e contraste.
 
-**Status geral:** P0 e P1 **implementados e verificados**. P2 parcial (ver §3).
+**Status geral:** P0 e P1 **implementados e verificados**. P2 parcial (ver §3). Deferidos que exigem olho humano/device estão consolidados em §7 (próxima fase).
 
 ## 1. Críticos (P0) — concluído
 
@@ -74,3 +74,44 @@ Axe (WCAG 2.2 AA) pós-correção: `/dashboard` (375), `/salas/KARAOKEDOZE/sala`
 - Hex do Leaflet em `presence-radius-map.tsx`
 - Textos <12px das telas compactas de pulseira/mapa
 - Tokens semânticos de mapa (se o mapa ganhar variações de tema)
+
+## 7. Próxima fase — verificação visual e manual (a resolver depois)
+
+Esta fase reúne o que **não** é capturável apenas por axe/estático: exige olho humano,
+interação real e/ou device. Nada aqui foi executado ainda.
+
+### 7.1 Touch targets e ergonomia
+- [ ] `Input` default `h-8` (32px): decidir elevar para `h-9`/`h-10` e varrer todos os formulários (código da sala, mesas, busca, pulseira, login).
+- [ ] Alvos <44px restantes: links da `desktop-nav`, botão de conta/avatar, `site-footer` (`Sobre` 32×16), “Voltar à sala” (altura 20).
+- [ ] Conferir WCAG 2.5.8 (mínimo 24px) em mobile, com toque real.
+
+### 7.2 Contraste e tema
+- [ ] `presence-radius-map.tsx`: 8 nodes “incomplete” do axe (Leaflet/SVG) — medir manualmente círculo/anel/marcador no dark.
+- [ ] Hex do Leaflet → tokens semânticos (avaliar `getComputedStyle` em runtime).
+- [ ] Tema claro: só o dark foi auditado. Se houver toggle, auditar `:root` (light) com axe + inspeção.
+- [ ] Textos <12px (`pulseira-codes-card.tsx:143,160`, `pulseira-prices-card.tsx:217`, `presence-radius-map.tsx:218`): ir para ≥12px ou aceitar formalmente no design-system §10.
+
+### 7.3 Movimento, estados e mídia
+- [ ] `prefers-reduced-motion`: verificar `kf-rise`/`ease-neon` (onboarding) e animações do player.
+- [ ] Skeletons recém-criados (`loading.tsx` por rota): conferir visual em cada rota (sem flash/layout shift).
+- [ ] Estados vazios (`EmptyState`) e `error.tsx`/`global-error.tsx`: revisar no device.
+
+### 7.4 Fluxos E2E manuais
+- [ ] Entrada: login anônimo → código → mesa → fila.
+- [ ] Aprovação de pedido pelo host (`entry-approval-wait` + `PendingEntries`).
+- [ ] Troca de código da sala (`RoomCodeCard` → novo link/QR).
+- [ ] Leitura de QR (mesa/pulseira/TV) em tela real.
+- [ ] Entrada fora do raio do bar (espectador) e gate de presença.
+- [ ] Player TV kiosk: autoplay, gate de som, reconexão.
+
+### 7.5 Verificação em device
+- [ ] DevTools mobile + iOS real (Safari) — citado em `TODO.md` (Fase 4 design) e ainda em aberto.
+
+## 8. Registro de commits da auditoria (2026-10-15)
+
+- `feat(design)` `5c28f47` — tokens de status, `EmptyState`, skeletons e navegação desktop.
+- `docs` `e6f60a7` — reorganização de documentos + este plano + evidências.
+- `fix(a11y)` `c915436` — P0/P1/P2 da auditoria UX/UI.
+- `chore(tooling)` `0b12e1a` — opencode (MCP/skill/comando) + `.gitignore`.
+
+Sem push; `main` à frente de `origin/main`.

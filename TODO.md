@@ -1604,3 +1604,12 @@ Ver plano detalhado: [`docs/design/PLANO-CORRECOES-UX-UI-2026-10-15.md`](./docs/
 - [x] P2: `global-error.tsx` botão cru → `Button` — **entregue 2026-10-15**
 
 Validação: lint/typecheck/format limpos, `contrast.test.ts` 23/23, axe WCAG 2.2 AA 0 violações em `/dashboard` (375), `/salas/KARAOKEDOZE{,/sala,/buscar,/pulseiras}`, `/player/KARAOKEDOZE`.
+
+**Próxima fase — verificação visual e manual (a resolver depois):** ver §7 do plano. Resumo:
+- [ ] Touch targets: `Input` h-8 e demais alvos <44px (nav desktop, avatar, rodapé).
+- [ ] Contraste/tema: 8 nodes "incomplete" do mapa (Leaflet), hex do Leaflet, tema claro não auditado, textos <12px.
+- [ ] Movimento/estados: `prefers-reduced-motion`, skeletons por rota, estados vazios/erro.
+- [ ] Fluxos E2E manuais: entrada/mesa/fila, aprovação do host, troca de código, QR, fora do raio, kiosk TV.
+- [ ] Device: DevTools mobile + iOS real (Safari).
+
+Commits da auditoria (2026-10-15, sem push): `5c28f47` (design), `e6f60a7` (docs), `c915436` (a11y), `0b12e1a` (tooling).

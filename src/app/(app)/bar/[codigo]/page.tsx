@@ -84,7 +84,7 @@ export default async function BarScreenPage({ params }: BarScreenProps) {
       <section className="flex flex-col gap-3">
         <Link
           href="/dashboard"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 py-1 text-sm transition-colors"
         >
           <ArrowLeft className="size-3.5" />
           Voltar ao início

@@ -16,6 +16,12 @@ test-results/
 blob-report/
 .playwright-mcp/
 
+# Evidências da verificação visual (screenshots + JSONs). Ficam locais:
+# são binários pesados e o JSON do player pode conter `?token=` real
+# (TODO.md: nunca registrar link de player em log/issue/doc). O relatório
+# de auditoria referencia os arquivos pelo nome.
+docs/design/evidencias-visual-*/
+
 # Misc
 .DS_Store
 *.pem

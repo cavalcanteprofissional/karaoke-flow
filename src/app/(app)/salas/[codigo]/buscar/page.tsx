@@ -246,7 +246,7 @@ function BackLink({ code }: { code: string }) {
   return (
     <Link
       href={`/salas/${code}`}
-      className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm"
+      className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 py-1 text-sm"
     >
       <ArrowLeft className="size-4" />
       Voltar à sala {code}

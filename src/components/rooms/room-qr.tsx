@@ -107,7 +107,9 @@ export function RoomQr({
         <a
           href={dataUrl}
           download={fileName}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2"
+          // `py-1` empurra a altura para 24px (WCAG 2.5.8): como link solto de
+          // `text-xs` o alvo tinha só 16px.
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 text-xs underline underline-offset-2"
         >
           <Download className="size-3.5" />
           Baixar QR

@@ -250,9 +250,11 @@ export function PresenceGateInfo({
               radiusMeters={radius}
               barName={barName}
             />
-            <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
               <a
-                className="text-muted-foreground hover:text-foreground underline underline-offset-4"
+                // `py-1` → 24px de altura (WCAG 2.5.8): são links de navegação
+                // reais, não citação inline, e sem o padding ficavam com 16px.
+                className="hover:text-foreground py-1 underline underline-offset-4"
                 href={`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`}
                 target="_blank"
                 rel="noreferrer"
@@ -261,7 +263,7 @@ export function PresenceGateInfo({
               </a>
               <span className="text-muted-foreground">·</span>
               <a
-                className="text-muted-foreground hover:text-foreground underline underline-offset-4"
+                className="hover:text-foreground py-1 underline underline-offset-4"
                 href={`https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`}
                 target="_blank"
                 rel="noreferrer"

@@ -60,10 +60,10 @@ export function PendingEntryRequests({
   }
 
   return (
-    <Card className="border-amber-500/30 bg-amber-500/5">
+    <Card className="border-warning/30 bg-warning/5">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Hourglass className="size-4 text-amber-600" />
+          <Hourglass className="text-warning size-4" />
           Pedidos de entrada aguardando aprovação
         </CardTitle>
         <CardDescription>

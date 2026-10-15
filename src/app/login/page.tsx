@@ -32,7 +32,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <div className="bg-background flex min-h-dvh flex-col">
       <Header />
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8">
+      <main className="kf-container flex flex-1 flex-col justify-center py-8">
         <LoginForm
           providers={AUTH_PROVIDERS}
           error={error}

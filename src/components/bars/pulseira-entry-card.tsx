@@ -87,7 +87,7 @@ export function PulseiraEntryCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           {temPulseira || resgatada ? (
-            <TicketCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
+            <TicketCheck className="text-success size-4" />
           ) : (
             <Ticket className="text-muted-foreground size-4" />
           )}
@@ -110,13 +110,13 @@ export function PulseiraEntryCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {temPulseira || resgatada ? (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
-            <ShieldCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <div className="border-success/30 bg-success/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
+            <ShieldCheck className="text-success size-4 shrink-0" />
             <span>Pulseira ativa. Boa sorte no palco!</span>
           </div>
         ) : isAnonymous ? (
           <div className="flex items-start gap-2 rounded-lg border p-3 text-sm">
-            <ShieldX className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <ShieldX className="text-warning mt-0.5 size-4 shrink-0" />
             <span>
               Crie uma conta anônima com e-mail ou entre para ativar a pulseira.
             </span>

@@ -6,15 +6,25 @@ import { cn } from "cn";
 type AppShellProps = {
   children: React.ReactNode;
   nav?: React.ReactNode;
+  headerNav?: React.ReactNode;
   className?: string;
   headerActions?: React.ReactNode;
 };
 
-export function AppShell({ children, nav, className, headerActions }: AppShellProps) {
+export function AppShell({
+  children,
+  nav,
+  headerNav,
+  className,
+  headerActions,
+}: AppShellProps) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <Header actions={headerActions} />
-      <main className={cn("mx-auto w-full max-w-md flex-1 px-4 pt-4 pb-28", className)}>
+      <Header nav={headerNav} actions={headerActions} />
+      {/* `pb-28` abre espaço para o bottom-nav (só existe no mobile); a partir
+          de `md` o bottom-nav some e a navegação vai para o topo, então o
+          padding inferior pode encolher. */}
+      <main className={cn("kf-container flex-1 pt-4 pb-28 md:pb-10", className)}>
         {children}
       </main>
       {nav}

@@ -120,7 +120,7 @@ function RadiusSprites({
         return (
           <span
             key={meters}
-            className="radius-sprite absolute rounded-full border border-blue-400/45 bg-blue-500/5"
+            className="radius-sprite border-info/45 bg-info/5 absolute rounded-full border"
             style={
               {
                 width: `${diameterPx}px`,

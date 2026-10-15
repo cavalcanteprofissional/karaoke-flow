@@ -5,6 +5,7 @@ import { ArrowLeft, Store } from "lucide-react";
 import { HostScreenNav } from "@/components/rooms/host-screen-nav";
 import { PresenceGateInfo } from "@/components/rooms/presence-gate-info";
 import { YoutubeSettingsCard } from "@/components/rooms/settings/youtube-settings-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { createAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -112,13 +113,10 @@ export default async function BarScreenPage({ params }: BarScreenProps) {
       />
 
       {roomList.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-6 text-center">
-          <p className="font-medium">Este bar ainda não tem karaokê</p>
-          <p className="text-muted-foreground mt-1 text-sm">
-            A busca de música é configuração de cada sala — assim que houver uma sala
-            ativa, o card aparece aqui.
-          </p>
-        </div>
+        <EmptyState
+          title="Este bar ainda não tem karaokê"
+          description="A busca de música é configuração de cada sala — assim que houver uma sala ativa, o card aparece aqui."
+        />
       ) : (
         roomList.map((room) => (
           <YoutubeSettingsCard

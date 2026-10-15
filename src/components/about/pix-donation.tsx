@@ -148,7 +148,7 @@ export function PixDonation({ chave, nome, cidade }: PixDonationProps) {
             disabled={!payload}
           >
             {copiado ? (
-              <Check className="size-4 text-emerald-500" />
+              <Check className="text-success size-4" />
             ) : (
               <Copy className="size-4" />
             )}
@@ -158,13 +158,13 @@ export function PixDonation({ chave, nome, cidade }: PixDonationProps) {
       </div>
 
       {resultado.erro && (
-        <p role="alert" className="text-sm text-amber-500">
+        <p role="alert" className="text-warning text-sm">
           {resultado.erro} A chave abaixo ainda funciona copiada à mão:
         </p>
       )}
 
       {falha && (
-        <p role="alert" className="text-sm text-amber-500">
+        <p role="alert" className="text-warning text-sm">
           {falha}
         </p>
       )}

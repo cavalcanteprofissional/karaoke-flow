@@ -41,7 +41,7 @@ export function LocationGate({ error }: LocationGateProps) {
   }
 
   return (
-    <div className="text-destructive border-destructive/30 bg-destructive/10 flex flex-col gap-3 rounded-lg border p-3">
+    <div className="text-destructive border-destructive/30 bg-destructive/5 flex flex-col gap-3 rounded-lg border p-3">
       <p className="flex items-start gap-2 text-sm">
         <MapPin className="mt-0.5 size-4 shrink-0" />
         {error} Para proteger a casa, é preciso confirmar que você está no

@@ -19,7 +19,7 @@ import Link from "next/link";
 export function SiteFooter() {
   return (
     <footer className="mt-12 w-full border-t pt-8 pb-6">
-      <div className="text-muted-foreground mx-auto flex max-w-md flex-col items-center justify-between gap-4 px-4 text-xs sm:flex-row">
+      <div className="text-muted-foreground kf-container flex flex-col items-center justify-between gap-4 text-xs sm:flex-row">
         <p className="text-center sm:text-left">
           © {new Date().getFullYear()} Lucas Cavalcante.
           <br className="hidden sm:block" />

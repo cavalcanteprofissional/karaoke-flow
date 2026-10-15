@@ -506,8 +506,8 @@ export function SongSearch({
   return (
     <div className="flex flex-col gap-4">
       {!presenceOk && (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm">
-          <MapPin className="mt-0.5 size-4 shrink-0 text-amber-400" />
+        <div className="border-warning/40 bg-warning/10 flex items-start gap-2 rounded-xl border p-3 text-sm">
+          <MapPin className="text-warning mt-0.5 size-4 shrink-0" />
           <div className="flex flex-col gap-2">
             <p>
               {presenceMessage ??
@@ -534,17 +534,17 @@ export function SongSearch({
        */}
       {!isReplace && ownSong.noStop && (
         <div
-          className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
+          className="border-warning/40 bg-warning/10 flex items-start gap-2 rounded-xl border p-3 text-sm"
           data-testid="aviso-no-stop"
         >
           {ownSong.playing ? (
             <>
-              <X className="mt-0.5 size-4 shrink-0 text-amber-400" />
+              <X className="text-warning mt-0.5 size-4 shrink-0" />
               <p>{ownQueueFullMessage(ownSong.maxActive)}</p>
             </>
           ) : (
             <>
-              <Plus className="mt-0.5 size-4 shrink-0 text-amber-400" />
+              <Plus className="text-warning mt-0.5 size-4 shrink-0" />
               <p>
                 Modo no-stop: você já tem{" "}
                 <span className="text-foreground font-medium">
@@ -565,10 +565,10 @@ export function SongSearch({
        */}
       {!isReplace && !ownSong.noStop && !ownSong.playing && ownSong.replacedTitle && (
         <div
-          className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
+          className="border-warning/40 bg-warning/10 flex items-start gap-2 rounded-xl border p-3 text-sm"
           data-testid="aviso-substituicao"
         >
-          <Repeat2 className="mt-0.5 size-4 shrink-0 text-amber-400" />
+          <Repeat2 className="text-warning mt-0.5 size-4 shrink-0" />
           <p>
             Você já tem{" "}
             <span className="text-foreground font-medium">{ownSong.replacedTitle}</span>{" "}
@@ -580,10 +580,10 @@ export function SongSearch({
 
       {ownSongPlaying && !ownSong.noStop && (
         <div
-          className="flex items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-950/10 p-3 text-sm"
+          className="border-warning/40 bg-warning/10 flex items-start gap-2 rounded-xl border p-3 text-sm"
           data-testid="aviso-tocando"
         >
-          <Music2 className="mt-0.5 size-4 shrink-0 text-amber-400" />
+          <Music2 className="text-warning mt-0.5 size-4 shrink-0" />
           <p>
             {ownSong.replacedTitle ? (
               <>

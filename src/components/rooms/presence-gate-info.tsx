@@ -294,11 +294,11 @@ export function PresenceGateInfo({
               {saving ? (
                 <LoaderCircle className="size-3 animate-spin" />
               ) : fieldError ? (
-                <TriangleAlert className="size-3 text-amber-500" />
+                <TriangleAlert className="text-warning size-3" />
               ) : dirty ? (
                 <Ruler className="size-3" />
               ) : (
-                <Check className="size-3 text-emerald-500" />
+                <Check className="text-success size-3" />
               )}
               {statusText()}
             </span>
@@ -346,7 +346,7 @@ export function PresenceGateInfo({
           </div>
 
           {fieldError ? (
-            <p role="alert" className="text-xs text-amber-500">
+            <p role="alert" className="text-warning text-xs">
               {fieldError}
             </p>
           ) : (

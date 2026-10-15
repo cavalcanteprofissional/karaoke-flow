@@ -15,6 +15,14 @@
   --font-display: var(--font-sans);
   --color-highlight: var(--highlight);
   --color-highlight-foreground: var(--highlight-foreground);
+  /* Tokens semânticos de status: "cor é sinal" (design-system §1.2). Substituem
+     as cores cruas (amber/emerald/rose/blue) usadas para sinalizar estado. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --shadow-glow:
     0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent),
     0 10px 40px -12px color-mix(in oklch, var(--primary) 55%, transparent);
@@ -74,6 +82,12 @@
   --accent-foreground: oklch(0.2 0.03 350);
   --highlight: oklch(0.62 0.12 200);
   --highlight-foreground: oklch(0.15 0.02 200);
+  --success: oklch(0.52 0.15 152);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.55 0.13 70);
+  --warning-foreground: oklch(0.99 0 0);
+  --info: oklch(0.52 0.13 245);
+  --info-foreground: oklch(0.99 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.9 0.01 350);
   --input: oklch(0.9 0.01 350);
@@ -111,6 +125,12 @@
   --accent-foreground: oklch(0.97 0 0);
   --highlight: oklch(0.8 0.14 200);
   --highlight-foreground: oklch(0.16 0.02 200);
+  --success: oklch(0.78 0.16 152);
+  --success-foreground: oklch(0.16 0.03 152);
+  --warning: oklch(0.82 0.15 78);
+  --warning-foreground: oklch(0.18 0.04 78);
+  --info: oklch(0.75 0.12 235);
+  --info-foreground: oklch(0.16 0.03 235);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
@@ -143,6 +163,23 @@
 }
 
 @layer utilities {
+  /* Largura única do conteúdo em telas de app (Fase de responsividade):
+     mobile-first (`max-w-md`) e sobe para `lg` a partir de 768px. Shell,
+     cabeçalho, rodapé e páginas públicas usam esta classe para não divergirem.
+     O player/TV fica de fora (é `fixed inset-0`, tela cheia de propósito). */
+  .kf-container {
+    width: 100%;
+    max-width: 28rem; /* max-w-md */
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  @media (min-width: 768px) {
+    .kf-container {
+      max-width: 32rem; /* max-w-lg */
+    }
+  }
+
   .tap-highlight-none {
     -webkit-tap-highlight-color: transparent;
   }
@@ -197,8 +234,43 @@
       );
   }
 
+  /* Em telas largas o brilho radial cobre uma área muito maior; baixar a
+     opacidade mantém o clima neon sem cansar a vista. */
+  @media (min-width: 1024px) {
+    .kf-home-glow::before {
+      opacity: 0.6;
+    }
+  }
+
   .kf-rise {
     animation: kf-rise 0.42s var(--ease-neon, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
+  }
+
+  /* Toaster (sonner): sem `richColors`, os estados coloridos só no ícone, via
+     tokens semânticos — mantém "cor é sinal" (design-system §1.2) e adapta ao
+     tema. O `.cn-toast` é o hook aplicado por `ui/sonner.tsx`. */
+  [data-sonner-toast].cn-toast {
+    border: 1px solid var(--border);
+  }
+
+  [data-sonner-toast].cn-toast [data-icon] {
+    color: var(--muted-foreground);
+  }
+
+  [data-sonner-toast].cn-toast[data-type="success"] [data-icon] {
+    color: var(--success);
+  }
+
+  [data-sonner-toast].cn-toast[data-type="error"] [data-icon] {
+    color: var(--destructive);
+  }
+
+  [data-sonner-toast].cn-toast[data-type="warning"] [data-icon] {
+    color: var(--warning);
+  }
+
+  [data-sonner-toast].cn-toast[data-type="info"] [data-icon] {
+    color: var(--info);
   }
 }
 

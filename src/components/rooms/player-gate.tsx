@@ -88,7 +88,7 @@ export function PlayerGate({
       // montado atrás (o vídeo não saiu do primeiro frame), e uma tela
       // semitransparente seria um overlay sobre o player — a mesma coisa que os
       // termos do YouTube não permitem. Aqui a tela substitui o player.
-      className="flex size-full flex-col items-center justify-center gap-8 bg-black p-8 text-center"
+      className="dark flex size-full flex-col items-center justify-center gap-8 bg-black p-8 text-center"
       data-testid="player-gate"
       data-phase={phase}
     >
@@ -96,7 +96,7 @@ export function PlayerGate({
         <p className="text-5xl font-bold tracking-tight sm:text-7xl">
           {playerGateTitle(state, phase)}
         </p>
-        <p className="text-2xl text-zinc-300 sm:text-3xl">
+        <p className="text-foreground/80 text-2xl sm:text-3xl">
           {playerGateHint(state, phase)}
         </p>
       </div>
@@ -129,7 +129,7 @@ export function PlayerGate({
         </div>
       )}
 
-      <p className="flex max-w-xl items-center gap-2 text-lg text-zinc-500">
+      <p className="text-muted-foreground flex max-w-xl items-center gap-2 text-lg">
         <WifiOff className="size-5" />A TV continua acompanhando a fila. Quem estiver no
         celular pode pedir música pelo QR.
       </p>

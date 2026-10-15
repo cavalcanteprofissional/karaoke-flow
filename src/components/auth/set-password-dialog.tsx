@@ -86,7 +86,7 @@ export function SetPasswordItem({ hasProvider = false }: SetPasswordItemProps) {
           {rotulo}
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <KeyRound className="size-4" />

@@ -243,9 +243,9 @@ export function EntryApprovalWait({
 
   if (status === "approved") {
     return (
-      <Card className="border-emerald-500/30 bg-emerald-500/5" aria-live="polite">
+      <Card className="border-success/30 bg-success/5" aria-live="polite">
         <CardHeader className="items-center text-center">
-          <span className="flex size-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
+          <span className="bg-success/15 text-success flex size-14 items-center justify-center rounded-full">
             <Check className="size-7" />
           </span>
           <CardTitle>Entrada aprovada!</CardTitle>
@@ -283,9 +283,9 @@ export function EntryApprovalWait({
 
   if (status === "rejected") {
     return (
-      <Card className="border-rose-500/30 bg-rose-500/5" aria-live="polite">
+      <Card className="border-destructive/30 bg-destructive/5" aria-live="polite">
         <CardHeader className="items-center text-center">
-          <span className="flex size-14 items-center justify-center rounded-full bg-rose-500/15 text-rose-600">
+          <span className="bg-destructive/15 text-destructive flex size-14 items-center justify-center rounded-full">
             <X className="size-7" />
           </span>
           <CardTitle>Seu pedido não foi aprovado</CardTitle>
@@ -369,9 +369,9 @@ export function EntryApprovalWait({
   }
 
   return (
-    <Card className="border-amber-500/30 bg-amber-500/5" aria-live="polite">
+    <Card className="border-warning/30 bg-warning/5" aria-live="polite">
       <CardHeader className="items-center text-center">
-        <span className="flex size-14 animate-pulse items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
+        <span className="bg-warning/15 text-warning flex size-14 animate-pulse items-center justify-center rounded-full">
           <Hourglass className="size-7" />
         </span>
         <div className="flex flex-col items-center gap-2">
@@ -403,7 +403,7 @@ export function EntryApprovalWait({
           )}
         </div>
         <p className="text-muted-foreground flex items-center gap-2 text-center text-sm">
-          <span className="size-2 animate-pulse rounded-full bg-amber-500" />
+          <span className="bg-warning size-2 animate-pulse rounded-full" />
           Estamos acompanhando a aprovação do host…
         </p>
         <div className="flex w-full flex-col items-center gap-1">

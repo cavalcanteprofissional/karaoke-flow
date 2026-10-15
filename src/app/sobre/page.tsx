@@ -39,7 +39,7 @@ export default function AboutPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-8">
+      <main className="kf-container flex flex-1 flex-col gap-6 py-8">
         <Button asChild variant="ghost" size="sm" className="self-start">
           <Link href="/">
             <ArrowLeft className="size-4" />

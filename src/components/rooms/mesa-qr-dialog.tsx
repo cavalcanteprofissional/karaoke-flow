@@ -35,7 +35,7 @@ export function MesaQrDialog({ barCode, barNome, quantidadeMesas }: MesaQrDialog
           QR das mesas ({quantidadeMesas})
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Table2 className="size-4" />

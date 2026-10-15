@@ -48,7 +48,7 @@ export function SongConfirmDialog({
 
   return (
     <Dialog open={video !== null} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isReplace ? <Repeat2 className="size-4" /> : <Music4 className="size-4" />}

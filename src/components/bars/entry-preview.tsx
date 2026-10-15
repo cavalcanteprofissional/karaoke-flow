@@ -158,8 +158,8 @@ export function EntryPreview({
         />
 
         {outside && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-            <Eye className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <div className="border-warning/30 bg-warning/10 flex items-start gap-2 rounded-lg border p-3 text-sm">
+            <Eye className="text-warning mt-0.5 size-4 shrink-0" />
             <span>{PRESENCE_VIEWER_NOTICE}</span>
           </div>
         )}

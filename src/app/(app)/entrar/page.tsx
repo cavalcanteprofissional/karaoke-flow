@@ -44,7 +44,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
       return (
         <div className="flex flex-col gap-6">
           <SectionHeader title="Entrar na casa" href="/dashboard" linkLabel="Voltar" />
-          <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
+          <div className="text-destructive border-destructive/30 bg-destructive/5 flex items-center gap-2 rounded-lg border p-3 text-sm">
             {result.error}. Confira o código e tente de novo.
           </div>
           <EntryTokenForm />
@@ -87,7 +87,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
         <div className="flex flex-col gap-6">
           <SectionHeader title="Entrar na casa" href="/dashboard" linkLabel="Voltar" />
           {result.preview.status === "closed" ? (
-            <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
+            <div className="text-destructive border-destructive/30 bg-destructive/5 flex items-center gap-2 rounded-lg border p-3 text-sm">
               A sala do bar está encerrada no momento.
             </div>
           ) : showGate ? (
@@ -116,7 +116,7 @@ export default async function EnterPage({ searchParams }: EnterPageProps) {
       <div className="flex flex-col gap-6">
         <SectionHeader title="Entrar na casa" href="/dashboard" linkLabel="Voltar" />
         {result.preview.status === "closed" ? (
-          <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border p-3 text-sm">
+          <div className="text-destructive border-destructive/30 bg-destructive/5 flex items-center gap-2 rounded-lg border p-3 text-sm">
             A sala do bar está encerrada no momento.
           </div>
         ) : (

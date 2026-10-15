@@ -49,10 +49,10 @@ export class PlayerErrorBoundary extends Component<
     if (!this.state.failed) return this.props.children;
 
     return (
-      <div className="flex h-dvh items-center justify-center bg-black p-8 text-white">
+      <div className="dark flex h-dvh items-center justify-center bg-black p-8 text-white">
         <div className="flex max-w-xl flex-col items-center gap-5 text-center">
           <p className="text-3xl font-bold">Não foi possível tocar esta música</p>
-          <p className="text-lg text-zinc-400">
+          <p className="text-muted-foreground text-lg">
             Pule pelo controle do dono da sala, ou toque abaixo para tentar de novo.
           </p>
           <Button

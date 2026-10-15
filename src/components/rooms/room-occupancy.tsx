@@ -138,7 +138,7 @@ export function RoomOccupancyCard({ roomId, quantidadeMesas }: RoomOccupancyCard
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p role="alert" className="flex items-start gap-2 text-sm text-amber-500">
+          <p role="alert" className="text-warning flex items-start gap-2 text-sm">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
             Não foi possível ler a contagem: {erro}
           </p>
@@ -247,7 +247,7 @@ function Numero({
     <div
       className={
         destaque
-          ? "flex flex-col rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"
+          ? "border-warning/30 bg-warning/10 flex flex-col rounded-lg border p-3"
           : "bg-muted/40 flex flex-col rounded-lg border p-3"
       }
     >

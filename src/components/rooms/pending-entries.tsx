@@ -164,7 +164,7 @@ export function PendingEntries({ roomId, initial }: PendingEntriesProps) {
                   {busy === entry.user_id ? (
                     <LoaderCircle className="size-4 animate-spin" />
                   ) : (
-                    <Check className="size-4 text-emerald-500" />
+                    <Check className="text-success size-4" />
                   )}
                 </Button>
                 <Button
@@ -175,7 +175,7 @@ export function PendingEntries({ roomId, initial }: PendingEntriesProps) {
                   disabled={busy === entry.user_id}
                   onClick={() => decide(entry.user_id, "rejected")}
                 >
-                  <X className="size-4 text-rose-500" />
+                  <X className="text-destructive size-4" />
                 </Button>
               </div>
             </div>

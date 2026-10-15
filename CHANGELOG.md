@@ -8,6 +8,74 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### Design — skill de auditoria UX/UI + Playwright MCP (free tier) (2026-10-14)
+
+- **Skill `ux-ui-review`** (`.opencode/skills/ux-ui-review/SKILL.md`): revisão de
+  UX/UI **baseada em evidência** para o frontend — rubrica (Nielsen + WCAG 2.2
+  AA + tokens do projeto), passe estático, passagem por browser, portão de
+  evidência e formato de relatório. Comando `/ux-audit` para disparar.
+- **Playwright MCP** (`opencode.json`): `npx @playwright/mcp@latest` (Apache-2.0,
+  free) dá ao agente um browser real para screenshots, árvore de acessibilidade
+  e computed styles. Requer reiniciar o opencode para valer. Ferramentas
+  alternativas citadas na skill também são free (axe-core/MPL-2.0, pour,
+  Lighthouse CI). O e2e Playwright do repo continua adiado (M7).
+- **Varredura estática de padronização** registrada em
+  `docs/design/design-system.md` §10: **0** cores cruas, 4 valores arbitrários
+  (todos justificados), alvos de toque e foco consistentes; 4 pontos de texto
+  < 12px e 4 CTAs como `<Link>` cru anotados como dívidas menores.
+
+### Design — telas-chave: tokens de status, contraste AA, loading e estados vazios (2026-10-14)
+
+Passe de UX/design da **Fase 4** (`docs/design/design-system.md`), na ordem
+**A → C → B → D**:
+
+- **A — tokens semânticos:** `--success`/`--warning`/`--info` (+ `-foreground`)
+  entram em `globals.css`. As cores cruas (`emerald`/`amber`/`rose`/`blue`/
+  `zinc`) saem de ~18 componentes; o player/kiosk ganha `dark` fixo e passa a
+  usar `card`/`muted-foreground`/`border` em vez de cinzas soltas.
+- **C — contraste WCAG AA:** utilitário `src/lib/theme/contrast.ts`
+  (oklch→oklab→sRGB + fórmula WCAG) e guarda automatizada
+  `contrast.test.ts` (lê o `.dark` de `globals.css`). A auditoria achou texto
+  colorido sobre o **tint da própria cor** abaixo de AA: nav ativo
+  (`bg-primary/10`→`/5`), `badge`/`button`/`dropdown` destructive (`/10`,`/20`→`/5`)
+  e banners de erro (`destructive/10`→`/5`).
+- **B — estados de carregamento:** `src/components/shared/loading-skeletons.tsx`
+  + `loading.tsx` por segmento — fallback do grupo `(app)` e telas `dashboard`,
+  `entrar`, `salas/[codigo]` (e filhas `buscar`/`sala`/`player`), `bar/[codigo]`,
+  `player/[codigo]` (tela cheia escura) e `login`. Resolve o débito **M8**
+  (`docs/engenharia/melhorias.md`).
+- **D — estados vazios e polimento:** `EmptyState` único com variantes
+  `bordered`/`quiet` substitui os três idiomas visuais anteriores
+  (`dashboard`, `salas/[codigo]`, `buscar`, `bar/[codigo]`, fila). O toaster
+  (`sonner`) larga o `richColors`: a cor é sinal **só no ícone**, via tokens.
+- **Testes:** `contrast.test.ts` (23), `empty-state.test.tsx` (3).
+- **Docs:** `docs/design/design-system.md` §2 (tokens de status), §2.1 (tabela
+  de contraste), §6.1 (execução A→D) e §7 (estados de tela).
+
+### Design — responsividade: breakpoints e navegação no topo (2026-10-14)
+
+- **Largura em um só lugar:** utilitário **`.kf-container`** (`globals.css`) —
+  `max-width: 28rem` no mobile → `32rem` a partir de `768px`, com o mesmo
+  `padding-inline`. Shell (`main`), `Header`, `SiteFooter` e as páginas públicas
+  (`/login`, `/sobre`) passam a usá-lo; antes o `main` era `max-w-md` e o
+  `Header` era largura total, então o logo ficava desalinhado do conteúdo no
+  desktop.
+- **Navegação no `md+`:** o `BottomNav` é `md:hidden` e **nada o substituía** —
+  no desktop o app ficava sem navegação. Novo **`DesktopNav`** (`hidden md:flex`)
+  reusa `NAV_ITEMS` (`app-nav.tsx`), então itens e item ativo têm uma só
+  definição. O `main` reduz o padding inferior (`pb-28` → `md:pb-10`) quando o
+  bottom-nav some.
+- **Diálogos:** `DialogContent` sobe a base de `sm:max-w-sm` para
+  `sm:max-w-md`; overrides agora redundantes saíram (o `qr-scanner` continua
+  `sm:max-w-sm` de propósito).
+- **Home:** bloco de botões `max-w-sm` → `md:max-w-md`; **glow atenuado em `lg`**
+  (`opacity: 0.6`) para não cansar em telas grandes.
+- **Testes:** `desktop-nav.test.tsx` (3). Suíte **818 → 821** (66 arquivos).
+- **Docs:** seção "Breakpoints e layout responsivo" em
+  [`docs/design/design-system.md`](./docs/design/design-system.md).
+- **Exceção mantida:** o player/TV (`fixed inset-0`/`h-dvh`) não usa
+  `kf-container` — tela cheia de propósito.
+
 ### Design — sistema de estilização neon (2026-10-14)
 
 - **Direção visual definida** com o dono: **neon/festa**, dark-first, primário

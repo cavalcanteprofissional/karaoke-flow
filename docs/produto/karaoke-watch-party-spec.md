@@ -69,13 +69,13 @@ flowchart LR
 
 ## 2.6 Decisões Arquiteturais (ADRs)
 
-As decisões técnicas e de produto mais relevantes estão formalizadas em Architecture Decision Records (ADRs), no diretório [`docs/decisions/`](./docs/decisions/README.md):
+As decisões técnicas e de produto mais relevantes estão formalizadas em Architecture Decision Records (ADRs), no diretório [`docs/decisions/`](../decisions/README.md):
 
 | ADR | Título | Status | Data | Propósito |
 |---|---|---|---|---|
-| [ADR-001](./docs/decisions/ADR-001-youtube-first-vs-licensed-catalog.md) | YouTube-first vs. Catálogo licenciado (karaokê) | **Accepted** | 2026-10-04 | Justifica YouTube-first pragmático, com arquitetura reversível para híbrido/licenciado. |
-| [ADR-002](./docs/decisions/ADR-002-player-isolated-by-token-and-kiosk-only.md) | Player isolado por token de capacidade + gate humano obrigatório (kiosk-only) | **Accepted** | 2026-10-04 | Isolamento entre TV/kiosk e controladores; gate obrigatório por políticas de autoplay; rotação de token. |
-| [ADR-003](./docs/decisions/ADR-003-rls-as-primary-wall-plus-rpcs-security-definer.md) | RLS como parede primária + RPCs `security definer` + travas bypass-proof | **Accepted** | 2026-10-04 | Banco-como-parede: RLS auditado, RPCs com validação interna, triggers BEFORE INSERT/UPDATE para invariantes de domínio. |
+| [ADR-001](../decisions/ADR-001-youtube-first-vs-licensed-catalog.md) | YouTube-first vs. Catálogo licenciado (karaokê) | **Accepted** | 2026-10-04 | Justifica YouTube-first pragmático, com arquitetura reversível para híbrido/licenciado. |
+| [ADR-002](../decisions/ADR-002-player-isolated-by-token-and-kiosk-only.md) | Player isolado por token de capacidade + gate humano obrigatório (kiosk-only) | **Accepted** | 2026-10-04 | Isolamento entre TV/kiosk e controladores; gate obrigatório por políticas de autoplay; rotação de token. |
+| [ADR-003](../decisions/ADR-003-rls-as-primary-wall-plus-rpcs-security-definer.md) | RLS como parede primária + RPCs `security definer` + travas bypass-proof | **Accepted** | 2026-10-04 | Banco-como-parede: RLS auditado, RPCs com validação interna, triggers BEFORE INSERT/UPDATE para invariantes de domínio. |
 
 ## 3. Fluxo Principal
 
@@ -251,13 +251,13 @@ O MVP (1 sala, 50 usuários) roda confortavelmente no free tier de qualquer um d
 
 ## 12.5 Considerações legais (YouTube TOS)
 
-O modelo **YouTube-first** adotado neste projeto é intencional e pragmático, com trade-offs explícitos formalizados em [`ADR-001`](./docs/decisions/ADR-001-youtube-first-vs-licensed-catalog.md).
+O modelo **YouTube-first** adotado neste projeto é intencional e pragmático, com trade-offs explícitos formalizados em [`ADR-001`](../decisions/ADR-001-youtube-first-vs-licensed-catalog.md).
 
 ### 12.5.1 Princípios de uso (IFrame Player API)
 
 - **Reprodução via embed, não re-hospedagem:** utilizamos [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference) para embutir vídeos. Não fazemos download, armazenamento ou re-distribuição de conteúdo do YouTube.
 - **Respeito ao player oficial:** não sobrepomos elementos de UI de forma a enganar ou violar funcionalidades do player. O layout da TV (kiosk) mantém o player visível, sem overlays indevidos sobre o mesmo (conforme diretrizes de UX §14).
-- **Autoplay controlado:** políticas de autoplay são respeitadas via **gate humano obrigatório de partida** (`autoplay: 0`), com player só iniciando após ação humana explícita (ver [`ADR-002`](./docs/decisions/ADR-002-player-isolated-by-token-and-kiosk-only.md)).
+- **Autoplay controlado:** políticas de autoplay são respeitadas via **gate humano obrigatório de partida** (`autoplay: 0`), com player só iniciando após ação humana explícita (ver [`ADR-002`](../decisions/ADR-002-player-isolated-by-token-and-kiosk-only.md)).
 - **Vídeos embutíveis:** busca filtra por `videoEmbeddable=true`, reduzindo chance de vídeos não reproduzíveis via IFrame.
 
 ### 12.5.2 Riscos e mitigação
@@ -271,8 +271,8 @@ O modelo **YouTube-first** adotado neste projeto é intencional e pragmático, c
 
 ### 12.5.3 Posição e caminho reversível
 
-Esta decisão é **pragmática para MVP/validação com bares**. O núcleo (fila, playback, Realtime, multi-tenancy, RLS) é **independente do provedor de vídeos**. Conforme [`ADR-001`](./docs/decisions/ADR-001-youtube-first-vs-licensed-catalog.md), evolução para modelo **híbrido** (`video_provider: youtube|licensed`, whitelist por bar) está prevista como não-bloqueante caso surjam requisitos comerciais/direitos autorais mais restritivos.
-- **Presença física** (requisito 2026-09-23 — §2.5.4): a participação na sala exige consentimento + geolocalização concedida e dentro do raio do bar, validado **no servidor** (cookie `kf-geo` × coords do bar). Impede usuários remotos de pedir música. Limitação honesta: GPS de dispositivo não é prova criptográfica (spoofing) — é trava de fricção, não fronteira de segurança. As regras de "fora do raio vê, mas não pede música" são aplicadas **no banco de dados** (conforme [`ADR-003`](./docs/decisions/ADR-003-rls-as-primary-wall-plus-rpcs-security-definer.md)) para garantir aplicação consistente independente da camada de aplicação.
+Esta decisão é **pragmática para MVP/validação com bares**. O núcleo (fila, playback, Realtime, multi-tenancy, RLS) é **independente do provedor de vídeos**. Conforme [`ADR-001`](../decisions/ADR-001-youtube-first-vs-licensed-catalog.md), evolução para modelo **híbrido** (`video_provider: youtube|licensed`, whitelist por bar) está prevista como não-bloqueante caso surjam requisitos comerciais/direitos autorais mais restritivos.
+- **Presença física** (requisito 2026-09-23 — §2.5.4): a participação na sala exige consentimento + geolocalização concedida e dentro do raio do bar, validado **no servidor** (cookie `kf-geo` × coords do bar). Impede usuários remotos de pedir música. Limitação honesta: GPS de dispositivo não é prova criptográfica (spoofing) — é trava de fricção, não fronteira de segurança. As regras de "fora do raio vê, mas não pede música" são aplicadas **no banco de dados** (conforme [`ADR-003`](../decisions/ADR-003-rls-as-primary-wall-plus-rpcs-security-definer.md)) para garantir aplicação consistente independente da camada de aplicação.
 - **LGPD:** já que o Supabase vai guardar dados de usuários (login social, e-mails) e a geolocalização é coletada como finalidade de produto (presença), definir desde já política de retenção e um caminho de exclusão de conta/dados.
 
 ## 14. Padrões de UX/UI recomendados
@@ -334,6 +334,6 @@ Esta decisão é **pragmática para MVP/validação com bares**. O núcleo (fila
 - **como os dados deles são usados e protegidos** (LGPD — alinhado à §13),
 - **por que vale a pena participar** (benefício real para o cantor, não apenas vitrine dos bares).
 
-> Status do manifesto: **rascunho disponível em [`MANIFEST.md`](./MANIFEST.md) (v0.1 — 2026-09-21)** — artigo 6 é íntimo do autor, **concluído com dados reais do histórico de escuta do YouTube Music (Google Takeout, 8.216 eventos em 2025→2026), extraídos por ferramenta pessoal executada fora do repositório**; documento ainda **em validação** (revisão de donos e cantores).
+> Status do manifesto: **rascunho disponível em [`MANIFEST.md`](../../MANIFEST.md) (v0.1 — 2026-09-21)** — artigo 6 é íntimo do autor, **concluído com dados reais do histórico de escuta do YouTube Music (Google Takeout, 8.216 eventos em 2025→2026), extraídos por ferramenta pessoal executada fora do repositório**; documento ainda **em validação** (revisão de donos e cantores).
 
 **OAuth com plataformas de música/streaming (requisito técnico futuro):** para viabilizar a camada social — autenticar usuários por histórico de escuta/canto e sincronizar as músicas cantadas — será necessário OAuth com apps de música/streaming, **no mínimo Spotify e Deezer**, além do OAuth do YouTube já usado hoje para o fluxo de conteúdo. Requisito técnico associado à **criação da rede social**, não ao MVP de watch party; manter o design de auth desacoplado (§8) para absorver esses provedores sem retrabalho.

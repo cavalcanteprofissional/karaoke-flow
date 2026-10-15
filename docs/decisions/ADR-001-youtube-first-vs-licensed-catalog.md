@@ -68,7 +68,7 @@ Justificativa:
 - Player: [`src/components/player/youtube-player.tsx`](../../src/components/player/youtube-player.tsx), [`src/app/player/[codigo]/page.tsx`](../../src/app/player/[codigo]/page.tsx) — IFrame Player API, gate humano (armado por clique).
 - Config por-host: [`src/lib/rooms/settings.ts`](../../src/lib/rooms/settings.ts), [`YoutubeSettingsCard`](../../src/components/rooms/settings/youtube-settings-card.tsx) (tela do bar, `/bar/[codigo]`) — conexão Google (OAuth por-host) para aproveitar cota do dono.
 - Fallbacks/cadeia: [`src/lib/youtube/*`](../../src/lib/youtube/) — estratégia de credenciais com prioridade por-host → app → dev.
-- Docs: [Estado da Arte](../produto/estado-da-arte.md#7-riscos-e-trade-offs-youtube-first), [Especificação](../../karaoke-watch-party-spec.md#125-consideracoes-legais-youtube-tos), [Manifesto](../../MANIFEST.md).
+- Docs: [Estado da Arte](../produto/estado-da-arte.md#7-riscos-e-trade-offs-youtube-first), [Especificação](../produto/karaoke-watch-party-spec.md#125-consideracoes-legais-youtube-tos), [Manifesto](../../MANIFEST.md).
 
 ## 8. Plano de Evolução (Futuro, não bloqueante)
 

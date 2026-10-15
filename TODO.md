@@ -18,6 +18,7 @@ Plano de implementação faseado para reconstrução do projeto a partir da `kar
 2. ~~**Domínio bar/mesas/karaokês + acesso anônimo** (Fase 3.5)~~ (**entregue em 2026-09-23** — Blocos A–F concluídos: migrations 00010–00014 aplicadas no projeto Cloud via `apply-sql.mjs`, anonymous sign-ins, reseed (Bar 1/Bar 2), lib+actions+16 testes de `qr.ts`, UI Bloc E, docs Bloc F; lint/typecheck/build e 45 testes verdes. **Decisões de modelo fechadas com o PO** — ver bloco da Fase 3.5 abaixo). _Pendências residuais registradas ao final da Fase 3.5._
 3. ~~**Busca + fila end-to-end** (Fase 4)~~ (**entregue em 2026-09-23** — Blocos A–H concluídos + hardening pós-entrega I; ver seção Fase 4 abaixo).
 4. ~~**Acabamento do MANIFEST v0.1 — §6 "Acerca das Belas Artes"**~~ (**entregue em 2026-09-22**): Google Takeout "YouTube and YouTube Music" (2 pedidos, 1 recebido) recebido; `ler-takeout.mjs` (fora do repo, `Temp\opencode\yt-music`) ajustado p/ nomes pt-BR + strip ` - Topic` e rodado → 8.216 eventos de escuta (2025→2026, sem Shorts/vídeo, 2.842 faixas); §6 do [`MANIFEST.md`](./MANIFEST.md) escrita com o retrato real (Florence + The Machine dominante, AURORA, década 2020); nota de instrução do autor e cartão do ouvido removidos, nota de rodapé aponta a etapa de ciência de dados; fonte no §8 e nota da spec §16/§17 atualizadas. Zip do Takeout isolado em `.local-data/takeout/` (gitignored, nunca versionado). _Pendência residual anotada:_ análise cruzada (histórico × curtidas) fica para o futuro repo `karaoke-flow-data` (ciência de dados — ver `docs/ciencia-de-dados/segmentacao-sentimental.md`).
+5. ~~**Design/UX — Fase 4 do design system** (telas-chave + contraste AA + estados)~~ (**entregue em 2026-10-14**, ordem A→C→B→D): tokens de status (`success`/`warning`/`info`), contraste WCAG AA com guarda automatizada (`contrast.ts`/`contrast.test.ts`), `loading.tsx`/skeletons (débito **M8**), `EmptyState` unificado e toaster via tokens. Ver [`docs/design/design-system.md`](./docs/design/design-system.md) §2.1/§6.1/§7 e o CHANGELOG. _Em aberto:_ verificação visual manual no DevTools/iOS e os itens específicos de UX do dono.
 
 > A ampliação da **bateria de testes** acompanha as fases (ver seção "Plano de testes por fase" abaixo).
 
@@ -102,6 +103,43 @@ caiu no `id`; trocado por `position` (pre_rank) antes de fechar.
 
 **Fora do escopo (D17–D22):** cold start do DJ, janela de histórico, veto de
 sugestões, tom da casa, IA generativa e rodízio por mesa.
+
+---
+
+## Retomada — contexto da próxima sessão (2026-10-14, responsividade)
+
+> ### Design — breakpoints/viewports (Fase 5 do design system) entregue
+>
+> Passada de **UX/UI** pedida pelo dono, continuando o plano neon. Foco:
+> **responsividade** (o checkpoint anterior, `docs/design/RETOMADA_ANALISE.md`,
+> tinha parado aqui).
+>
+> **Decisões:** nav no topo a partir de `md` (o `BottomNav` era `md:hidden` e
+> **nada o substituía** — desktop ficava sem navegação) e alargamento moderado
+> (`max-w-md` → `md:max-w-lg`).
+>
+> **Entregue:**
+>
+> - `.kf-container` (`globals.css`): fonte única de largura (28rem → 32rem em
+>   `md`), aplicada a shell/header/rodapé/páginas públicas. O logo do `Header`
+>   deixa de ficar desalinhado do `main`.
+> - `DesktopNav` (novo) + `NAV_ITEMS` exportado; `Header` com prop `nav`;
+>   `AppShell` com `headerNav` e `main` responsivo.
+> - `DialogContent` base `sm:max-w-sm` → `sm:max-w-md`; glow da home atenuado em
+>   `lg`; home `md:max-w-md`.
+> - Teste `desktop-nav.test.tsx`. Suíte **818 → 821 / 65 → 66 arquivos**.
+> - Registro em `docs/design/design-system.md` §5.
+>
+> **Gates:** `lint`, `typecheck`, **821 testes / 66 arquivos**, `build`,
+> `format:check` e `scan:secrets` (332) verdes.
+>
+> **Falta (ordem):**
+>
+> - [ ] Verificação visual manual em DevTools (iPhone SE, iPad Air, 1366×768,
+>       1440×900) e em iOS com notch — checklist no `design-system.md` §5.
+> - [ ] **Fase 4 do design system:** telas-chave (`dashboard`, `entrar`,
+>       `salas/[codigo]`, `player`) + auditoria de contraste AA.
+> - [ ] Pendências de sempre: aparelho da Fase 18 (§3.19), H3 (Sentry), deploy.
 
 ---
 
@@ -1555,3 +1593,14 @@ de aparelho da pulseira (`TESTING.md` §3.19, montado abaixo).
 - [ ] Aumento de cota YouTube via auditoria Google Cloud + pool/rotação de chaves quando 10+ salas
 - [ ] Escala 5.000 usuários: pausar/reconectar canais Realtime em background; verificar teto de conexões do free tier (Firebase como plano B)
 - [ ] Hardware dedicado (Raspberry Pi/appliance) só se o modelo kiosk mostrar limitação real
+
+## Correções UX/UI — Auditoria 2026-10-15
+
+Ver plano detalhado: [`docs/design/PLANO-CORRECOES-UX-UI-2026-10-15.md`](./docs/design/PLANO-CORRECOES-UX-UI-2026-10-15.md)
+
+- [x] P0: Labels ausentes + overflow horizontal dashboard (375px) — **entregue 2026-10-15**
+- [x] P1: Interativos aninhados, CTAs crus, contraste opacity-60, acessibilidade estrutural — **entregue 2026-10-15**
+- [ ] P1/P2 residual: touch targets `Input` h-8, hex do Leaflet, textos <12px — dívidas residuais registradas no plano
+- [x] P2: `global-error.tsx` botão cru → `Button` — **entregue 2026-10-15**
+
+Validação: lint/typecheck/format limpos, `contrast.test.ts` 23/23, axe WCAG 2.2 AA 0 violações em `/dashboard` (375), `/salas/KARAOKEDOZE{,/sala,/buscar,/pulseiras}`, `/player/KARAOKEDOZE`.

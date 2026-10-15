@@ -73,7 +73,7 @@ Os buracos mais caros, em ordem:
 | M5 | Cobertura | `coverage` configurado sem threshold nem gate | Meta inicial realista (ex.: 70% em `src/lib/rooms`/`stores`) e `--coverage` no CI | S |
 | M6 | Governança | Sem `CONTRIBUTING`, `SECURITY`, PR template, dependabot | ✅ docs adicionados neste passo; falta **dependabot** + branch protection | S |
 | M7 | Testes E2E | Playwright adiado (por desenho) | Manter adiado, mas criar **um** smoke E2E do caminho crítico (entrar → pedir → tocar) quando a UX estabilizar | M |
-| M8 | UX operacional | Sem `loading.tsx`/skeletons | Resolver na **fase de UX/UI** (não é débito técnico) | — |
+| M8 | UX operacional | Sem `loading.tsx`/skeletons | Resolver na **fase de UX/UI** (não é débito técnico) | ✅ **feito na Fase 4 de design** — `loading.tsx` por segmento + `loading-skeletons.tsx` |
 
 ### Baixa (B)
 

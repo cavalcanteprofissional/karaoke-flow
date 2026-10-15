@@ -107,7 +107,7 @@ Cada franquia desta casa é única — e o dono é o rei dela. O que o sistema f
   funcionamento do karaokê) e administra seus limites — com honestidade sobre qual conta paga
   o quê.
 - **Valida com a casa, não com o fornecedor**: nossa pesquisa de campo está em
-  [`questionario-donos-estabelecimento.md`](./questionario-donos-estabelecimento.md) — e é
+  [`questionario-donos-estabelecimento.md`](./docs/produto/questionario-donos-estabelecimento.md) — e é
   preenchida por donos, para donos.
 
 O dono não é DJ do gosto alheio nem casmurro do gosto: é o regente do *quando*. A fila decide o

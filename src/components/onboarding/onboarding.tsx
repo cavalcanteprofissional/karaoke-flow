@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SiteFooter } from "@/components/shell/site-footer";
-import { cn } from "cn";
 import {
   hasConsent,
   readPreferences,
@@ -39,11 +38,6 @@ function initialLocale(): Locale {
   if (prefs?.lang) return detectLocale([prefs.lang]);
   return detectLocale(navigatorLanguages());
 }
-
-const ROLES: Array<{ role: ProfilePreference; icon: typeof Mic2 }> = [
-  { role: "participant", icon: Mic2 },
-  { role: "host", icon: Store },
-];
 
 /**
  * Spec §2.5 (Tela 1 — Onboarding). Bifurcação com apenas dois botões e o
@@ -100,34 +94,40 @@ export function Onboarding() {
     <div className="bg-background kf-home-glow flex min-h-dvh flex-col">
       {/* O conteúdo fica num wrapper `flex-1` e o rodapé fora dele: no mesmo
           container, o `gap-16` empurraria a assinatura para 4rem do botão. */}
-      <main className="flex flex-1 flex-col items-center justify-center gap-16 p-4">
+      <main className="relative flex flex-1 flex-col items-center justify-center gap-16 p-4">
         <h1 className="sr-only">Karaokê Watch Party</h1>
+
+        {/* "Sou dono" sai do fluxo central: fica no canto superior direito e
+            menor (`size="sm"`, 32px ≥ 24px do 2.5.8). É a entrada secundária
+            (o dono do bar configura a casa); o caminho principal do público é
+            "Quero cantar", que fica sozinho e centralizado na tela. */}
+        <div className="absolute top-4 right-4">
+          <Button
+            size="sm"
+            variant="outline"
+            className="kf-rise ease-neon border-primary/40 hover:bg-accent gap-2 duration-200"
+            aria-label={dict.onboarding.host}
+            onClick={() => chooseRole("host")}
+          >
+            <Store className="size-4" />
+            {dict.onboarding.host}
+          </Button>
+        </div>
+
         <div
           className="flex w-full max-w-sm flex-col gap-4 md:max-w-md"
           role="group"
           aria-label="Escolha seu perfil"
         >
-          {ROLES.map(({ role, icon: Icon }, index) => {
-            const isHost = role === "host";
-            const label = isHost ? dict.onboarding.host : dict.onboarding.sing;
-            return (
-              <Button
-                key={role}
-                size="lg"
-                variant={isHost ? "outline" : "default"}
-                className={cn(
-                  "kf-rise ease-neon w-full gap-3 duration-200",
-                  isHost ? "border-primary/40 hover:bg-accent" : "shadow-glow"
-                )}
-                style={{ animationDelay: `${index * 70}ms` }}
-                aria-label={label}
-                onClick={() => chooseRole(role)}
-              >
-                <Icon className="size-5" />
-                {label}
-              </Button>
-            );
-          })}
+          <Button
+            size="lg"
+            className="kf-rise ease-neon shadow-glow w-full gap-3 duration-200"
+            aria-label={dict.onboarding.sing}
+            onClick={() => chooseRole("participant")}
+          >
+            <Mic2 className="size-5" />
+            {dict.onboarding.sing}
+          </Button>
         </div>
 
         <Dialog open={bannerOpen} onOpenChange={() => {}}>

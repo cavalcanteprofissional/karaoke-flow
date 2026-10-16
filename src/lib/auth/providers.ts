@@ -6,8 +6,9 @@ import type { Provider } from "@supabase/supabase-js";
  *
  * `disabled`: o provedor está construído (credenciais no Supabase) mas o login
  * não está disponível no momento — o botão é renderizado desabilitado.
- * Motivos atuais: Spotify exige Premium para a Web API; Discord/Facebook/X
- * aguardam criação dos apps OAuth externos (app review para produção).
+ * Motivos atuais: Spotify exige Premium para a Web API; Google ainda não foi
+ * habilitado no Supabase; Discord/Facebook/X aguardam criação dos apps OAuth
+ * externos (app review para produção).
  */
 export const AUTH_PROVIDER_IDS = [
   "spotify",
@@ -38,7 +39,13 @@ export const AUTH_PROVIDERS: AuthProviderConfig[] = [
       "Web API exige Spotify Premium — aguardando conta habilitada para voltar.",
   },
   { id: "github", label: "GitHub", description: "Continue com sua conta GitHub" },
-  { id: "google", label: "Google", description: "Continue com sua conta Google" },
+  {
+    id: "google",
+    label: "Google",
+    description: "Continue com sua conta Google",
+    disabled: true,
+    disabledReason: "Login pelo Google ainda não habilitado no Supabase.",
+  },
   {
     id: "discord",
     label: "Discord",

@@ -224,13 +224,25 @@ Dívidas **menores** anotadas (não bloqueiam):
   (`rooms/pulseiras/pulseira-codes-card.tsx:143,160`) e o marcador de preço
   aplicado (`pulseira-prices-card.tsx:217`). Aceitável por serem legendas de
   contexto; revisar se virarem texto de leitura.
-- **CTA primário como `<Link>` cru (4×)** com
-  `bg-primary … rounded-xl px-6 py-3 text-sm font-semibold`
-  (`salas/[codigo]/page.tsx:43,108`, `salas/[codigo]/buscar/page.tsx:58,102`).
-  É o mesmo alvo de `<Button asChild size="lg">` — candidato a padronizar para
-  herdar foco/estados e não divergir do `Button`.
-- **Foco nos CTAs crus:** dependem do outline do navegador (os primitivos usam
-  `focus-visible`). Resolver junto do item acima.
+- ~~**CTA primário como `<Link>` cru (4×)**~~ e ~~**foco nos CTAs crus**~~:
+  **resolvido em 2026-10-15** (§2.2 do plano) — os 4 CTAs de
+  `salas/[codigo]` e `buscar` usam `<Button asChild size="lg">`, herdando
+  `focus-visible`/estados do primitivo.
+- **`Input` `h-8` (32px)**: ≥ 24px do 2.5.8, mas abaixo do 44px (AAA 2.5.5).
+  Elevar afeta todos os formulários — varredura dedicada pendente.
+
+**Convenções fixadas na verificação visual de 2026-10-15:**
+
+- **`CardTitle` é `<h2>` por padrão** (não `<div>`). Com o Preflight os headings
+  são resetados, então não há diferença visual — mas os títulos de card entram
+  na navegação por headings do leitor de tela. Use `asChild` + `<h1>` quando o
+  card for o título da página (login, buscar, sobre).
+- **Ação/nota em canto de card vai em `CardAction`** (slot que o grid do
+  `CardHeader` já posiciona no canto), nunca dentro do `CardTitle`: dentro do
+  heading o texto do botão entra no nome acessível ("Fila de músicasPedir
+  música"). Idem para notas com `ml-auto` ("Quem está na salaatualiza sozinho").
+- **CTA de navegação sempre `Button asChild` + `Link`** — nunca `<a href>`
+  envolvendo `<button>` (interativo aninhado, WCAG 4.1.2).
 
 **Ferramentas de auditoria contínua:** skill `ux-ui-review`
 (`.opencode/skills/ux-ui-review/SKILL.md`) + comando `/ux-audit`, com Playwright

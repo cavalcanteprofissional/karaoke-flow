@@ -65,6 +65,7 @@ Axe (WCAG 2.2 AA) pós-correção: `/dashboard` (375), `/salas/KARAOKEDOZE/sala`
 ## 5. Evidências
 
 - Screenshots da auditoria: `docs/design/evidencias-auditoria-2026-10-15/` (`01-home-1440.png` … `10-sala-mobile-375.png`)
+- Verificação visual (fase da §9): `docs/design/evidencias-visual-2026-10-15/` — `audit-results.json` (axe/overflow/alvos), `inspect-results.json` e `inspect-light-results.json` (contraste/fontes/árvore, dark e light), `headings-after.json`, `nested-check.json` + screenshots 375/768/1440. **Local (gitignored)**: binários pesados e o JSON do player podia conter `?token=`.
 - Medições/axe via Playwright MCP (sessão 2026-10-15)
 - Alterações em `src/**` listadas acima; `TODO.md` aponta para este plano
 
@@ -75,26 +76,27 @@ Axe (WCAG 2.2 AA) pós-correção: `/dashboard` (375), `/salas/KARAOKEDOZE/sala`
 - Textos <12px das telas compactas de pulseira/mapa
 - Tokens semânticos de mapa (se o mapa ganhar variações de tema)
 
-## 7. Próxima fase — verificação visual e manual (a resolver depois)
+## 7. Próxima fase — verificação visual e manual
 
 Esta fase reúne o que **não** é capturável apenas por axe/estático: exige olho humano,
-interação real e/ou device. Nada aqui foi executado ainda.
+interação real e/ou device. **Fase parcialmente executada em 2026-10-15** — ver §9
+para o relatório, os commits e o que ficou pendente de device.
 
 ### 7.1 Touch targets e ergonomia
-- [ ] `Input` default `h-8` (32px): decidir elevar para `h-9`/`h-10` e varrer todos os formulários (código da sala, mesas, busca, pulseira, login).
-- [ ] Alvos <44px restantes: links da `desktop-nav`, botão de conta/avatar, `site-footer` (`Sobre` 32×16), “Voltar à sala” (altura 20).
-- [ ] Conferir WCAG 2.5.8 (mínimo 24px) em mobile, com toque real.
+- [ ] `Input` default `h-8` (32px): decidir elevar para `h-9`/`h-10` e varrer todos os formulários (código da sala, mesas, busca, pulseira, login). **Ainda aberto.**
+- [x] Alvos standalone medidos em 3 viewports (375/768/1440): elevados para ≥24px em `BackLink`, "Voltar ao início" (`/bar`), "Voltar à sala" (`/buscar`), "Baixar QR", links do mapa (`6057f11`). Isentos mantidos com motivo documentado: `Switch` (alvo efetivo é o `Label htmlFor`), `Sobre` do rodapé (exceção `spacing`), atribuição Leaflet/OpenStreetMap/Google Cloud.
+- [x] WCAG 2.5.8 (mínimo **24px**) verificado programaticamente: 0 alvos <24px não isentos nas 12 rotas em 3 viewports. Os <44px restantes são **AAA (2.5.5)**, fora do portão do projeto — toque real segue em §7.5.
 
 ### 7.2 Contraste e tema
-- [ ] `presence-radius-map.tsx`: 8 nodes “incomplete” do axe (Leaflet/SVG) — medir manualmente círculo/anel/marcador no dark.
-- [ ] Hex do Leaflet → tokens semânticos (avaliar `getComputedStyle` em runtime).
-- [ ] Tema claro: só o dark foi auditado. Se houver toggle, auditar `:root` (light) com axe + inspeção.
-- [ ] Textos <12px (`pulseira-codes-card.tsx:143,160`, `pulseira-prices-card.tsx:217`, `presence-radius-map.tsx:218`): ir para ≥12px ou aceitar formalmente no design-system §10.
+- [x] `presence-radius-map.tsx` — nodes “incomplete” do axe: **0 incomplete e 0 violations** na re-execução das 12 rotas (`audit-results.json`). Contraste dos textos sobre o mapa medido = 0 abaixo do mínimo AA. O contraste **visual** do círculo/anel/marcador (não-textual) segue para device.
+- [ ] Hex do Leaflet → tokens semânticos (avaliar `getComputedStyle` em runtime): **mantido como dívida** (§6).
+- [x] Tema claro auditado: toggle aplicado (`html.light`), **axe=0** e **0 violações de contraste** nas 12 rotas (`inspect-light-results.json`).
+- [x] Textos <12px: **aceitos formalmente** no design-system §10 (legendas de contexto em `pulseira-codes-card`, `pulseira-prices-card`, `presence-radius-map`); revisar se virarem texto de leitura.
 
 ### 7.3 Movimento, estados e mídia
-- [ ] `prefers-reduced-motion`: verificar `kf-rise`/`ease-neon` (onboarding) e animações do player.
-- [ ] Skeletons recém-criados (`loading.tsx` por rota): conferir visual em cada rota (sem flash/layout shift).
-- [ ] Estados vazios (`EmptyState`) e `error.tsx`/`global-error.tsx`: revisar no device.
+- [x] `prefers-reduced-motion`: **0 elementos com `animation-name` ≠ none** na home/onboarding sob a media query. Animações do player seguem para device.
+- [x] Skeletons: verificado em código que `loading.tsx` renderiza **dentro** do `<main>` do `AppShell` (sem header/`kf-container` duplicados). Flash/layout shift real segue para device.
+- [ ] Estados vazios (`EmptyState`) e `error.tsx`/`global-error.tsx`: revisar no device. **Ainda aberto.**
 
 ### 7.4 Fluxos E2E manuais
 - [ ] Entrada: login anônimo → código → mesa → fila.
@@ -111,6 +113,37 @@ interação real e/ou device. Nada aqui foi executado ainda.
 
 - `feat(design)` `5c28f47` — tokens de status, `EmptyState`, skeletons e navegação desktop.
 - `docs` `e6f60a7` — reorganização de documentos + este plano + evidências.
+- `fix(a11y)` `c915436` — correções da auditoria UX/UI (rótulos, overflow, contraste, navegação).
+- `test(queue)` `1d653dc` — seletor do CTA de pedido (`role:button` → `role:link`).
+- `fix(design)` `d1edb80` — rodapé sai de `<main>` vira `contentinfo` top-level; botão do gate do player não estoura em 375.
+- `fix(a11y)` `6057f11` — alvos de toque standalone elevados para 24px (2.5.8).
+- `fix(a11y)` `f097b44` — interativo aninhado removido no CTA de conectar YouTube.
+- `fix(a11y)` `acfa5c6` — `CardTitle` vira `h2`; ações/notas saem do nome do heading.
+
+## 9. Relatório da verificação visual (2026-10-15)
+
+### Resumo
+12 rotas (home, login, sobre, dashboard, entrar, sala, buscar, sala-config, player-config, pulseiras, bar, player-TV) verificadas em **375/768/1440** com Playwright headless: screenshots (viewport + full), axe WCAG 2.2 AA, overflow horizontal, alvos <24px, contraste renderizado, fontes <12px, árvore de acessibilidade, pirâmide de headings, interativos aninhados, ids duplicados, `alt`, tema claro e `prefers-reduced-motion`. Evidências locais em `docs/design/evidencias-visual-2026-10-15/` (gitignored: binários pesados e JSON com `?token=`).
+
+### Críticos
+Nenhum novo. `axe = 0` e `overflow = 0` em todas as rotas/viewports, antes e depois das correções.
+
+### Maiores (corrigidos)
+1. **Interativo aninhado no CTA "Conectar conta do YouTube"** (`youtube-settings-card.tsx`) — `<a href>` envolvendo `<button>`; axe não sinalizou. Virou `Button asChild` + `Link`; o `Label htmlFor` do bloco apontava para esse link e virou `role="group"` + `aria-labelledby`. Verificado: 0 aninhados nas 12 rotas.
+2. **Pirâmide de headings chapada** — títulos de card eram `<div data-slot="card-title">`; leitor de tela navegava só pelo `h1`. `CardTitle` agora é `h2` por padrão (Preflight torna a mudança visual nula): 18 títulos em 6 telas viraram seção navegável. Resultado: h1+h2 nas 12 rotas, 0 pulos de nível.
+3. **Nomes acessíveis concatenando ação/nota no heading** — "Fila de músicasPedir música" (ação dentro do `CardTitle` → movida para o slot `CardAction`, que já existia no design system) e "Quem está na salaatualiza sozinho" (nota com `ml-auto` → wrapper flex). h1 de `/buscar` lia "KARAOKEDOZEhost aprova" → espaço antes do `Badge`.
+
+### Menores (corrigidos)
+4. **Alvos de toque <24px** — "Voltar à sala" (20px), "Voltar ao início", "Baixar QR", "Abrir no Google Maps"/"OpenStreetMap" → ≥24px via `py-1` removido. Isentos documentados (switch, rodapé `Sobre`, atribuições).
+
+### Menores (mantidos como dívida — §6/design-system §10)
+5. Hex do Leaflet em `presence-radius-map.tsx`; textos <12px das telas compactas; `Input` `h-8` (32px).
+
+### Segurança
+6. **Link do player com `?token=` real** apareceu na árvore de acessibilidade de telas com o botão "Abrir player na TV" e foi gravado em `inspect-light-results.json`. **Token rotacionado via UI** (antigo passa a servir "Player não autorizado"; novo abre o player ao vivo), JSON **sanitizado** (`REDACTED-TOKEN`) e pasta de evidências **gitignored**.
+
+### Não verificado (exige device/humano)
+- Toque real (24px medido programaticamente, não com dedo), flash/layout shift dos skeletons, estados vazios/erro na tela, player TV (autoplay, gate de som, reconexão), leitura de QR, entrada fora do raio, e os fluxos E2E manuais da §7.4.
 - `fix(a11y)` `c915436` — P0/P1/P2 da auditoria UX/UI.
 - `chore(tooling)` `0b12e1a` — opencode (MCP/skill/comando) + `.gitignore`.
 

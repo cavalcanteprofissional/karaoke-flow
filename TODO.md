@@ -1600,16 +1600,35 @@ Ver plano detalhado: [`docs/design/PLANO-CORRECOES-UX-UI-2026-10-15.md`](./docs/
 
 - [x] P0: Labels ausentes + overflow horizontal dashboard (375px) — **entregue 2026-10-15**
 - [x] P1: Interativos aninhados, CTAs crus, contraste opacity-60, acessibilidade estrutural — **entregue 2026-10-15**
-- [ ] P1/P2 residual: touch targets `Input` h-8, hex do Leaflet, textos <12px — dívidas residuais registradas no plano
+- [ ] P1/P2 residual: touch targets `Input` h-8, hex do Leaflet — dívidas residuais registradas no plano (textos <12px foram **aceitos** no design-system §10)
 - [x] P2: `global-error.tsx` botão cru → `Button` — **entregue 2026-10-15**
 
 Validação: lint/typecheck/format limpos, `contrast.test.ts` 23/23, axe WCAG 2.2 AA 0 violações em `/dashboard` (375), `/salas/KARAOKEDOZE{,/sala,/buscar,/pulseiras}`, `/player/KARAOKEDOZE`.
 
-**Próxima fase — verificação visual e manual (a resolver depois):** ver §7 do plano. Resumo:
-- [ ] Touch targets: `Input` h-8 e demais alvos <44px (nav desktop, avatar, rodapé).
-- [ ] Contraste/tema: 8 nodes "incomplete" do mapa (Leaflet), hex do Leaflet, tema claro não auditado, textos <12px.
-- [ ] Movimento/estados: `prefers-reduced-motion`, skeletons por rota, estados vazios/erro.
-- [ ] Fluxos E2E manuais: entrada/mesa/fila, aprovação do host, troca de código, QR, fora do raio, kiosk TV.
-- [ ] Device: DevTools mobile + iOS real (Safari).
+### Verificação visual (fase 2 — executada 2026-10-15, relatório na §9 do plano)
 
-Commits da auditoria (2026-10-15, sem push): `5c28f47` (design), `e6f60a7` (docs), `c915436` (a11y), `0b12e1a` (tooling).
+Rodada com **Playwright headless** (MCP não disponível): 12 rotas × 375/768/1440,
+axe WCAG 2.2 AA, overflow, alvos <24px, contraste renderizado, fontes <12px, árvore
+de acessibilidade, pirâmide de headings, interativos aninhados, ids duplicados, `alt`,
+tema claro e `prefers-reduced-motion`. Evidências locais em
+`docs/design/evidencias-visual-2026-10-15/` (**gitignored**).
+
+- [x] **Alvos de toque ≥24px (2.5.8)**: elevados em `BackLink`, "Voltar ao início"/"Baixar QR"/links do mapa; isentos documentados (switch, `Sobre` do rodapé, atribuições Leaflet/OSM/Google) — `6057f11`.
+- [x] **Interativo aninhado** no CTA "Conectar conta do YouTube" (`<a href>` com `<button>` dentro; axe não pegou) → `Button asChild` + `Link`; `Label htmlFor` virou `role="group"` — `f097b44`.
+- [x] **Pirâmide de headings**: `CardTitle` deixou de ser `<div>` e virou `h2` (18 títulos/6 telas; visual nulo pelo Preflight); 0 pulos, h1+h2 nas 12 rotas — `acfa5c6`.
+- [x] **Nomes acessíveis concatenando ação/nota**: "Fila de músicasPedir música" → ação no slot `CardAction`; "Quem está na salaatualiza sozinho" → nota fora do heading; h1 de `/buscar` ganhou espaço antes do `Badge`.
+- [x] **Tema claro**: `html.light`, axe=0 e 0 violações de contraste nas 12 rotas.
+- [x] **`prefers-reduced-motion`**: 0 animações ativas na home.
+- [x] **Segurança**: token do player vazado em JSON de evidência **rotacionado** (antigo → "Player não autorizado"), JSON sanitizado e pasta de evidências no `.gitignore`.
+
+Ficou para device/humano (§7.4/§7.5 do plano): toque real, flash/layout shift dos
+skeletons, estados vazios/erro na tela, kiosk TV (autoplay/gate de som/reconexão),
+QR, fora do raio e fluxos E2E manuais.
+
+> **Pausa (2026-10-15):** a frente de **estética/UI-UX do front foi pausada** para
+> priorizar uma bateria de **funcionalidades**; retomar os ajustes visuais depois.
+> Já entregues nesta última rodada estética: Tela 1 (home) com "Quero cantar"
+> central e "Sou dono" no canto superior direito, e login OAuth com o **Google
+> desabilitado** ("em breve") mantendo só o GitHub ativo.
+
+Commits da auditoria (2026-10-15, sem push): `5c28f47` (design), `e6f60a7` (docs), `c915436` (a11y), `0b12e1a` (tooling), `1d653dc` (teste), `d1edb80` (landmark+overflow), `6057f11` (alvos), `f097b44` (aninhado), `acfa5c6` (headings).

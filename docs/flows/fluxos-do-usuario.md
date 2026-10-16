@@ -12,18 +12,18 @@ Personas:
 
 ## 1. Primeiro acesso (todos)
 
-Tela de bifurcação (MVP — spec §2.5): antes de qualquer login, o usuário escolhe o perfil ("Quero cantar" / "Sou dono"). O texto dos botões segue o idioma do navegador; a coleta de idioma/geolocalização e o cookie de preferências (idioma + último perfil) só ocorrem após o **aceite de cookies** (LGPD/GDPR), independentemente do botão escolhido. Se já há sessão, o proxy pula para o dashboard (real) ou `/entrar` (anônimo).
+Tela de bifurcação (MVP — spec §2.5): antes de qualquer login, o usuário escolhe o perfil ("Quero cantar" / "Sou dono"). Na Tela 1 o caminho principal é **"Quero cantar"** — botão primário (`size="lg"`, com glow) sozinho e centralizado; **"Sou dono"** é a entrada secundária, no **canto superior direito** e menor (`size="sm"`), com o mesmo destino (`/login`) e a mesma bifurcação de rotas. O texto dos botões segue o idioma do navegador; a coleta de idioma/geolocalização e o cookie de preferências (idioma + último perfil) só ocorrem após o **aceite de cookies** (LGPD/GDPR), independentemente do botão escolhido. Se já há sessão, o proxy pula para o dashboard (real) ou `/entrar` (anônimo).
 
 ```mermaid
 flowchart TD
     A["Abre o app"] --> B{Tem sessão?}
     B -->|anônimo| B1["/entrar (entrar no bar via QR/código)"]
     B -->|conta real| G["/dashboard"]
-    B -->|não| C["Tela 1 — Onboarding<br/>2 botões (Quero cantar / Sou dono) + aceite de cookies"]
+    B -->|não| C["Tela 1 — Onboarding<br/>'Quero cantar' central (primário)<br/>'Sou dono' no canto sup. direito (menor)<br/>+ aceite de cookies"]
     C --> D{"Perfil"}
     D -->|cantar| E["/login"]
     D -->|dono| F["/login"]
-    E --> E1["/login: 'Continuar sem login' → signInAnonymously → /entrar<br/>ou logar com provedor → /dashboard"]
+    E --> E1["/login: 'Continuar sem login' → signInAnonymously → /entrar<br/>ou logar com provedor → /dashboard<br/>OAuth ativo: GitHub<br/>(Spotify, Google, Discord, Facebook e X<br/>aparecem esmaecidos, 'em breve')"]
     F --> G
     G --> H["Diferença fica nas ações:<br/>host cria/gerencia bar e aprovações;<br/>participante entra via QR/código, escolhe a mesa e adiciona músicas"]
 ```

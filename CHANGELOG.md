@@ -8,6 +8,53 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Unreleased]
 
+### UX — Tela 1 (onboarding) e login OAuth: layout e disponibilidade (2026-10-15)
+
+- **Tela 1 reorganizada** (`src/components/onboarding/onboarding.tsx`): "Quero
+  cantar" passa a ser o caminho principal — botão primário (`size="lg"`, com
+  glow) sozinho e **centralizado** na tela; "Sou dono" vira entrada secundária
+  no **canto superior direito**, menor (`size="sm"`), com o mesmo destino
+  (`/login`). Antes os dois ficavam empilhados no centro, com o mesmo peso.
+- **Login OAuth: só o GitHub fica ativo** (`src/lib/auth/providers.ts`). O
+  **Google foi desabilitado** (não foi possível habilitá-lo no Supabase ainda) e
+  agora aparece **esmaecido, com "em breve"**, como Spotify, Discord, Facebook e
+  X — nenhum deles inicia o `signInWithOAuth`. Reabilitar é só remover
+  `disabled` do config: o `LoginForm` já renderiza o estado.
+- **Docs:** `docs/flows/fluxos-do-usuario.md` §1 e
+  `docs/flows/fluxos-do-sistema.md` §1.1 refletem as duas mudanças.
+
+### Verificação visual e manual do frontend (2026-10-15)
+
+Passada de UX/UI dirigida por evidência (Playwright headless — o MCP não estava
+disponível): 12 rotas × 375/768/1440 com axe WCAG 2.2 AA, overflow horizontal,
+alvos < 24px, contraste renderizado, fontes < 12px, árvore de acessibilidade,
+pirâmide de headings, interativos aninhados, ids duplicados, `alt`, tema claro e
+`prefers-reduced-motion`. **axe = 0** e **overflow = 0** em todas; relatório
+completo na §9 de `docs/design/PLANO-CORRECOES-UX-UI-2026-10-15.md`. Correções:
+
+- **Alvos de toque ≥ 24px (WCAG 2.2 AA, 2.5.8):** `BackLink`, "Voltar ao início",
+  "Baixar QR" e os links do mapa subiram de 16–20px para ≥ 24px. Isentos com
+  motivo documentado: `Switch` (alvo efetivo é o `Label htmlFor`), `Sobre` do
+  rodapé (exceção de espaçamento) e atribuição Leaflet/OpenStreetMap/Google.
+- **Interativo aninhado:** o CTA "Conectar conta do YouTube" era um `<a href>`
+  envolvendo um `<button>` (o axe não pegou) → `Button asChild` + `Link`; o
+  `Label htmlFor` do bloco, que apontava para esse link, virou
+  `role="group"`/`aria-labelledby`.
+- **Hierarquia de headings:** `CardTitle` deixou de ser `<div>` e passou a ser
+  `<h2>` por padrão (o preflight torna a mudança visual nula) — 18 títulos em 6
+  telas entraram na navegação por headings. Ações/notas saíram do nome acessível
+  do título (a ação da fila foi para o slot `CardAction`), e o `<h1>` de
+  `/buscar` deixou de concatenar o badge.
+- **Rodapé como `<footer>`/`contentinfo`** (fora do `<main>`) e o botão do gate
+  do player deixou de estourar a largura em 375px.
+- **Segurança:** o `?token=` do player que apareceu na árvore de acessibilidade
+  das evidências foi **rotacionado** (o link antigo passa a recusar) e os JSONs
+  foram sanitizados; a pasta de evidências ficou **gitignored**.
+
+O restante da fase (§7 do plano) — device real, fluxos E2E manuais e o `Input`
+`h-8` — fica para depois: **a estética/UI foi pausada** para priorizar
+funcionalidades.
+
 ### Design — skill de auditoria UX/UI + Playwright MCP (free tier) (2026-10-14)
 
 - **Skill `ux-ui-review`** (`.opencode/skills/ux-ui-review/SKILL.md`): revisão de

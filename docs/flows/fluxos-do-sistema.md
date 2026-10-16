@@ -6,7 +6,9 @@ Fluxos técnicos end-to-end no estado atual do MVP (Fases 1–3.5 **e Fase 4 —
 
 ## 1. Autenticação e sessão
 
-### 1.1 Login OAuth (Google/GitHub)
+### 1.1 Login OAuth (provedores externos)
+
+**Disponibilidade (UI):** o único provedor **ativo** é o **GitHub**. Spotify (exige Premium para a Web API) e Google (ainda não habilitado no Supabase), Discord, Facebook e X aparecem **desabilitados e esmaecidos** no `/login`, com o selo "em breve" (`AUTH_PROVIDERS` em `src/lib/auth/providers.ts`). Reabilitar um provedor é só remover `disabled` do config — o `LoginForm` já renderiza o estado.
 
 ```mermaid
 sequenceDiagram
@@ -16,7 +18,7 @@ sequenceDiagram
     participant S as Supabase Auth (browser)
     participant CB as /auth/callback (route)
     participant D as /dashboard (protected)
-    actor P as Provider (Google/GitHub)
+    actor P as Provider (ex.: GitHub)
 
     U->>L: toca botão do provedor
     L->>S: signInWithOAuth({ provider, redirectTo })
